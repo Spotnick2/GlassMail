@@ -26,7 +26,8 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
   total said 0, so I1 must not stop on that total alone. It should try an item when some bag that
   fits it has room.
 - **A failed take:** `MAIL_FAILED (itemID)` (1181) plus `UI_ERROR_MESSAGE (3, "Inventory is
-  full.")`. The itemID is there; the error type 3 is the key, not the text.
+  full.")`. `MAIL_FAILED` is the failure signal. The `UI_ERROR_MESSAGE` only gives
+  the reason: type 3 is "inventory full", the only reason measured so far. Never match its text.
 - **Taking money needs no bag slot:** `TakeInboxMoney` with 0 free slots succeeded.
 - **`MAIL_SUCCESS` carries no itemID** (nil) even for an item take. Success has to be checked from
   the inbox, not from the event.

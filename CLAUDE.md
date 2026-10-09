@@ -77,9 +77,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   `""`, so key attachments by itemID.
 - Measured looting (session 3): `TakeInboxItem` works from timers; taking money needs no bag slot;
   specialty bags take their items when general bags are full (Blizzard's free-slot total ignores
-  them); a failure is `MAIL_FAILED(itemID)` + `UI_ERROR_MESSAGE` type 3; `MAIL_SUCCESS` has no
-  itemID. **`GetInboxText` marks mail read**: never call it on unread mail for a snapshot. The
-  stock Open All button reappears on every mailbox open.
+  them); **`MAIL_FAILED(itemID)` is the failure signal** (the `UI_ERROR_MESSAGE` beside it only
+  says why: type 3 = inventory full, the one reason measured); `MAIL_SUCCESS` has no itemID.
+  **`GetInboxText` marks mail read**, and so did a *failed* take: never call it on unread mail
+  for a snapshot, and expect any take attempt to flip `wasRead`. The stock Open All button
+  reappears on every mailbox open.
 - Use `C_Mail.CanCheckInbox()` before `CheckInbox()`; the inbox loads at most 100 mails at a time
   (`GetInboxNumItems` returns loaded, total).
 - Containers are `C_Container.*` only; `GetContainerItemInfo` returns a struct. Items:
@@ -146,7 +148,8 @@ can't cover taint, real secrets or rendering; that's the probe and an in-game ch
 ## Workflow and releasing
 
 Same as GlassChat's CLAUDE.md, "Workflow and releasing":
-- Issue → branch off `main` → PR with `Closes #N`. Never commit to `main`; commit or push only
+- Issue → branch off `main` → PR with `Closes #N`. A milestone that spans several PRs uses
+  `Part of #N` until the last one, which says `Closes #N`. Never commit to `main`; commit or push only
   when asked. `luac -p` clean and tests green before committing; check the PR's `package-check`
   run after pushing.
 - **The owner merges and closes PRs and launches reviews.**

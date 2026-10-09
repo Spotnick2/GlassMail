@@ -6,8 +6,10 @@
 -- the player's own inbox only.
 --
 -- Passive, always on (no command needed):
---   L  lifecycle: MAIL_SHOW / MAIL_CLOSED / interaction manager (MailInfo) /
---      PLAYER_LEAVING_WORLD, in order, with duplicates visible
+--   L  lifecycle: MAIL_SHOW / interaction manager SHOW and HIDE (MailInfo) /
+--      PLAYER_LEAVING_WORLD, in order, with duplicates visible. The interaction
+--      HIDE is the close signal: MAIL_CLOSED never fired (FOREVER-PROBE.md
+--      session 2) and stays registered only to show it if it ever does.
 --   I  every MAIL_INBOX_UPDATE that changes loaded/total counts
 --   R  results: MAIL_SUCCESS / MAIL_FAILED (itemID), MAIL_SEND_SUCCESS,
 --      CLOSE_INBOX_ITEM, UI_ERROR_MESSAGE, send lock/unlock, money/COD changes,
@@ -143,9 +145,12 @@ end
 local lastLoaded, lastTotal
 local mailOpenSince
 
+-- Enum.PlayerInteractionType.MailInfo, else 17, the value measured on 70291
+-- (FOREVER-PROBE.md session 1): the close signal must not vanish with the enum.
+local MAIL_INFO_MEASURED = 17
 local function mailInfoType()
     local e = global("Enum")
-    return e and e.PlayerInteractionType and e.PlayerInteractionType.MailInfo
+    return (e and e.PlayerInteractionType and e.PlayerInteractionType.MailInfo) or MAIL_INFO_MEASURED
 end
 
 local EVENTS = {
