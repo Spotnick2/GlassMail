@@ -62,7 +62,9 @@ check(chatHas("total free 12"), "bags reports free space")
 SlashCmdList.MAILPROBE("taketimer 1")
 eq(calls[1], "take 1:1", "taketimer takes the first attachment from the key press")
 SlashCmdList.MAILPROBE("")
-check(chatHas("/mprobe state"), "help lists the commands")
+check(chatHas("/mailprobe state"), "help lists the commands")
+-- Not /mprobe: MagelyProbe owns that one (Magely/Tools/MagelyProbe).
+eq(SLASH_MAILPROBE1, "/mailprobe", "the probe's command is /mailprobe")
 
 -- The mailbox lifecycle is logged, filtered to the mailbox interaction.
 newChat()

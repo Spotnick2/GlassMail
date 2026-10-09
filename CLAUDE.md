@@ -57,7 +57,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
 - **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the
   `Settings` helpers, `/gmail`.
-- **`Tools/MailProbe/`**: the throwaway measurement addon (`/mprobe help`).
+- **`Tools/MailProbe/`**: the throwaway measurement addon (`/mailprobe help`).
 
 ## Mail facts for this client
 

@@ -16,7 +16,7 @@
 --      DeleteInboxItem, SendMail, ClickSendMailItemButton, C_Mail.SetOpeningAll
 --      (post-hooks, whoever calls them: Blizzard's Open All included)
 --
--- Commands (/mprobe):
+-- Commands (/mailprobe):
 --   state            inbox counts, CanCheckInbox, pending command, bag space, money secrecy
 --   inbox            every loaded mail's header and attachments (sender formats, isGM, currency)
 --   dupes            mails that look identical (identity without a server id)
@@ -315,7 +315,7 @@ function C.readtest(arg)
     try("GetInboxText", global("GetInboxText"), i)
     local after = header(i)
     say("readtest " .. i .. ": wasRead before=" .. show(before.wasRead) .. " right after GetInboxText="
-        .. show(after and after.wasRead) .. " (check again with /mprobe inbox after the next update)")
+        .. show(after and after.wasRead) .. " (check again with /mailprobe inbox after the next update)")
 end
 
 function C.bags()
@@ -542,7 +542,7 @@ local HELP = {
     "log [N] | log clear",
 }
 
-SLASH_MAILPROBE1 = "/mprobe"
+SLASH_MAILPROBE1 = "/mailprobe"
 SlashCmdList.MAILPROBE = function(msg)
     local cmd, arg = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
     cmd = cmd:lower()
@@ -550,6 +550,6 @@ SlashCmdList.MAILPROBE = function(msg)
         local ok, err = pcall(C[cmd], arg)
         if not ok then say(cmd .. ": ERROR " .. show(err)) end
     else
-        for _, line in ipairs(HELP) do print("|cff7fd4ffMailProbe|r /mprobe " .. line) end
+        for _, line in ipairs(HELP) do print("|cff7fd4ffMailProbe|r /mailprobe " .. line) end
     end
 end

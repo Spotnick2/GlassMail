@@ -1,7 +1,7 @@
 # MailProbe results
 
 Measured on the live client with `Tools/MailProbe` (`pwsh Tools/deploy.ps1 -Probe`, then
-`/mprobe help`). Item numbers match the probe checklist in [PLAN.md](PLAN.md). The probe keeps its
+`/mailprobe help`). Item numbers match the probe checklist in [PLAN.md](PLAN.md). The probe keeps its
 log in `MailProbeDB.log` (`WTF\Account\<account>\SavedVariables\MailProbe.lua`) after a full client
 exit; paste the relevant lines under each item.
 
