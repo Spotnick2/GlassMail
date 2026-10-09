@@ -11,12 +11,59 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
 |---|---|---|
 | 1 | Lifecycle events, order, duplicates | **`MAIL_CLOSED` never fires**; close = interaction HIDE (17). See session 2. |
 | 2 | Inbox identity and capacity | Empty inbox: `GetInboxNumItems` = 0, 0; `CanCheckInbox` = true, 0; no command pending. Two identical mails differ only by `daysLeft` (session 2). |
-| 3 | Looting limits and failures | Bag facts below; looting itself needs mail. |
-| 4 | Take / Return from a timer | *pending* |
-| 5 | Open All ownership (gamepad, OnHide) | Hiding the stock button calls `SetOpeningAll(false)` at once. Gamepad untested. |
-| 6 | Sending, splitting, secure transfer | *pending* |
-| 7 | Taint: row controls, picker, combat | *pending* |
+| 3 | Looting limits and failures | Specialty bags take items when general bags are full; money needs no slot; `MAIL_FAILED(itemID)` + error type 3. Session 3. |
+| 4 | Take / Return from a timer | `TakeInboxItem` from timers: **works**. `ReturnInboxItem` from a timer: pending. |
+| 5 | Open All ownership (gamepad, OnHide) | Hiding calls `SetOpeningAll(false)`; the button comes back on every mailbox open and on /reload. Gamepad untested. |
+| 6 | Sending, splitting, secure transfer | Blizzard Send: no secure-transfer confirm for an own character; success 15 s later. Timer send, split: pending. |
+| 7 | Taint: row controls, picker, combat | Our row button took an item with no block. Picker, combat: pending. |
 | 8 | Sender formats, secrets, read state | `GetMoney` was **not** secret (out of combat, in town). Players "First Surname"; AH "Horde Auction House" (faction-specific). Item count nil without items; uncached items named "". |
+
+## Session 3 findings (2026-10-09, same inbox)
+
+**Looting (item 3).**
+- **A specialty bag takes its items when the general bags are full.** `take 5` (a Sharp Arrow)
+  succeeded with 0 general free slots: the arrow went into bag 4 (family 1). Blizzard's free-slot
+  total said 0, so I1 must not stop on that total alone. It should try an item when some bag that
+  fits it has room.
+- **A failed take:** `MAIL_FAILED (itemID)` (1181) plus `UI_ERROR_MESSAGE (3, "Inventory is
+  full.")`. The itemID is there; the error type 3 is the key, not the text.
+- **Taking money needs no bag slot:** `TakeInboxMoney` with 0 free slots succeeded.
+- **`MAIL_SUCCESS` carries no itemID** (nil) even for an item take. Success has to be checked from
+  the inbox, not from the event.
+- **An emptied mail with items is removed:** the last take fires `CLOSE_INBOX_ITEM (index)`,
+  `MAIL_SUCCESS` twice, and `MAIL_INBOX_UPDATE` with one mail fewer. The indices shift down.
+- **A money-only mail stays after its money is taken** (mail 3, `money=0 items=nil`). There was no
+  `CLOSE_INBOX_ITEM`. It still has to be deleted by hand, so Open All leaves such mails behind,
+  as Blizzard's does.
+
+**Batch actions (item 4, half).** **`TakeInboxItem` works from a timer.** `taketimer 2` took
+slot 3 from the key press, then slots 2 and 1 from `C_Timer` callbacks 0.3-0.5 s apart; all
+three succeeded with no block. So looting needs no click per item. `ReturnInboxItem` from a timer
+is still unmeasured.
+
+**Read state (item 8).**
+- **`GetInboxText` marks a mail read immediately** (`readtest 2`: false before, true right after).
+  The X1 snapshot must never call it on an unread mail.
+- Mail 1 also turned read after its *failed* take. A take attempt seems to mark mail read even
+  when it fails.
+
+**Identity (item 2).** `dupes` found mails 4 and 5 identical, as expected.
+
+**Open All (item 5).** Hidden with `hidestock`, the stock button stays hidden while the mailbox
+stays open. **Reopening the mailbox shows it again** (it was visible, and hid itself again, at
+the next `hidestock`), and so does `/reload`. Our Open All must hide it on every open.
+
+**Taint (item 7, partial).** **Our own row button** (a UIParent child at HIGH strata, anchored
+to `MailItem3`) took that mail's item with `TakeInboxItem`. There was no `ADDON_ACTION_BLOCKED`.
+
+**Sending (item 6, partial).**
+- A send from Blizzard's Send button (an item to an own character) logged
+  `SendMail("Cowruzo Test", "Coarse Stone", "", nil)`, the fourth argument nil.
+- `MAIL_SEND_SUCCESS` and `MAIL_SUCCESS` came **15 s later**.
+- **No `SECURE_TRANSFER_CONFIRM_SEND_MAIL` fired.**
+- `SEND_MAIL_MONEY_CHANGED` / `SEND_MAIL_COD_CHANGED` fire when the draft resets.
+
+**Still to run:** `returntimer`, the gamepad, `picker` then Send, `split`, `sendtimer`.
 
 ## Session 2 findings (2026-10-09, 5 mails, bags 0-3 full)
 
