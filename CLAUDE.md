@@ -68,6 +68,13 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - Blizzard already has an Open All button (`OpenAllMail`, `OpenAllMailMixin`): it skips COD and GM
   mail, waits for `C_Mail.IsCommandPending()` and at least 0.15 s between takes, wraps the run in
   `C_Mail.SetOpeningAll(true/false)`, and skips item IDs that `MAIL_FAILED` reported.
+- **`MAIL_CLOSED` never fires** (measured, FOREVER-PROBE session 2). The mailbox opens with
+  `MAIL_SHOW` + `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` (type 17) and closes with
+  `PLAYER_INTERACTION_MANAGER_FRAME_HIDE` (17), which can fire twice at logout. Hiding
+  `OpenAllMail` calls `C_Mail.SetOpeningAll(false)`.
+- The AH sender name is faction-specific ("Horde Auction House"): classify mail by the subject
+  templates, never by sender. `itemCount` is nil without items; an uncached attachment's name is
+  `""`, so key attachments by itemID.
 - Use `C_Mail.CanCheckInbox()` before `CheckInbox()`; the inbox loads at most 100 mails at a time
   (`GetInboxNumItems` returns loaded, total).
 - Containers are `C_Container.*` only; `GetContainerItemInfo` returns a struct. Items:
