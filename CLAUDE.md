@@ -75,7 +75,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - The AH sender name is faction-specific ("Horde Auction House"): classify mail by the subject
   templates, never by sender. `itemCount` is nil without items; an uncached attachment's name is
   `""`, so key attachments by itemID.
-- Measured looting (session 3): `TakeInboxItem` works from timers; taking money needs no bag slot;
+- Measured looting (session 3): `TakeInboxItem` and `ReturnInboxItem` work from timers; taking money needs no bag slot;
   specialty bags take their items when general bags are full (Blizzard's free-slot total ignores
   them); **`MAIL_FAILED(itemID)` is the failure signal** (the `UI_ERROR_MESSAGE` beside it only
   says why: type 3 = inventory full, the one reason measured); `MAIL_SUCCESS` has no itemID.

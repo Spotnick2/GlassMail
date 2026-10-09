@@ -12,11 +12,28 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
 | 1 | Lifecycle events, order, duplicates | **`MAIL_CLOSED` never fires**; close = interaction HIDE (17). See session 2. |
 | 2 | Inbox identity and capacity | Empty inbox: `GetInboxNumItems` = 0, 0; `CanCheckInbox` = true, 0; no command pending. Two identical mails differ only by `daysLeft` (session 2). |
 | 3 | Looting limits and failures | Specialty bags take items when general bags are full; money needs no slot; `MAIL_FAILED(itemID)` + error type 3. Session 3. |
-| 4 | Take / Return from a timer | `TakeInboxItem` from timers: **works**. `ReturnInboxItem` from a timer: pending. |
+| 4 | Take / Return from a timer | **Both work.** `TakeInboxItem` and `ReturnInboxItem` from `C_Timer` callbacks, no block. Sessions 3 and 4. |
 | 5 | Open All ownership (gamepad, OnHide) | Hiding calls `SetOpeningAll(false)`; the button comes back on every mailbox open and on /reload. No gamepad available (owner): untestable. Our engine re-checks its own state each step instead of relying on the stock button staying inert. |
 | 6 | Sending, splitting, secure transfer | Blizzard Send: no secure-transfer confirm for an own character; success 15 s later. Timer send, split: pending. |
 | 7 | Taint: row controls, picker, combat | Our row button took an item with no block. Picker, combat: pending. |
 | 8 | Sender formats, secrets, read state | `GetMoney` was **not** secret (out of combat, in town). Players "First Surname"; AH "Horde Auction House" (faction-specific). Item count nil without items; uncached items named "". |
+
+## Session 4 findings (2026-10-09)
+
+**Batch actions (item 4, done).** **`ReturnInboxItem` works from a timer.** `returntimer 1`
+returned a player's mail ("Kaleid Sumner", "Crawler Claw") 1 s after the key press, from a
+`C_Timer` callback. Nothing was blocked. The inbox went from 1 mail to 0 at once, then
+`MAIL_SUCCESS (nil)` fired. There was no `CLOSE_INBOX_ITEM`. So I2's "Return selected" needs one
+click for the whole selection, paced like looting.
+
+```
+returntimer 1: sender="Kaleid Sumner" subject="Crawler Claw" - returning in 1 s, from a timer
+C ReturnInboxItem(1)
+I inbox loaded=0 total=0
+R MAIL_SUCCESS (nil)
+```
+
+**Still to run:** `picker` then Send; optionally `split` and `sendtimer`.
 
 ## Session 3 findings (2026-10-09, same inbox)
 
@@ -64,7 +81,7 @@ to `MailItem3`) took that mail's item with `TakeInboxItem`. There was no `ADDON_
 - **No `SECURE_TRANSFER_CONFIRM_SEND_MAIL` fired.**
 - `SEND_MAIL_MONEY_CHANGED` / `SEND_MAIL_COD_CHANGED` fire when the draft resets.
 
-**Still to run:** `returntimer`, `picker` then Send, `split`, `sendtimer`. (The gamepad path can't be tested: no gamepad.)
+(The gamepad path can't be tested: no gamepad.)
 
 ## Session 2 findings (2026-10-09, 5 mails, bags 0-3 full)
 
