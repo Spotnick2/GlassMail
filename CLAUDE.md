@@ -57,7 +57,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
 - **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the
   `Settings` helpers, `/gmail`.
-- **`Tools/MailProbe/`**: the throwaway measurement addon (`/mprobe help`).
+- **`Tools/MailProbe/`**: the throwaway measurement addon (`/mailprobe help`).
 
 ## Mail facts for this client
 
@@ -68,6 +68,20 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - Blizzard already has an Open All button (`OpenAllMail`, `OpenAllMailMixin`): it skips COD and GM
   mail, waits for `C_Mail.IsCommandPending()` and at least 0.15 s between takes, wraps the run in
   `C_Mail.SetOpeningAll(true/false)`, and skips item IDs that `MAIL_FAILED` reported.
+- **`MAIL_CLOSED` never fires** (measured, FOREVER-PROBE session 2). The mailbox opens with
+  `MAIL_SHOW` + `PLAYER_INTERACTION_MANAGER_FRAME_SHOW` (type 17) and closes with
+  `PLAYER_INTERACTION_MANAGER_FRAME_HIDE` (17), which can fire twice at logout. Hiding
+  `OpenAllMail` calls `C_Mail.SetOpeningAll(false)`.
+- The AH sender name is faction-specific ("Horde Auction House"): classify mail by the subject
+  templates, never by sender. `itemCount` is nil without items; an uncached attachment's name is
+  `""`, so key attachments by itemID.
+- Measured looting (session 3): `TakeInboxItem` works from timers; taking money needs no bag slot;
+  specialty bags take their items when general bags are full (Blizzard's free-slot total ignores
+  them); **`MAIL_FAILED(itemID)` is the failure signal** (the `UI_ERROR_MESSAGE` beside it only
+  says why: type 3 = inventory full, the one reason measured); `MAIL_SUCCESS` has no itemID.
+  **`GetInboxText` marks mail read**, and so did a *failed* take: never call it on unread mail
+  for a snapshot, and expect any take attempt to flip `wasRead`. The stock Open All button
+  reappears on every mailbox open.
 - Use `C_Mail.CanCheckInbox()` before `CheckInbox()`; the inbox loads at most 100 mails at a time
   (`GetInboxNumItems` returns loaded, total).
 - Containers are `C_Container.*` only; `GetContainerItemInfo` returns a struct. Items:
@@ -134,7 +148,8 @@ can't cover taint, real secrets or rendering; that's the probe and an in-game ch
 ## Workflow and releasing
 
 Same as GlassChat's CLAUDE.md, "Workflow and releasing":
-- Issue → branch off `main` → PR with `Closes #N`. Never commit to `main`; commit or push only
+- Issue → branch off `main` → PR with `Closes #N`. A milestone that spans several PRs uses
+  `Part of #N` until the last one, which says `Closes #N`. Never commit to `main`; commit or push only
   when asked. `luac -p` clean and tests green before committing; check the PR's `package-check`
   run after pushing.
 - **The owner merges and closes PRs and launches reviews.**

@@ -38,7 +38,7 @@ In `Core/`, shaped like a library but not published as one until M3.
   re-check their target after every inbox change.
 - **`IsSendable(bag, slot)`** answers yes / no / unknown with a reason, never an unconditional yes.
 
-## Probe checklist (M0, `/mprobe`)
+## Probe checklist (M0, `/mailprobe`)
 
 Each item goes in FOREVER-PROBE.md with what was seen.
 

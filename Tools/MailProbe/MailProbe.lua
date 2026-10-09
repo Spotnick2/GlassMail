@@ -6,8 +6,10 @@
 -- the player's own inbox only.
 --
 -- Passive, always on (no command needed):
---   L  lifecycle: MAIL_SHOW / MAIL_CLOSED / interaction manager (MailInfo) /
---      PLAYER_LEAVING_WORLD, in order, with duplicates visible
+--   L  lifecycle: MAIL_SHOW / interaction manager SHOW and HIDE (MailInfo) /
+--      PLAYER_LEAVING_WORLD, in order, with duplicates visible. The interaction
+--      HIDE is the close signal: MAIL_CLOSED never fired (FOREVER-PROBE.md
+--      session 2) and stays registered only to show it if it ever does.
 --   I  every MAIL_INBOX_UPDATE that changes loaded/total counts
 --   R  results: MAIL_SUCCESS / MAIL_FAILED (itemID), MAIL_SEND_SUCCESS,
 --      CLOSE_INBOX_ITEM, UI_ERROR_MESSAGE, send lock/unlock, money/COD changes,
@@ -16,7 +18,7 @@
 --      DeleteInboxItem, SendMail, ClickSendMailItemButton, C_Mail.SetOpeningAll
 --      (post-hooks, whoever calls them: Blizzard's Open All included)
 --
--- Commands (/mprobe):
+-- Commands (/mailprobe):
 --   state            inbox counts, CanCheckInbox, pending command, bag space, money secrecy
 --   inbox            every loaded mail's header and attachments (sender formats, isGM, currency)
 --   dupes            mails that look identical (identity without a server id)
@@ -143,9 +145,12 @@ end
 local lastLoaded, lastTotal
 local mailOpenSince
 
+-- Enum.PlayerInteractionType.MailInfo, else 17, the value measured on 70291
+-- (FOREVER-PROBE.md session 1): the close signal must not vanish with the enum.
+local MAIL_INFO_MEASURED = 17
 local function mailInfoType()
     local e = global("Enum")
-    return e and e.PlayerInteractionType and e.PlayerInteractionType.MailInfo
+    return (e and e.PlayerInteractionType and e.PlayerInteractionType.MailInfo) or MAIL_INFO_MEASURED
 end
 
 local EVENTS = {
@@ -195,14 +200,16 @@ frame:SetScript("OnEvent", function(_, event, ...)
         local t = ...
         if t ~= mailInfoType() then return end   -- only the mailbox
         say("L " .. event .. " (MailInfo=" .. show(t) .. ")")
+        -- The close signal: MAIL_CLOSED never fired in session 2 (FOREVER-PROBE.md).
+        if event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" and mailOpenSince then
+            say(string.format("L mailbox was open %.1f s", GetTime() - mailOpenSince))
+            mailOpenSince = nil
+        end
         return
     end
     if event == "MAIL_SHOW" then
         mailOpenSince = GetTime()
         lastLoaded, lastTotal = nil, nil
-    elseif event == "MAIL_CLOSED" and mailOpenSince then
-        say(string.format("L mailbox was open %.1f s", GetTime() - mailOpenSince))
-        mailOpenSince = nil
     end
     local tag = (event:find("^MAIL_SHOW") or event:find("^MAIL_CLOSED") or event == "PLAYER_LEAVING_WORLD") and "L"
         or ((event:find("ADDON_ACTION") or event:find("SECURE_TRANSFER")) and "!") or "R"
@@ -309,13 +316,13 @@ end
 
 function C.readtest(arg)
     local i = tonumber(arg)
-    if not i then say("readtest N"); return end
+    if not i then say("readtest N: N is the mail number from /mailprobe inbox, e.g. /mailprobe readtest 2"); return end
     local before = header(i)
     if not before then return end
     try("GetInboxText", global("GetInboxText"), i)
     local after = header(i)
     say("readtest " .. i .. ": wasRead before=" .. show(before.wasRead) .. " right after GetInboxText="
-        .. show(after and after.wasRead) .. " (check again with /mprobe inbox after the next update)")
+        .. show(after and after.wasRead) .. " (check again with /mailprobe inbox after the next update)")
 end
 
 function C.bags()
@@ -335,13 +342,13 @@ end
 function C.take(arg)
     local i, slot = arg:match("^(%d+)%s*(%d*)$")
     i, slot = tonumber(i), tonumber(slot) or 1
-    if not i then say("take N [slot]"); return end
+    if not i then say("take N [slot]: N is the mail number from /mailprobe inbox, e.g. /mailprobe take 4"); return end
     try("TakeInboxItem", global("TakeInboxItem"), i, slot)
 end
 
 function C.money(arg)
     local i = tonumber(arg)
-    if not i then say("money N"); return end
+    if not i then say("money N: N is the mail number from /mailprobe inbox, e.g. /mailprobe money 3"); return end
     say("money: free slots " .. show(freeSlots()))
     try("TakeInboxMoney", global("TakeInboxMoney"), i)
 end
@@ -351,7 +358,7 @@ end
 -- Paced like Blizzard's Open All: wait while a command is pending, 0.3 s apart.
 function C.taketimer(arg)
     local i = tonumber(arg)
-    if not i then say("taketimer N"); return end
+    if not i then say("taketimer N: N is the mail number from /mailprobe inbox, e.g. /mailprobe taketimer 2"); return end
     local cm = global("C_Mail")
     local steps = 0
     busy = true
@@ -377,7 +384,7 @@ end
 
 function C.returnnow(arg)
     local i = tonumber(arg)
-    if not i then say("returnnow N"); return end
+    if not i then say("returnnow N: N is the mail number from /mailprobe inbox"); return end
     local h = header(i)
     say("returnnow " .. i .. ": sender=" .. show(h and h.sender) .. " subject=" .. show(h and h.subject))
     try("ReturnInboxItem", global("ReturnInboxItem"), i)
@@ -385,7 +392,7 @@ end
 
 function C.returntimer(arg)
     local i = tonumber(arg)
-    if not i then say("returntimer N"); return end
+    if not i then say("returntimer N: N is the mail number from /mailprobe inbox"); return end
     local h = header(i)
     say("returntimer " .. i .. ": sender=" .. show(h and h.sender) .. " subject=" .. show(h and h.subject)
         .. " - returning in 1 s, from a timer")
@@ -542,7 +549,7 @@ local HELP = {
     "log [N] | log clear",
 }
 
-SLASH_MAILPROBE1 = "/mprobe"
+SLASH_MAILPROBE1 = "/mailprobe"
 SlashCmdList.MAILPROBE = function(msg)
     local cmd, arg = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
     cmd = cmd:lower()
@@ -550,6 +557,6 @@ SlashCmdList.MAILPROBE = function(msg)
         local ok, err = pcall(C[cmd], arg)
         if not ok then say(cmd .. ": ERROR " .. show(err)) end
     else
-        for _, line in ipairs(HELP) do print("|cff7fd4ffMailProbe|r /mprobe " .. line) end
+        for _, line in ipairs(HELP) do print("|cff7fd4ffMailProbe|r /mailprobe " .. line) end
     end
 end

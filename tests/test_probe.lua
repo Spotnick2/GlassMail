@@ -62,7 +62,9 @@ check(chatHas("total free 12"), "bags reports free space")
 SlashCmdList.MAILPROBE("taketimer 1")
 eq(calls[1], "take 1:1", "taketimer takes the first attachment from the key press")
 SlashCmdList.MAILPROBE("")
-check(chatHas("/mprobe state"), "help lists the commands")
+check(chatHas("/mailprobe state"), "help lists the commands")
+-- Not /mprobe: MagelyProbe owns that one (Magely/Tools/MagelyProbe).
+eq(SLASH_MAILPROBE1, "/mailprobe", "the probe's command is /mailprobe")
 
 -- The mailbox lifecycle is logged, filtered to the mailbox interaction.
 newChat()
@@ -72,5 +74,21 @@ WoW.fire("MAIL_SHOW")
 local lines = newChat()
 eq(#lines, 2, "the mailbox interaction and MAIL_SHOW are logged, another interaction isn't")
 check(#MailProbeDB.log > 0, "every line is kept in the log")
+
+-- The open time is logged on the interaction HIDE (MAIL_CLOSED never fires),
+-- once even when HIDE fires twice, as it does at logout.
+local function durations()
+    local n = 0
+    for _, l in ipairs(newChat()) do if l:find("mailbox was open") then n = n + 1 end end
+    return n
+end
+WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 17)
+WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 17)
+eq(durations(), 1, "the open time is logged once on HIDE, not again on a second HIDE")
+-- Without the enum, the measured type 17 still counts as the mailbox.
+rawset(_G, "Enum", {})
+WoW.fire("MAIL_SHOW")
+WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 17)
+eq(durations(), 1, "with no MailInfo enum, HIDE 17 still closes the mailbox")
 
 done("test_probe")
