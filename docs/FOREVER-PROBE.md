@@ -14,8 +14,8 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
 | 3 | Looting limits and failures | Specialty bags take items when general bags are full; money needs no slot; `MAIL_FAILED(itemID)` + error type 3. Session 3. |
 | 4 | Take / Return from a timer | **Both work.** `TakeInboxItem` and `ReturnInboxItem` from `C_Timer` callbacks, no block. Sessions 3 and 4. |
 | 5 | Open All ownership (gamepad, OnHide) | Hiding calls `SetOpeningAll(false)`; the button comes back on every mailbox open and on /reload. No gamepad available (owner): untestable. Our engine re-checks its own state each step instead of relying on the stock button staying inert. |
-| 6 | Sending, splitting, secure transfer | Blizzard Send: no secure-transfer confirm for an own character; success 15 s later. Timer send, split: pending. |
-| 7 | Taint: row controls, picker, combat | Our row button took an item with no block. Picker, combat: pending. |
+| 6 | Sending, splitting, secure transfer | Blizzard Send: no secure-transfer confirm for own characters; success 4-15 s after `SendMail`. Splitting a stack and a timer send are deferred to M4 (N1). |
+| 7 | Taint: row controls, picker, combat | No block from our row button (take) or our picker (`SetText` on the recipient box, then Blizzard's Send). Combat is untested and not needed: the mailbox can't be used in combat. |
 | 8 | Sender formats, secrets, read state | `GetMoney` was **not** secret (out of combat, in town). Players "First Surname"; AH "Horde Auction House" (faction-specific). Item count nil without items; uncached items named "". |
 
 ## Session 4 findings (2026-10-09)
@@ -33,7 +33,31 @@ I inbox loaded=0 total=0
 R MAIL_SUCCESS (nil)
 ```
 
-**Still to run:** `picker` then Send; optionally `split` and `sendtimer`.
+**Taint (item 7, done).** **The picker works.** Our own `@` button (a UIParent child) called
+`SendMailNameEditBox:SetText("Cowruzo Kashmere")`, then Blizzard's Send button sent the mail
+normally. Nothing was blocked and no secure-transfer confirmation appeared. S1's picker is safe.
+
+**Sending (item 6).**
+- `SEND_MAIL_COD_CHANGED` and `SEND_MAIL_MONEY_CHANGED` fire in the frame of the Send click,
+  before `SendMail` runs, and again when the draft resets after success.
+- **`MAIL_SEND_SUCCESS` came 4.3 s after `SendMail`** (15 s in session 3). A send queue (N1) must
+  wait for it with a generous timeout, and treat a mailbox close in the meantime as "unknown",
+  not "failed".
+
+```
+picker: recipient set to "Cowruzo Kashmere"; now press Send yourself
+R SEND_MAIL_COD_CHANGED ()
+R SEND_MAIL_MONEY_CHANGED ()
+C SendMail("Cowruzo Kashmere", "Commonplace Herb Seeds", "", nil)
+R SEND_MAIL_MONEY_CHANGED ()
+R SEND_MAIL_COD_CHANGED ()
+R MAIL_SEND_SUCCESS ()
+R MAIL_SUCCESS (nil)
+```
+
+**Deferred to M4 (bank character), measured there:** splitting a stack into an attachment
+(`split`), and `SendMail` from a timer (`sendtimer`, measured only: the design never sends from
+a timer).
 
 ## Session 3 findings (2026-10-09, same inbox)
 

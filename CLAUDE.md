@@ -15,8 +15,8 @@ characters. The feature list is [docs/FEATURES.md](docs/FEATURES.md); the milest
 probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 [docs/FOREVER-PROBE.md](docs/FOREVER-PROBE.md).
 
-**Status: M0** (skeleton, options page, first glass pass, MailProbe). No feature code until the
-probe has run on the live client.
+**Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
+results in docs/FOREVER-PROBE.md). **Next: M1**, planned and reviewed with Codex before coding.
 
 ## The UI contract (non-negotiable)
 

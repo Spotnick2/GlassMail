@@ -6,12 +6,12 @@ review's main corrections are listed at the end.
 
 ## Milestones
 
-- **M0: skeleton and probe** *(this milestone)*.
+- **M0: skeleton and probe** *(done)*.
   - The addon boots, has `/gmail`, an options page and a first glass pass on the mail windows.
   - Repository tooling: tests, deploy, `.pkgmeta`, CI.
   - `Tools/MailProbe` is run on the live client and its results recorded in
     [FOREVER-PROBE.md](FOREVER-PROBE.md). **No feature code before that.**
-- **M1, first release:** the mail core (`Core/Scan.lua`, `Core/Summary.lua`, `Core/Names.lua`,
+- **M1, first release** *(next)*: the mail core (`Core/Scan.lua`, `Core/Summary.lua`, `Core/Names.lua`,
   `Core/Loot.lua`), the skin finished, I1, I2, I3, X3, with the operation records that confirm each
   action succeeded.
 - **M2:** S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI.
@@ -67,7 +67,10 @@ Each item goes in FOREVER-PROBE.md with what was seen.
    we read, whether `GetInboxText` marks mail as read. *(`inbox`, `readtest`)*
 
 Deferred until their features come up: autocomplete-source then Send; whether a subject suffix
-token survives a round trip.
+token survives a round trip; splitting a stack into an attachment and `SendMail` from a timer
+(M4). The gamepad path of item 5 can't be tested (no gamepad).
+
+**M0 probe status: done** (FOREVER-PROBE.md sessions 1-4).
 
 ## Review outcome (Codex, 2026-10-09)
 
