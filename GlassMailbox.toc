@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: |cff7fd4ffGlass|r Mailbox
+## Notes: Liquid-glass mailbox: open all with filters, select, mail memory across your characters. /gmail help
+## Author: Spotnick
+## Version: @project-version@
+## X-License: GPL-3.0
+## SavedVariables: GlassMailboxDB
+## SavedVariablesPerCharacter: GlassMailboxCharDB
+
+Libs\LibGlass-1.0\LibGlass-1.0.xml
+Compat.lua
+Glass.lua
+Skin.lua
+Options.lua
+GlassMailbox.lua

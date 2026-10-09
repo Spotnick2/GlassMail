@@ -1,0 +1,139 @@
+-- GlassMailbox.lua: bootstrap, saved settings, the settings helpers and the
+-- /gmail command. Loads last: every module is defined by now.
+
+local ADDON = ...
+GlassMailbox = GlassMailbox or {}
+local GM = GlassMailbox
+local API = GM.API
+local say = API.Print
+
+-- Account-wide (GlassMailboxDB): settings, the same on every character.
+-- Per character (GlassMailboxCharDB): nothing yet.
+local DEFAULTS = {
+    glass = true,   -- the glass panels on the mail windows (off: Blizzard's own art)
+}
+GM.DEFAULTS = DEFAULTS
+
+-- Only what the player SET is saved: everything else falls through to
+-- DEFAULTS, so a changed default reaches everyone. Saved keys equal to the
+-- default are dropped. Nothing may REQUIRE a value to have survived
+-- (GlassChat's rule).
+local function ensureDefaults()
+    if type(GlassMailboxDB) ~= "table" then GlassMailboxDB = {} end
+    local db = GlassMailboxDB
+    for k, v in pairs(DEFAULTS) do
+        if db[k] == v then db[k] = nil end
+    end
+    setmetatable(db, { __index = DEFAULTS })
+    if type(GlassMailboxCharDB) ~= "table" then GlassMailboxCharDB = {} end
+    return db, GlassMailboxCharDB
+end
+
+-- Every setting goes through here: /gmail and the options page.
+local Settings = {}
+GM.Settings = Settings
+
+function Settings.SetGlass(on)
+    GM.db.glass = on and true or false
+    GM.Skin.Refresh()
+end
+
+-- A dev build, by its version: "dev" from the deploy script, or the
+-- packager's token left unreplaced (matched as a pattern, never written whole:
+-- the packager would replace it here too). Unreadable is NOT dev.
+function GM.IsDev()
+    local v = API.AddOnVersion(ADDON or "GlassMailbox")
+    return v ~= nil and (v == "dev" or v:find("@project%-version@") ~= nil)
+end
+
+function GM.VersionText()
+    local v = API.AddOnVersion(ADDON or "GlassMailbox")
+    if v == nil or v == "" or GM.IsDev() then return "dev" end
+    return v
+end
+
+local function failures()
+    local any = false
+    for key, err in pairs(GM.failures) do
+        any = true
+        say(key .. ": " .. err)
+    end
+    for _, line in ipairs(GM.eventFailures) do
+        any = true
+        say("event " .. line)
+    end
+    if not any then say("no failures recorded") end
+end
+
+local function onOff(v) return v and "on" or "off" end
+
+-- The command list: /gmail help prints it, the options page can show it.
+local function helpLines()
+    return {
+        "/gmail glass on/off - the glass look on the mailbox (" .. onOff(GM.db.glass) .. ")",
+        "/gmail options - open the options page",
+        "/gmail failures - what failed to build or register",
+        "/gmail version - client build vs the measured one",
+    }
+end
+GM.HelpLines = helpLines
+
+local function flag(arg)
+    if arg == "on" then return true elseif arg == "off" then return false end
+end
+
+local function slash(msg)
+    local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
+    if cmd == "glass" then
+        local v = flag(arg)
+        if v == nil then say("/gmail glass on/off"); return end
+        Settings.SetGlass(v)
+        say("glass " .. onOff(v))
+    elseif cmd == "options" then
+        if not GM.Options.Open() then say("Esc > Options > AddOns > Glass Mailbox") end
+    elseif cmd == "failures" then
+        failures()
+    elseif cmd == "version" then
+        say("version " .. GM.VersionText() .. ", client " .. API.ClientBuild()
+            .. ", measured on " .. GM.MEASURED_ON_BUILD)
+    else
+        for _, line in ipairs(helpLines()) do say(line) end
+    end
+end
+
+SLASH_GLASSMAILBOX1 = "/gmail"
+SLASH_GLASSMAILBOX2 = "/glassmailbox"
+SlashCmdList.GLASSMAILBOX = slash
+
+local function start(key, fn)
+    local ok, err = pcall(fn)
+    if not ok then API.Fail(key, err) end
+end
+
+local boot = CreateFrame("Frame")
+boot:SetScript("OnEvent", function(_, event, arg1)
+    if event == "ADDON_LOADED" then
+        if arg1 == ADDON then
+            GM.db, GM.charDB = ensureDefaults()
+        elseif arg1 == "Blizzard_MailFrame" and GM.db then
+            start("skin", GM.Skin.Start)
+        end
+    elseif event == "PLAYER_LOGIN" then
+        -- SavedVariables are read here at the latest (porting guide: not at file scope).
+        if not GM.db then GM.db, GM.charDB = ensureDefaults() end
+        start("options", GM.Options.Register)
+        start("skin", GM.Skin.Start)
+    elseif event == "PLAYER_ENTERING_WORLD" then
+        -- arg1 = isInitialLogin. The build warning asks the developer to
+        -- re-measure; a player can't act on it, and /reload never repeats it.
+        if arg1 and GM.IsDev() and API.ClientBuild() ~= GM.MEASURED_ON_BUILD then
+            say("client build " .. API.ClientBuild() .. " differs from the one this addon was measured on ("
+                .. GM.MEASURED_ON_BUILD .. "). Things may misbehave until it is re-checked.")
+        end
+    end
+end)
+API.RegisterEvents(boot, { "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD" })
+
+GM._test = GM._test or {}
+GM._test.ensureDefaults = ensureDefaults
+GM._test.DEFAULTS = DEFAULTS
