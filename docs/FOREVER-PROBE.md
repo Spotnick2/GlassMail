@@ -12,19 +12,25 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
 | 1 | Lifecycle events, order, duplicates | **`MAIL_CLOSED` never fires**; close = interaction HIDE (17). See session 2. |
 | 2 | Inbox identity and capacity | Empty inbox: `GetInboxNumItems` = 0, 0; `CanCheckInbox` = true, 0; no command pending. Two identical mails differ only by `daysLeft` (session 2). |
 | 3 | Looting limits and failures | Specialty bags take items when general bags are full; money needs no slot; `MAIL_FAILED(itemID)` + error type 3. Session 3. |
-| 4 | Take / Return from a timer | **Both work.** `TakeInboxItem` and `ReturnInboxItem` from `C_Timer` callbacks, no block. Sessions 3 and 4. |
+| 4 | Take / Return from a timer | `TakeInboxItem` from timers works (several in a row). One `ReturnInboxItem` from a timer works; several in a row: open. Sessions 3 and 4. |
 | 5 | Open All ownership (gamepad, OnHide) | Hiding calls `SetOpeningAll(false)`; the button comes back on every mailbox open and on /reload. No gamepad available (owner): untestable. Our engine re-checks its own state each step instead of relying on the stock button staying inert. |
-| 6 | Sending, splitting, secure transfer | Blizzard Send: no secure-transfer confirm for own characters; success 4-15 s after `SendMail`. Splitting a stack and a timer send are deferred to M4 (N1). |
-| 7 | Taint: row controls, picker, combat | No block from our row button (take) or our picker (`SetText` on the recipient box, then Blizzard's Send). Combat is untested and not needed: the mailbox can't be used in combat. |
+| 6 | Sending, splitting, secure transfer | No confirmation appeared for two item sends (to "Cowruzo Test" and "Cowruzo Kashmere"). Blizzard shows it only for strangers. Success 4.3 s / ~15 s after `SendMail`. Strangers, splitting, timer send: open (see below). |
+| 7 | Taint: row controls, picker, combat | No block from our row button (take) or our picker followed by Blizzard's Send, on sends that needed no confirmation. Combat, and the picker with a confirmation: open (see below). |
 | 8 | Sender formats, secrets, read state | `GetMoney` was **not** secret (out of combat, in town). Players "First Surname"; AH "Horde Auction House" (faction-specific). Item count nil without items; uncached items named "". |
 
 ## Session 4 findings (2026-10-09)
 
-**Batch actions (item 4, done).** **`ReturnInboxItem` works from a timer.** `returntimer 1`
+**Batch actions (item 4).** **One `ReturnInboxItem` from a timer worked.** `returntimer 1`
 returned a player's mail ("Kaleid Sumner", "Crawler Claw") 1 s after the key press, from a
-`C_Timer` callback. Nothing was blocked. The inbox went from 1 mail to 0 at once, then
-`MAIL_SUCCESS (nil)` fired. There was no `CLOSE_INBOX_ITEM`. So I2's "Return selected" needs one
-click for the whole selection, paced like looting.
+`C_Timer` callback, with nothing blocked.
+- **The order differs from a take:** the inbox shrank (1 mail to 0) **before** `MAIL_SUCCESS`, and
+  there was no `CLOSE_INBOX_ITEM`. After a return, the indices have shifted by the time the success
+  event arrives.
+- A batch Return must find each mail again, by its fingerprint, after every inbox update and
+  immediately before each `ReturnInboxItem`. It must never use an index remembered from before the
+  last update. Otherwise the next return can send back the wrong mail.
+- Several returns in a row were **not** measured. That happens during M1, on test mails, before
+  I2's "Return selected" ships.
 
 ```
 returntimer 1: sender="Kaleid Sumner" subject="Crawler Claw" - returning in 1 s, from a timer
@@ -33,31 +39,55 @@ I inbox loaded=0 total=0
 R MAIL_SUCCESS (nil)
 ```
 
-**Taint (item 7, done).** **The picker works.** Our own `@` button (a UIParent child) called
-`SendMailNameEditBox:SetText("Cowruzo Kashmere")`, then Blizzard's Send button sent the mail
-normally. Nothing was blocked and no secure-transfer confirmation appeared. S1's picker is safe.
+**Taint (item 7).** **The picker worked on a send that showed no confirmation.** Our own `@`
+button (a `UIParent` child) called `SendMailNameEditBox:SetText("Cowruzo Kashmere")`. Blizzard's
+Send then sent the mail normally, with nothing blocked.
+- **Blizzard's secure-transfer confirmation is for strangers.** `Blizzard_SecureTransferUI.lua:298-304`
+  shows `SEND_ITEMS_TO_STRANGER` / `SEND_MONEY_TO_STRANGER` when `SECURE_TRANSFER_CONFIRM_SEND_MAIL`
+  fires. Our two sends (to "Cowruzo Test" and "Cowruzo Kashmere") showed none.
+- **Still unmeasured:** whether a name set by our code, followed by a send that does need the
+  confirmation (an item or gold to a stranger), still goes through the restricted
+  `C_SecureTransfer.SendMail`. The S1 picker is only proven for recipients that need no
+  confirmation until then. It must be measured before S1 ships (M2), with the `MenuUtil` menu S1
+  will use.
 
 **Sending (item 6).**
-- `SEND_MAIL_COD_CHANGED` and `SEND_MAIL_MONEY_CHANGED` fire in the frame of the Send click,
-  before `SendMail` runs, and again when the draft resets after success.
-- **`MAIL_SEND_SUCCESS` came 4.3 s after `SendMail`** (15 s in session 3). A send queue (N1) must
-  wait for it with a generous timeout, and treat a mailbox close in the meantime as "unknown",
-  not "failed".
+- **Send order:** `SEND_MAIL_COD_CHANGED` and `SEND_MAIL_MONEY_CHANGED` fire on the Send click,
+  before `SendMail`. That comes from Blizzard's code, `SendMailButtonMixin:OnClick` in
+  `MailFrame.lua:1251-1268`, which calls `SetSendMailCOD(0)` and `SetSendMailMoney(0)` before
+  `SendMailFrame_SendMail()`. The log can't show it, because the probe's `C` lines are post-hooks
+  logged after the call returns. The same two events fire again when the draft resets after success.
+- **`MAIL_SEND_SUCCESS` came 4.3 s after `SendMail`** (`GetTime` 610146.39 to 610150.70). In
+  session 3 it came about 15 s after, which is wall-clock only (16:51:02 to 16:51:17, 1 s
+  resolution). A send queue (N1) must wait for it with a generous timeout. A mailbox close in
+  the meantime means "unknown", not "failed".
 
 ```
-picker: recipient set to "Cowruzo Kashmere"; now press Send yourself
-R SEND_MAIL_COD_CHANGED ()
-R SEND_MAIL_MONEY_CHANGED ()
-C SendMail("Cowruzo Kashmere", "Commonplace Herb Seeds", "", nil)
-R SEND_MAIL_MONEY_CHANGED ()
-R SEND_MAIL_COD_CHANGED ()
-R MAIL_SEND_SUCCESS ()
-R MAIL_SUCCESS (nil)
+610139.87 picker: recipient set to "Cowruzo Kashmere"; now press Send yourself
+610146.39 R SEND_MAIL_COD_CHANGED ()
+610146.39 R SEND_MAIL_MONEY_CHANGED ()
+610146.39 C SendMail("Cowruzo Kashmere", "Commonplace Herb Seeds", "", nil)
+610150.70 R SEND_MAIL_MONEY_CHANGED ()
+610150.70 R SEND_MAIL_COD_CHANGED ()
+610150.70 R MAIL_SEND_SUCCESS ()
+610150.70 R MAIL_SUCCESS (nil)
 ```
 
-**Deferred to M4 (bank character), measured there:** splitting a stack into an attachment
-(`split`), and `SendMail` from a timer (`sendtimer`, measured only: the design never sends from
-a timer).
+## Still open, and when it gets measured
+
+M0 measured what M1's design decisions depend on. These items stay open. Each is measured with
+MailProbe **before the feature that depends on it ships**:
+
+| Item | Open question | Measure in | Blocks |
+|---|---|---|---|
+| 2 | `CanCheckInbox` refill past the loaded window; index shifts on new mail; returned mail; an inbox update while a confirmation is open | M1 | I1, I2 |
+| 3 | Stack limits, unique items, locked slots, the free-slot reserve boundary, skipped mail filling the loaded window | M1 | I1 |
+| 4 | Several `ReturnInboxItem` in a row (re-find each mail after every update) | M1 | I2 |
+| 7 | Combat: being attacked with the mailbox open, with our row buttons shown | M1 | I2, I3 |
+| 8 | Postmaster mail and other system senders; senders on a localized client | M1 (Postmaster), when available (localized) | I1 filters |
+| 6, 7 | A send that needs the secure-transfer confirmation (a stranger), after our `SetText`; postage failure; bind/refund prompts | M2 | S1 |
+| 6 | Splitting a stack into an attachment; `SendMail` from a timer (measured only, never used) | M4 | N1 |
+| 5 | Open All from a gamepad | never (no gamepad) | none: our engine checks its own state at every step |
 
 ## Session 3 findings (2026-10-09, same inbox)
 

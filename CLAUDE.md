@@ -17,6 +17,8 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **Next: M1**, planned and reviewed with Codex before coding.
+Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which milestone
+measures each one, before the feature that depends on it ships.
 
 ## The UI contract (non-negotiable)
 
@@ -28,9 +30,10 @@ results in docs/FOREVER-PROBE.md). **Next: M1**, planned and reviewed with Codex
   child (`MailFrame.NineSlice`, `InboxFrame.OpenAllMail`) is fine; that's declared XML.
 - The inbox rows keep their stock clicks (shift-click auto-loots). Extra actions live on our own
   controls.
-- **Every send goes through Blizzard's Send button and its secure-transfer confirmation.** Never
-  call `SendMail` from a timer or event, whatever a probe shows. `C_SecureTransfer.SendMail` is
-  restricted.
+- **Every send goes through Blizzard's Send button, and through the secure-transfer confirmation
+  whenever Blizzard shows it** (items or gold to a stranger, `Blizzard_SecureTransferUI.lua:298`).
+  Never call `SendMail` from a timer or event, whatever a probe shows.
+  `C_SecureTransfer.SendMail` is restricted.
 - There is **no stable mail ID**. An inbox index is valid until the next `MAIL_INBOX_UPDATE`.
   Before any action on a remembered mail, find it again and check it is the same one; if two
   mails match, don't act.
@@ -75,10 +78,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - The AH sender name is faction-specific ("Horde Auction House"): classify mail by the subject
   templates, never by sender. `itemCount` is nil without items; an uncached attachment's name is
   `""`, so key attachments by itemID.
-- Measured looting (session 3): `TakeInboxItem` and `ReturnInboxItem` work from timers; taking money needs no bag slot;
-  specialty bags take their items when general bags are full (Blizzard's free-slot total ignores
-  them); **`MAIL_FAILED(itemID)` is the failure signal** (the `UI_ERROR_MESSAGE` beside it only
-  says why: type 3 = inventory full, the one reason measured); `MAIL_SUCCESS` has no itemID.
+- Measured looting (sessions 3-4): `TakeInboxItem` works from timers (several in a row), and so
+  did one `ReturnInboxItem`. After a return the inbox shrinks **before** `MAIL_SUCCESS`, so find
+  each mail again before the next action. Taking money needs no bag slot; specialty bags take
+  their items when general bags are full (Blizzard's free-slot total ignores them).
+  **`MAIL_FAILED(itemID)` is the failure signal**; the `UI_ERROR_MESSAGE` beside it only says
+  why (type 3 = inventory full, the one reason measured). `MAIL_SUCCESS` has no itemID.
   **`GetInboxText` marks mail read**, and so did a *failed* take: never call it on unread mail
   for a snapshot, and expect any take attempt to flip `wasRead`. The stock Open All button
   reappears on every mailbox open.
