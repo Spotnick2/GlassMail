@@ -1,6 +1,6 @@
--- MailProbe: the throwaway measurement addon for GlassMailbox, milestone M0.
--- It answers the questions docs/PLAN.md's probe checklist leaves open before
--- any feature code is written. Every line it prints also goes to
+-- MailProbe: the throwaway measurement addon for GlassMailbox (M0, and M1's
+-- session 5). It answers the questions docs/PLAN.md's probe checklist leaves
+-- open before any feature code is written. Every line it prints also goes to
 -- MailProbeDB.log (SavedVariables), so a full client exit leaves the session
 -- on disk for review. It logs mail headers (senders, subjects, amounts) of
 -- the player's own inbox only.
@@ -13,15 +13,21 @@
 --   I  every MAIL_INBOX_UPDATE that changes loaded/total counts
 --   R  results: MAIL_SUCCESS / MAIL_FAILED (itemID), MAIL_SEND_SUCCESS,
 --      CLOSE_INBOX_ITEM, UI_ERROR_MESSAGE, send lock/unlock, money/COD changes,
---      SECURE_TRANSFER_*, and taint: ADDON_ACTION_BLOCKED / _FORBIDDEN
+--      SECURE_TRANSFER_*, and taint: ADDON_ACTION_BLOCKED / _FORBIDDEN;
+--      UPDATE_PENDING_MAIL with HasNewMail and the minimap mail indicator
 --   C  calls: TakeInboxItem, TakeInboxMoney, AutoLootMailItem, ReturnInboxItem,
 --      DeleteInboxItem, SendMail, ClickSendMailItemButton, C_Mail.SetOpeningAll
 --      (post-hooks, whoever calls them: Blizzard's Open All included)
 --
 -- Commands (/mailprobe):
---   state            inbox counts, CanCheckInbox, pending command, bag space, money secrecy
---   inbox            every loaded mail's header and attachments (sender formats, isGM, currency)
+--   state            inbox counts, CanCheckInbox, pending command, bag space, money secrecy, new mail
+--   strings          the client's AUCTION_*_MAIL_SUBJECT templates
+--   inbox            every loaded mail's header, attachments with links, invoice, AH template
 --   dupes            mails that look identical (identity without a server id)
+--   watch on/off     log every mail whenever an inbox update changes it (index shifts, residuals)
+--   fit N            for mail N's attachments: max stack, item family, room in partial
+--                    stacks, specialty and general free slots (what I1 decides from)
+--   refill           CheckInbox() when allowed, and how long until the next update
 --   readtest N       does GetInboxText mark mail N read?
 --   bags             free slots per bag, with the bag family (specialty bags)
 --   take N [slot]    TakeInboxItem from the command (a key press)
@@ -29,8 +35,11 @@
 --   taketimer N      TakeInboxItem of mail N, slot by slot, from timers after one key press
 --   returnnow N      ReturnInboxItem from the command        (ONLY on a test mail!)
 --   returntimer N    ReturnInboxItem from a timer, 1 s later  (ONLY on a test mail!)
+--   returnmany A B.. ReturnInboxItem of several mails in a row, each found again by its
+--                    fingerprint, the first from the key press, the rest from timers (ONLY test mails!)
 --   hidestock / showstock   hide or show Blizzard's Open All button (then try a gamepad)
---   rows on/off      our own small buttons on the inbox rows; a click takes that mail's money/first item
+--   rows on/off      our own T / R / D buttons on the inbox rows, children of InboxFrame: take
+--                    (money, else the first item), return, delete (empty mail only)
 --   picker NAME      a button by the recipient box that fills it with NAME; then press Send yourself
 --   draft            the send draft: recipient, subject, attachments, money, COD, postage
 --   split BAG SLOT N split N off a stack and attach it to the draft
@@ -121,15 +130,104 @@ local function plain(v)   -- a value usable in Lua, or nil
     return v
 end
 
-local function fingerprint(h, i)
-    local parts = { plain(h.sender), plain(h.subject), plain(h.money), plain(h.CODAmount), plain(h.itemCount),
-        plain(h.wasReturned) }
+-- Mail N's attachments, by slot: { slot, itemID, count, link }. The link is
+-- nil when the client can't give it (the question M1's identity rule hangs on).
+local function attachments(i)
+    local out = {}
     for a = 1, ATTACH_MAX do
         local ok, name, itemID, _, count = try("GetInboxItem", global("GetInboxItem"), i, a)
-        if ok and name ~= nil then parts[#parts + 1] = tostring(plain(itemID)) .. "x" .. tostring(plain(count)) end
+        if ok and name ~= nil then
+            local okL, link = try("GetInboxItemLink", global("GetInboxItemLink"), i, a)
+            out[#out + 1] = { slot = a, itemID = plain(itemID), count = plain(count), link = okL and plain(link) or nil }
+        end
     end
+    return out
+end
+
+-- M1's fingerprint: sender, subject, money, COD, wasReturned and each
+-- attachment's link x count, without slot numbers (whether slots renumber
+-- after a take is one of the things `watch` shows). A missing link leaves it
+-- unresolved: the second return is false.
+local function fingerprint(h, i)
+    local parts = { plain(h.sender), plain(h.subject), plain(h.money), plain(h.CODAmount), plain(h.wasReturned) }
     for k = 1, #parts do parts[k] = tostring(parts[k]) end
-    return table.concat(parts, "|")
+    local items, resolved = {}, true
+    for _, it in ipairs(attachments(i)) do
+        if not it.link then resolved = false end
+        items[#items + 1] = tostring(it.link or ("id" .. tostring(it.itemID))) .. "x" .. tostring(it.count)
+    end
+    table.sort(items)
+    parts[#parts + 1] = table.concat(items, ",")
+    return table.concat(parts, "|"), resolved
+end
+
+-- Every loaded mail's fingerprint: byIndex[i] = fp, count[fp] = n.
+local function scanAll()
+    local byIndex, count = {}, {}
+    local loaded = counts()
+    for i = 1, loaded or 0 do
+        local h = header(i)
+        if h then
+            local fp = fingerprint(h, i)
+            byIndex[i] = fp
+            count[fp] = (count[fp] or 0) + 1
+        end
+    end
+    return byIndex, count
+end
+
+local function indexOf(fp)
+    local byIndex, count = scanAll()
+    if (count[fp] or 0) ~= 1 then return nil, count[fp] or 0 end
+    for i, f in pairs(byIndex) do if f == fp then return i, 1 end end
+end
+
+-- The client's AH subject templates, by global name.
+local function subjectTemplates()
+    local t = {}
+    for k, v in pairs(_G) do
+        if type(k) == "string" and k:find("^AUCTION_.*MAIL_SUBJECT$") and type(v) == "string" then t[k] = v end
+    end
+    return t
+end
+
+-- A format string ("Auction successful: %s") as an anchored Lua pattern.
+local function templatePattern(fmt)
+    local p = fmt:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0")
+    p = p:gsub("%%%%s", ".+"):gsub("%%%%d", "%%d+")
+    return "^" .. p .. "$"
+end
+
+local function subjectMatch(subject)
+    if type(plain(subject)) ~= "string" then return nil end
+    local names = {}
+    for name, fmt in pairs(subjectTemplates()) do
+        if subject:find(templatePattern(fmt)) then names[#names + 1] = name end
+    end
+    table.sort(names)
+    return names[1] and table.concat(names, ",") or nil
+end
+
+-- Blizzard's minimap mail indicator (Mainline Minimap.xml: MinimapCluster.
+-- IndicatorFrame.MailFrame, shown while HasNewMail() on UPDATE_PENDING_MAIL).
+local function indicator()
+    local mc = global("MinimapCluster")
+    local f = mc and mc.IndicatorFrame and mc.IndicatorFrame.MailFrame
+    if not f then return "MISSING" end
+    return show(f:IsShown())
+end
+
+-- One line per mail, slot numbers included, for `watch`.
+local function describe(i)
+    local h = header(i)
+    if not h then return nil end
+    local slots = {}
+    for _, it in ipairs(attachments(i)) do
+        slots[#slots + 1] = it.slot .. ":" .. tostring(it.link or ("id" .. tostring(it.itemID) .. "(no link)")) .. "x"
+            .. tostring(it.count)
+    end
+    return string.format("%d: %s %s money=%s cod=%s ret=%s read=%s [%s]", i, show(h.sender), show(h.subject),
+        show(h.money), show(h.CODAmount), show(h.wasReturned), show(h.wasRead), table.concat(slots, " "))
 end
 
 local function freeSlots()
@@ -174,6 +272,18 @@ end
 
 local hooksDone = false
 local installHooks   -- defined below
+local watching, lastWatch = false, {}   -- watch on: every mail line as last logged
+local refillAt                          -- GetTime() of our CheckInbox, until the next update
+
+local function logWatch()
+    local loaded = counts() or 0
+    for i = 1, math.max(loaded, #lastWatch) do
+        local line = i <= loaded and describe(i) or (i .. ": (none)")
+        if line ~= lastWatch[i] then say("W " .. line) end
+        lastWatch[i] = line
+    end
+    for i = #lastWatch, loaded + 1, -1 do lastWatch[i] = nil end
+end
 
 frame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -193,6 +303,19 @@ frame:SetScript("OnEvent", function(_, event, ...)
             say("I inbox loaded=" .. show(loaded) .. " total=" .. show(total))
             lastLoaded, lastTotal = loaded, total
         end
+        if refillAt then
+            say(string.format("refill: MAIL_INBOX_UPDATE %.2f s after CheckInbox, loaded=%s total=%s",
+                GetTime() - refillAt, show(loaded), show(total)))
+            refillAt = nil
+        end
+        if watching then logWatch() end
+        return
+    end
+    if event == "UPDATE_PENDING_MAIL" then
+        local okN, new = try("HasNewMail", global("HasNewMail"))
+        local okS, s1, s2, s3 = try("GetLatestThreeSenders", global("GetLatestThreeSenders"))
+        say("R UPDATE_PENDING_MAIL hasNewMail=" .. show(new) .. " senders=" .. args(s1, s2, s3)
+            .. " minimap indicator shown=" .. indicator())
         return
     end
     if QUIET[event] and not busy then return end
@@ -263,11 +386,21 @@ function C.state()
     local name, second = UnitName("player")
     say("state: loaded=" .. show(loaded) .. " total=" .. show(total) .. " canCheck=" .. show(can) .. " wait="
         .. show(wait) .. " pending=" .. show(pending))
-    say("state: hasNewMail=" .. show(new) .. " latest senders=" .. args(s1, s2, s3))
+    say("state: hasNewMail=" .. show(new) .. " latest senders=" .. args(s1, s2, s3) .. " minimap indicator shown="
+        .. indicator())
     say("state: freeSlots=" .. show(freeSlots()) .. " money secret=" .. show(okM and issecretvalue and issecretvalue(money))
         .. " UnitName=" .. args(name, second))
     say("state: mail frame shown=" .. show(global("MailFrame") and MailFrame:IsShown()) .. " MailInfo type="
         .. show(mailInfoType()))
+end
+
+function C.strings()
+    local t = subjectTemplates()
+    local names = {}
+    for name in pairs(t) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do say("strings: " .. name .. " = " .. show(t[name])) end
+    say("strings: " .. #names .. " AUCTION_*_MAIL_SUBJECT global(s)")
 end
 
 function C.inbox()
@@ -280,16 +413,21 @@ function C.inbox()
                 .. "reply=%s gm=%s first=%s", i, show(h.sender), show(h.subject), show(h.money), show(h.CODAmount),
                 show(h.daysLeft), show(h.itemCount), show(h.wasRead), show(h.wasReturned), show(h.canReply),
                 show(h.isGM), show(h.firstItemLink)))
+            -- Postmaster and system mail: anything here that tells them from a player.
+            say("   icons package=" .. show(h.packageIcon) .. " stationery=" .. show(h.stationeryIcon) .. " textCreated="
+                .. show(h.textCreated) .. " AH template=" .. show(subjectMatch(h.subject)))
             for a = 1, ATTACH_MAX do
                 local ok, nm, itemID, _, count, quality, canUse, isCurrency = try("GetInboxItem", global("GetInboxItem"), i, a)
                 if ok and nm ~= nil then
-                    say(string.format("   slot %d: %s id=%s count=%s q=%s usable=%s currency=%s", a, show(nm),
-                        show(itemID), show(count), show(quality), show(canUse), show(isCurrency)))
+                    local okL, link = try("GetInboxItemLink", global("GetInboxItemLink"), i, a)
+                    say(string.format("   slot %d: %s id=%s count=%s q=%s usable=%s currency=%s link=%s", a, show(nm),
+                        show(itemID), show(count), show(quality), show(canUse), show(isCurrency),
+                        okL and show(link) or "ERROR"))
                 end
             end
-            local okI, invoiceType, itemName, player = try("GetInboxInvoiceInfo", global("GetInboxInvoiceInfo"), i)
-            if okI and invoiceType ~= nil then
-                say("   invoice: " .. args(invoiceType, itemName, player))
+            local inv = pack(try("GetInboxInvoiceInfo", global("GetInboxInvoiceInfo"), i))
+            if inv[1] and inv[2] ~= nil then
+                say("   invoice: " .. args(unpack(inv, 2, inv.n)))
             end
         end
     end
@@ -302,7 +440,8 @@ function C.dupes()
     for i = 1, loaded do
         local h = header(i)
         if h then
-            local fp = fingerprint(h, i)
+            local fp, resolved = fingerprint(h, i)
+            if not resolved then say("dupes: mail " .. i .. " has an attachment with no link (unresolved)") end
             if seen[fp] then
                 groups = groups + 1
                 say("dupes: mail " .. i .. " looks identical to mail " .. seen[fp])
@@ -312,6 +451,148 @@ function C.dupes()
         end
     end
     say("dupes: " .. groups .. " identical pair(s) among " .. loaded .. " loaded")
+end
+
+function C.watch(arg)
+    watching = arg ~= "off"
+    lastWatch = {}
+    if watching then logWatch() end
+    say("watch " .. (watching and "on: every mail is logged again whenever an update changes it" or "off"))
+end
+
+-- A bitmask AND for the bag family (no bit library in the API dump).
+local function band(a, b)
+    local r, bitv = 0, 1
+    while a > 0 and b > 0 do
+        if a % 2 == 1 and b % 2 == 1 then r = r + bitv end
+        a, b, bitv = math.floor(a / 2), math.floor(b / 2), bitv * 2
+    end
+    return r
+end
+
+-- What I1's fit rule would see for each of mail N's attachments. Compare with
+-- what a take then does (`bags` before and after, MAIL_FAILED).
+function C.fit(arg)
+    local i = tonumber(arg)
+    if not i then say("fit N: N is the mail number from /mailprobe inbox, e.g. /mailprobe fit 2"); return end
+    local c, ci = global("C_Container"), global("C_Item")
+    if not (c and ci) then say("fit: C_Container or C_Item MISSING"); return end
+    local nb = global("NUM_BAG_SLOTS") or 4
+    local bags = {}
+    for bag = 0, nb + 1 do
+        local okS, slots = try("GetContainerNumSlots", c.GetContainerNumSlots, bag)
+        local okF, free, family = try("GetContainerNumFreeSlots", c.GetContainerNumFreeSlots, bag)
+        if okS and slots and slots > 0 then
+            bags[#bags + 1] = { bag = bag, slots = slots, free = okF and free or 0, family = okF and family or nil }
+        end
+    end
+    say("fit: general free (Blizzard's total) " .. show(freeSlots()))
+    for _, it in ipairs(attachments(i)) do
+        local id = it.itemID
+        local okM, maxStack = try("GetItemMaxStackSizeByID", ci.GetItemMaxStackSizeByID, id)
+        local okFam, itemFamily = try("GetItemFamily", ci.GetItemFamily, id)
+        local okC, held = try("GetItemCount", ci.GetItemCount, id)
+        local okI, info = try("GetItemInfo", ci.GetItemInfo, id)
+        local room, specialty = 0, 0
+        for _, b in ipairs(bags) do
+            for s = 1, b.slots do
+                local okG, item = try("GetContainerItemInfo", c.GetContainerItemInfo, b.bag, s)
+                if okG and type(item) == "table" and item.itemID == id and type(maxStack) == "number"
+                        and type(item.stackCount) == "number" and item.stackCount < maxStack then
+                    room = room + maxStack - item.stackCount
+                end
+            end
+            if type(b.family) == "number" and b.family ~= 0 and type(itemFamily) == "number"
+                    and band(b.family, itemFamily) ~= 0 then
+                specialty = specialty + (b.free or 0)
+            end
+        end
+        say(string.format("fit %d slot %d: id=%s x%s maxStack=%s family=%s held=%s cached=%s room in partial stacks=%s "
+            .. "specialty free=%s", i, it.slot, show(id), show(it.count), okM and show(maxStack) or "ERROR",
+            okFam and show(itemFamily) or "ERROR", okC and show(held) or "ERROR", show(okI and info ~= nil),
+            show(room), show(specialty)))
+    end
+end
+
+-- Fetch more mail from the server, as I1's refill would. Only meaningful when
+-- the server holds more than the loaded window (total > loaded, past 100).
+function C.refill()
+    local loaded, total = counts()
+    local cm = global("C_Mail")
+    local okC, can, wait = try("CanCheckInbox", cm and cm.CanCheckInbox)
+    say("refill: loaded=" .. show(loaded) .. " total=" .. show(total) .. " canCheck=" .. show(can) .. " wait=" .. show(wait))
+    if not (type(loaded) == "number" and type(total) == "number" and total > loaded) then
+        say("refill: total is not above loaded, so there is nothing more to fetch (needs over 100 mails); checking anyway")
+    end
+    if not can then say("refill: not allowed yet; run it again in " .. show(wait) .. " s"); return end
+    refillAt = GetTime()
+    busy = true
+    try("CheckInbox", global("CheckInbox"))
+    C_Timer.After(10, function()
+        if refillAt then say("refill: no MAIL_INBOX_UPDATE within 10 s"); refillAt = nil end
+        busy = false
+    end)
+end
+
+-- Return several mails in a row: the first from the key press, the rest from
+-- timers, each found again by its fingerprint after the previous one is gone.
+-- Twins and mails with an unloaded attachment are refused, as M1 will.
+function C.returnmany(arg)
+    local list = {}
+    for n in arg:gmatch("%d+") do list[#list + 1] = tonumber(n) end
+    if #list < 2 then
+        say("returnmany A B [C...]: two or more mail numbers from /mailprobe inbox (ONLY test mails: they go back)")
+        return
+    end
+    local _, count = scanAll()
+    local targets = {}
+    for _, i in ipairs(list) do
+        local h = header(i)
+        if not h then say("returnmany: no mail " .. i); return end
+        local fp, resolved = fingerprint(h, i)
+        if not resolved then say("returnmany: mail " .. i .. " has an attachment with no link yet; try again"); return end
+        if count[fp] ~= 1 then say("returnmany: mail " .. i .. " has an identical twin; pick another"); return end
+        targets[#targets + 1] = { fp = fp, was = i }
+    end
+    local cm = global("C_Mail")
+    local k, sentAt, steps = 1, nil, 0
+    busy = true
+    local function finish(msg) say("returnmany: " .. msg); busy = false end
+    local function step()
+        steps = steps + 1
+        if steps > 400 then finish("stop (too many steps)"); return end
+        local t = targets[k]
+        if not t then finish("done, " .. #targets .. " mail(s)"); return end
+        if sentAt then
+            local i, n = indexOf(t.fp)
+            if n == 0 then
+                say(string.format("returnmany: mail (was %d) gone %.2f s after its return", t.was, GetTime() - sentAt))
+                k, sentAt = k + 1, nil
+                C_Timer.After(0.5, step)
+            elseif GetTime() - sentAt > 10 then
+                finish(string.format("mail (was %d) still there 10 s after its return (now %s); stop", t.was, show(i)))
+            else
+                C_Timer.After(0.2, step)
+            end
+            return
+        end
+        if cm and cm.IsCommandPending and cm.IsCommandPending() then C_Timer.After(0.2, step); return end
+        local i, n = indexOf(t.fp)
+        if not i then
+            say("returnmany: mail (was " .. t.was .. ") now has " .. n .. " matches; skipped")
+            k = k + 1
+            C_Timer.After(0.2, step)
+            return
+        end
+        local h = header(i)
+        say("returnmany: mail (was " .. t.was .. ") is now " .. i .. ", canReply=" .. show(h and h.canReply)
+            .. " wasReturned=" .. show(h and h.wasReturned) .. (steps == 1 and " - returning from the key press"
+            or " - returning from a timer"))
+        sentAt = GetTime()
+        try("ReturnInboxItem", global("ReturnInboxItem"), i)
+        C_Timer.After(0.2, step)
+    end
+    step()
 end
 
 function C.readtest(arg)
@@ -417,36 +698,60 @@ function C.showstock()
     say("stock Open All shown=" .. show(b:IsShown()))
 end
 
--- Our own row controls: separate frames on top of the inbox rows, never
--- fields on Blizzard's. A click takes that row's money, else its first item.
+-- Our own row controls, as M1 will build them: children of InboxFrame (so
+-- they show and hide with it), one level above each row, never fields on
+-- Blizzard's frames. Click them in and out of combat; watch for "!" lines.
+local ROW_ACTIONS = {
+    { "T", function(i, h)
+        if plain(h.money) and h.money > 0 then
+            try("TakeInboxMoney", global("TakeInboxMoney"), i)
+        else
+            try("TakeInboxItem", global("TakeInboxItem"), i, 1)
+        end
+    end },
+    { "R", function(i, h)
+        if not h.canReply or h.wasReturned then say("rows: mail " .. i .. " can't be returned; not sent"); return end
+        try("ReturnInboxItem", global("ReturnInboxItem"), i)
+    end },
+    { "D", function(i, h)
+        local okD, can = try("InboxItemCanDelete", global("InboxItemCanDelete"), i)
+        if plain(h.itemCount) or (plain(h.money) or 0) > 0 or not (okD and can) then
+            say("rows: mail " .. i .. " isn't empty or can't be deleted; not sent")
+            return
+        end
+        try("DeleteInboxItem", global("DeleteInboxItem"), i)
+    end },
+}
 local rowButtons = {}
 function C.rows(arg)
     local on = arg ~= "off"
+    local inbox = global("InboxFrame")
+    if not inbox then say("InboxFrame: MISSING"); return end
     local perPage = global("INBOXITEMS_TO_DISPLAY") or 7
     for r = 1, perPage do
         local row = global("MailItem" .. r)
         if row and not rowButtons[r] then
-            local b = CreateFrame("Button", nil, UIParent, "UIPanelButtonTemplate")
-            b:SetSize(22, 18)
-            b:SetText("P")
-            b:SetFrameStrata("HIGH")
-            b:SetPoint("RIGHT", row, "RIGHT", -2, 0)
-            b:SetScript("OnClick", function()
-                local page = (InboxFrame and InboxFrame.pageNum) or 1
-                local i = (page - 1) * perPage + r
-                local h = header(i)
-                say("rows: our button on row " .. r .. " -> mail " .. i .. " sender=" .. show(h and h.sender))
-                if h and plain(h.money) and h.money > 0 then
-                    try("TakeInboxMoney", global("TakeInboxMoney"), i)
-                elseif h then
-                    try("TakeInboxItem", global("TakeInboxItem"), i, 1)
-                end
-            end)
-            rowButtons[r] = b
+            rowButtons[r] = {}
+            for n, action in ipairs(ROW_ACTIONS) do
+                local b = CreateFrame("Button", nil, inbox, "UIPanelButtonTemplate")
+                b:SetSize(20, 16)
+                b:SetText(action[1])
+                b:SetFrameLevel(row:GetFrameLevel() + 2)
+                -- Bottom right: the row's expiry text is at its top right.
+                b:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -2 - (#ROW_ACTIONS - n) * 21, 2)
+                b:SetScript("OnClick", function()
+                    local i = ((inbox.pageNum or 1) - 1) * perPage + r
+                    local h = header(i)
+                    say("rows: " .. action[1] .. " on row " .. r .. " -> mail " .. i .. " sender=" .. show(h and h.sender)
+                        .. " combat=" .. show(InCombatLockdown()))
+                    if h then action[2](i, h) end
+                end)
+                rowButtons[r][n] = b
+            end
         end
-        if rowButtons[r] then rowButtons[r]:SetShown(on and MailFrame:IsShown()) end
+        for _, b in ipairs(rowButtons[r] or {}) do b:SetShown(on) end
     end
-    say("rows " .. (on and "on" or "off") .. " (shown while the mailbox is open when you run this)")
+    say("rows " .. (on and "on" or "off") .. ": T take, R return, D delete (empty mail only)")
 end
 
 -- A picker button by the recipient box: SetText from our click, then the
@@ -541,9 +846,9 @@ function C.log(arg)
 end
 
 local HELP = {
-    "state | inbox | dupes | readtest N | bags",
+    "state | strings | inbox | dupes | watch on/off | readtest N | bags | fit N | refill",
     "take N [slot] | money N | taketimer N",
-    "returnnow N | returntimer N  (ONLY on a test mail: it goes back to the sender)",
+    "returnnow N | returntimer N | returnmany A B ..  (ONLY test mails: they go back to the sender)",
     "hidestock | showstock | rows on/off | picker NAME",
     "draft | split BAG SLOT N | sendnow | sendtimer",
     "log [N] | log clear",
