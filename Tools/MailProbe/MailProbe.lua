@@ -117,7 +117,11 @@ local HEADER = { "packageIcon", "stationeryIcon", "sender", "subject", "money", 
     "itemCount", "wasRead", "wasReturned", "textCreated", "canReply", "isGM", "firstItemQuantity",
     "firstItemLink" }
 
+-- nil when there is no mail i: the call itself succeeds with no values, so a
+-- table of nils would otherwise look like a mail.
 local function header(i)
+    local loaded = counts()
+    if type(loaded) ~= "number" or i < 1 or i > loaded then return nil end
     local r = { try("GetInboxHeaderInfo(" .. i .. ")", global("GetInboxHeaderInfo"), i) }
     if not r[1] then return nil end
     local h = {}
@@ -152,7 +156,8 @@ local function fingerprint(h, i)
     local parts = { plain(h.sender), plain(h.subject), plain(h.money), plain(h.CODAmount), plain(h.wasReturned) }
     for k = 1, #parts do parts[k] = tostring(parts[k]) end
     local items, resolved = {}, true
-    for _, it in ipairs(attachments(i)) do
+    -- itemCount is nil without items (session 2): no per-slot calls then.
+    for _, it in ipairs(plain(h.itemCount) and attachments(i) or {}) do
         if not it.link then resolved = false end
         items[#items + 1] = tostring(it.link or ("id" .. tostring(it.itemID))) .. "x" .. tostring(it.count)
     end
@@ -182,6 +187,13 @@ local function indexOf(fp)
     for i, f in pairs(byIndex) do if f == fp then return i, 1 end end
 end
 
+-- Blizzard's own rule: the letter's button deletes what InboxItemCanDelete
+-- allows and returns everything else (OpenMailDeleteMixin:Delete).
+local function returnable(i)
+    local ok, can = try("InboxItemCanDelete", global("InboxItemCanDelete"), i)
+    return ok and not can
+end
+
 -- The client's AH subject templates, by global name.
 local function subjectTemplates()
     local t = {}
@@ -191,18 +203,26 @@ local function subjectTemplates()
     return t
 end
 
--- A format string ("Auction successful: %s") as an anchored Lua pattern.
+-- A format string as an anchored Lua pattern: every specifier (%s, %d, %i,
+-- and the positional %1$s that localized strings use) matches anything, a
+-- literal %% stays a percent sign, everything else is literal.
 local function templatePattern(fmt)
-    local p = fmt:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0")
-    p = p:gsub("%%%%s", ".+"):gsub("%%%%d", "%%d+")
+    local p = fmt:gsub("%%%%", "\2"):gsub("%%%d*%$?[sdi]", "\1")
+    p = p:gsub("[%%%(%)%.%+%-%*%?%[%]%^%$]", "%%%0")
+    p = p:gsub("\1", ".+"):gsub("\2", "%%%%")
     return "^" .. p .. "$"
 end
 
+local patterns   -- name -> pattern, built once (a walk of _G is not cheap)
 local function subjectMatch(subject)
     if type(plain(subject)) ~= "string" then return nil end
+    if not patterns then
+        patterns = {}
+        for name, fmt in pairs(subjectTemplates()) do patterns[name] = templatePattern(fmt) end
+    end
     local names = {}
-    for name, fmt in pairs(subjectTemplates()) do
-        if subject:find(templatePattern(fmt)) then names[#names + 1] = name end
+    for name, pattern in pairs(patterns) do
+        if subject:find(pattern) then names[#names + 1] = name end
     end
     table.sort(names)
     return names[1] and table.concat(names, ",") or nil
@@ -525,12 +545,13 @@ function C.refill()
         say("refill: total is not above loaded, so there is nothing more to fetch (needs over 100 mails); checking anyway")
     end
     if not can then say("refill: not allowed yet; run it again in " .. show(wait) .. " s"); return end
-    refillAt = GetTime()
-    busy = true
+    if refillAt then say("refill: one is already waiting for its update"); return end
+    -- The next MAIL_INBOX_UPDATE is logged as the answer: run nothing else meanwhile.
+    local at = GetTime()
+    refillAt = at
     try("CheckInbox", global("CheckInbox"))
     C_Timer.After(10, function()
-        if refillAt then say("refill: no MAIL_INBOX_UPDATE within 10 s"); refillAt = nil end
-        busy = false
+        if refillAt == at then say("refill: no MAIL_INBOX_UPDATE within 10 s"); refillAt = nil end
     end)
 end
 
@@ -552,10 +573,11 @@ function C.returnmany(arg)
         local fp, resolved = fingerprint(h, i)
         if not resolved then say("returnmany: mail " .. i .. " has an attachment with no link yet; try again"); return end
         if count[fp] ~= 1 then say("returnmany: mail " .. i .. " has an identical twin; pick another"); return end
+        if not returnable(i) then say("returnmany: mail " .. i .. " can't be returned (Blizzard would delete it)"); return end
         targets[#targets + 1] = { fp = fp, was = i }
     end
     local cm = global("C_Mail")
-    local k, sentAt, steps = 1, nil, 0
+    local k, sentAt, before, steps = 1, nil, nil, 0
     busy = true
     local function finish(msg) say("returnmany: " .. msg); busy = false end
     local function step()
@@ -564,11 +586,16 @@ function C.returnmany(arg)
         local t = targets[k]
         if not t then finish("done, " .. #targets .. " mail(s)"); return end
         if sentAt then
+            -- Gone means no match AND one mail fewer: a fingerprint that merely
+            -- changed (a link, wasReturned) must not pass for a return.
             local i, n = indexOf(t.fp)
-            if n == 0 then
+            local loaded = counts()
+            if n == 0 and loaded == before - 1 then
                 say(string.format("returnmany: mail (was %d) gone %.2f s after its return", t.was, GetTime() - sentAt))
                 k, sentAt = k + 1, nil
                 C_Timer.After(0.5, step)
+            elseif n == 0 and loaded == before then
+                finish(string.format("mail (was %d) no longer matches but the inbox didn't shrink; stop (uncertain)", t.was))
             elseif GetTime() - sentAt > 10 then
                 finish(string.format("mail (was %d) still there 10 s after its return (now %s); stop", t.was, show(i)))
             else
@@ -584,11 +611,12 @@ function C.returnmany(arg)
             C_Timer.After(0.2, step)
             return
         end
+        if not returnable(i) then finish("mail (was " .. t.was .. ") can no longer be returned; stop"); return end
         local h = header(i)
         say("returnmany: mail (was " .. t.was .. ") is now " .. i .. ", canReply=" .. show(h and h.canReply)
             .. " wasReturned=" .. show(h and h.wasReturned) .. (steps == 1 and " - returning from the key press"
             or " - returning from a timer"))
-        sentAt = GetTime()
+        sentAt, before = GetTime(), counts()
         try("ReturnInboxItem", global("ReturnInboxItem"), i)
         C_Timer.After(0.2, step)
     end
@@ -703,6 +731,8 @@ end
 -- Blizzard's frames. Click them in and out of combat; watch for "!" lines.
 local ROW_ACTIONS = {
     { "T", function(i, h)
+        -- COD needs Blizzard's confirmation (COD_CONFIRMATION): never from here.
+        if (plain(h.CODAmount) or 0) > 0 then say("rows: mail " .. i .. " is COD; not taken"); return end
         if plain(h.money) and h.money > 0 then
             try("TakeInboxMoney", global("TakeInboxMoney"), i)
         else
@@ -710,7 +740,7 @@ local ROW_ACTIONS = {
         end
     end },
     { "R", function(i, h)
-        if not h.canReply or h.wasReturned then say("rows: mail " .. i .. " can't be returned; not sent"); return end
+        if not returnable(i) then say("rows: mail " .. i .. " can't be returned; not sent"); return end
         try("ReturnInboxItem", global("ReturnInboxItem"), i)
     end },
     { "D", function(i, h)

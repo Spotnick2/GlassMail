@@ -17,7 +17,7 @@ local total   -- the server's count, when more than the loaded window
 rawset(_G, "GetInboxNumItems", function() return #inbox, total or #inbox end)
 rawset(_G, "GetInboxHeaderInfo", function(i)
     local m = inbox[i]
-    if m then return nil, nil, m.sender, m.subject, m.money, 0, 29.5, #m.items > 0 and #m.items or nil, false,
+    if m then return nil, nil, m.sender, m.subject, m.money, m.cod or 0, 29.5, #m.items > 0 and #m.items or nil, false,
         false, false, m.canReply ~= false, false, nil, nil end
 end)
 rawset(_G, "GetInboxItem", function(i, a)
@@ -49,6 +49,10 @@ rawset(_G, "C_Item", { GetItemMaxStackSizeByID = function(id) return id == 2512 
     GetItemInfo = function(id) if id == 2770 then return "Copper Ore" end end })
 rawset(_G, "AUCTION_SOLD_MAIL_SUBJECT", "Auction successful: %s")
 rawset(_G, "AUCTION_OUTBID_MAIL_SUBJECT", "Outbid on %s.")
+-- A localized-style template: positional specifier and a literal percent.
+rawset(_G, "AUCTION_WON_MAIL_SUBJECT", "Gewonnen (100%%): %1$s")
+-- Blizzard deletes what this allows and returns the rest.
+rawset(_G, "InboxItemCanDelete", function(i) return inbox[i] ~= nil and (inbox[i].canDelete == true or inbox[i].sender == "Auction House") end)
 local indicatorFrame = CreateFrame("Frame")
 indicatorFrame:Hide()
 rawset(_G, "MinimapCluster", { IndicatorFrame = { MailFrame = indicatorFrame } })
@@ -114,7 +118,7 @@ eq(durations(), 1, "with no MailInfo enum, HIDE 17 still closes the mailbox")
 newChat()
 SlashCmdList.MAILPROBE("strings")
 check(chatHas('AUCTION_SOLD_MAIL_SUBJECT = "Auction successful: %%s"'), "strings lists the client's templates")
-check(chatHas("2 AUCTION_%*_MAIL_SUBJECT"), "  all of them")
+check(chatHas("3 AUCTION_%*_MAIL_SUBJECT"), "  all of them")
 SlashCmdList.MAILPROBE("inbox")
 check(chatHas('AH template="AUCTION_SOLD_MAIL_SUBJECT"'), "inbox names the template an AH subject matches")
 check(chatHas('link="|Hitem:2770|h%[Copper Ore%]|h"'), "inbox logs each attachment's link")
@@ -122,6 +126,10 @@ inbox[4] = { sender = "Auction House", subject = "Outbid on Linen Cloth", money 
 newChat()
 SlashCmdList.MAILPROBE("inbox")
 check(chatHas("AH template=nil"), "a template's punctuation is literal: no final '.', no match")
+inbox[4].subject = "Gewonnen (100%): Linen Cloth"
+newChat()
+SlashCmdList.MAILPROBE("inbox")
+check(chatHas('AH template="AUCTION_WON_MAIL_SUBJECT"'), "a positional %1$s and a literal %% match too")
 inbox[4] = nil
 
 -- New mail: HasNewMail and the minimap indicator, passively.
@@ -176,6 +184,15 @@ eq(checked, 1, "refill waits while the client says not yet")
 check(chatHas("again in 42 s"), "  and says how long")
 total = nil
 
+-- A second refill while one waits is refused, and its timer can't end the first.
+C_Mail.CanCheckInbox = function() return true, 0 end
+SlashCmdList.MAILPROBE("refill")
+SlashCmdList.MAILPROBE("refill")
+eq(checked, 2, "one refill at a time")
+check(chatHas("one is already waiting"), "  the second is refused")
+WoW.fire("MAIL_INBOX_UPDATE")
+WoW.flushTimers()
+
 -- returnmany: each found again by fingerprint, the rest from timers.
 local returned = {}
 rawset(_G, "ReturnInboxItem", function(i)
@@ -185,6 +202,11 @@ end)
 inbox[5] = { sender = "Cowruzo Test", subject = "a", money = 0, items = {} }
 inbox[6] = { sender = "Cowruzo Test", subject = "b", money = 0, items = {} }
 newChat()
+SlashCmdList.MAILPROBE("returnmany 5 99")
+check(chatHas("no mail 99"), "returnmany: a number past the inbox is no mail")
+SlashCmdList.MAILPROBE("returnmany 3 5")
+eq(#returned, 0, "returnmany refuses a mail Blizzard would delete")
+check(chatHas("mail 3 can't be returned"), "  and says so")
 SlashCmdList.MAILPROBE("returnmany 1 5")
 eq(#returned, 0, "returnmany refuses a mail with an identical twin")
 check(chatHas("mail 1 has an identical twin"), "  and says so")
@@ -202,10 +224,23 @@ check(chatHas("mail %(was 6%) is now 5.*from a timer"), "  at its new index")
 check(chatHas("done, 2 mail"), "returnmany finishes")
 eq(#returned, 2, "  with nothing else returned")
 
+-- A mail whose fingerprint changes without the inbox shrinking is not "gone".
+rawset(_G, "ReturnInboxItem", function(i)
+    returned[#returned + 1] = inbox[i].subject
+    inbox[i].wasChanged = true
+    inbox[i].money = 7
+end)
+inbox[#inbox + 1] = { sender = "Cowruzo Test", subject = "c", money = 0, items = {} }
+inbox[#inbox + 1] = { sender = "Cowruzo Test", subject = "d", money = 0, items = {} }
+newChat()
+SlashCmdList.MAILPROBE("returnmany " .. (#inbox - 1) .. " " .. #inbox)
+WoW.flushTimers(0.5)
+eq(#returned, 3, "a changed mail that is still there stops the run")
+check(chatHas("didn't shrink; stop %(uncertain%)"), "  as uncertain")
+
 -- rows: T / R / D on each row, children of InboxFrame, in and out of combat.
 rawset(_G, "TakeInboxMoney", function(i) calls[#calls + 1] = "money " .. i end)
 rawset(_G, "DeleteInboxItem", function(i) calls[#calls + 1] = "delete " .. i end)
-rawset(_G, "InboxItemCanDelete", function() return true end)
 inbox = {
     { sender = "Karuzo Morphisto", subject = "ore", money = 0, items = { ORE } },
     { sender = "Auction House", subject = "Auction successful: Linen Cloth", money = 1500, items = {} },
@@ -231,12 +266,18 @@ WoW.combat = false
 button("D", 1)._scripts.OnClick(button("D", 1))
 eq(calls[2], nil, "D never deletes a mail with items")
 inbox[2].money = 0
+inbox[2].canDelete = true
 button("D", 2)._scripts.OnClick(button("D", 2))
 eq(calls[2], "delete 2", "D deletes an empty mail")
-inbox[2].canReply = false
 returned = {}
 button("R", 2)._scripts.OnClick(button("R", 2))
 eq(#returned, 0, "R never returns a mail that can't be replied to")
+button("D", 7)._scripts.OnClick(button("D", 7))
+button("T", 7)._scripts.OnClick(button("T", 7))
+eq(#calls, 2, "an empty row's buttons do nothing")
+inbox[1].cod = 500
+button("T", 1)._scripts.OnClick(button("T", 1))
+eq(#calls, 2, "T never takes from a COD mail (that needs Blizzard's confirmation)")
 SlashCmdList.MAILPROBE("rows off")
 check(not button("T", 1):IsShown(), "rows off hides them")
 
