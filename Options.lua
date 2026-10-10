@@ -14,13 +14,6 @@ local API = GM.API
 local Options = {}
 GM.Options = Options
 
-local CHECK_ART = {
-    normal = "Interface\\Buttons\\UI-CheckBox-Up",
-    pushed = "Interface\\Buttons\\UI-CheckBox-Down",
-    highlight = "Interface\\Buttons\\UI-CheckBox-Highlight",
-    checked = "Interface\\Buttons\\UI-CheckBox-Check",
-}
-
 local RADIO_ART = "Interface\\Buttons\\UI-RadioButton"   -- 4 cells: normal, checked, highlight, pushed
 
 local panel = CreateFrame("Frame")
@@ -36,37 +29,24 @@ local function label(parent, text, font)
     return fs
 end
 
--- A labelled check button: UICheckButtonTemplate when the client has it, else
--- the client's own checkbox art.
-local function checkButton(parent, text, get, set)
-    local cb, templated = API.SafeFrame("CheckButton", parent, "UICheckButtonTemplate", "text")
-    if not templated then
-        cb:SetNormalTexture(CHECK_ART.normal)
-        cb:SetPushedTexture(CHECK_ART.pushed)
-        cb:SetHighlightTexture(CHECK_ART.highlight)
-        cb:SetCheckedTexture(CHECK_ART.checked)
-    end
-    cb:SetSize(24, 24)
-    local fs = label(parent, text)
-    fs:SetPoint("LEFT", cb, "RIGHT", 4, 0)
-    cb:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
-    refreshers[#refreshers + 1] = function() cb:SetChecked(get()) end
-    return cb
-end
-
--- A labelled radio button: UIRadioButtonTemplate when the client has it, else
--- the client's own radio art.
+-- A labelled radio button: UIRadioButtonTemplate when the client has it (its
+-- own label, rb.text, takes the text), else the client's own radio art and a
+-- label of ours.
 local function radioButton(parent, text)
     local rb, templated = API.SafeFrame("CheckButton", parent, "UIRadioButtonTemplate", "text")
-    if not templated then
-        rb:SetSize(16, 16)
-        rb:SetNormalTexture(RADIO_ART)
-        rb:GetNormalTexture():SetTexCoord(0, 0.25, 0, 1)
-        rb:SetCheckedTexture(RADIO_ART)
-        rb:GetCheckedTexture():SetTexCoord(0.25, 0.5, 0, 1)
-        rb:SetHighlightTexture(RADIO_ART)
-        rb:GetHighlightTexture():SetTexCoord(0.5, 0.75, 0, 1)
+    if templated then
+        rb.text:SetFontObject("GameFontHighlight")
+        rb.text:SetText(text)
+        return rb
     end
+    rb:SetSize(16, 16)
+    rb:SetNormalTexture(RADIO_ART)
+    rb:GetNormalTexture():SetTexCoord(0, 0.25, 0, 1)
+    rb:SetCheckedTexture(RADIO_ART)
+    rb:GetCheckedTexture():SetTexCoord(0.25, 0.5, 0, 1)
+    rb:SetHighlightTexture(RADIO_ART)
+    rb:GetHighlightTexture():SetTexCoord(0.5, 0.75, 0, 1)
+    rb:GetHighlightTexture():SetBlendMode("ADD")   -- as the template's (CheckButtonTemplates.xml:18)
     local fs = label(parent, text)
     fs:SetPoint("LEFT", rb, "RIGHT", 4, 0)
     return rb

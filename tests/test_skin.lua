@@ -64,6 +64,9 @@ for _, owner in ipairs({ SendMailFrame, OpenMailFrame }) do
         end
     end
 end
+eq(SendMailMoneyInset.Bg:GetAlpha(), 0, "the send tab's money inset faded")
+eq(SendMailMoneyInset.NineSlice:GetAlpha(), 0, "  and its border")
+eq(SendMailMoneyBg:GetAlpha(), 1, "the money value field keeps its frame")
 eq(SendMailErrorIcon:GetAlpha(), 1, "a texture anchored to something else stays")
 eq(OpenStationeryBackgroundLeft:GetAlpha(), 1, "the letter's stationery stays (dark text needs it)")
 
@@ -76,13 +79,16 @@ check(pane.frame:GetFrameLevel() < MailItem1:GetFrameLevel(), "the pane sits und
 -- A surface painted in a preset: the body's tint, grain and wash, and the pane.
 local function painted(name)
     local p = GM.Skin.PRESETS[name]
-    local g = T.skinned[MailFrame].g
-    local c = g.tint._color
-    local ok = c and close(c[1], p.tint[1]) and close(c[2], p.tint[2]) and close(c[3], p.tint[3])
-        and close(c[4], p.tint[4])
-    ok = ok and close(g.grain:GetAlpha(), p.grain)
-    local wash = g.wash._gradient
-    ok = ok and wash and close(wash[3].a, p.wash)
+    local ok = true
+    for _, window in ipairs({ MailFrame, OpenMailFrame }) do
+        local g = T.skinned[window].g
+        local c = g.tint._color
+        ok = ok and c and close(c[1], p.tint[1]) and close(c[2], p.tint[2]) and close(c[3], p.tint[3])
+            and close(c[4], p.tint[4])
+        ok = ok and close(g.grain:GetAlpha(), p.grain)
+        local wash = g.wash._gradient
+        ok = ok and wash and close(wash[3].a, p.wash)
+    end
     local pc = pane.tex._color
     ok = ok and pc and close(pc[4], p.pane[4]) and close(pc[1], p.pane[1])
     return ok
@@ -140,6 +146,7 @@ local O = GM.Options._test
 O.panel:Show()
 local radios = O.skinRadios
 eq(#radios, 3, "three looks on the options page")
+eq(radios[2].text:GetText(), "Smoked glass", "each radio carries its label in the template's own text")
 local function checked()
     for _, rb in ipairs(radios) do if rb:GetChecked() then return rb.value end end
 end

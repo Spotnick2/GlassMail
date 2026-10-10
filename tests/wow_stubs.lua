@@ -127,6 +127,8 @@ function CreateFrame(ftype, name, parent, template)
     if ftype == "StatusBar" then w._min, w._max, w._value = 0, 1, 0 end
     -- The template's bar, shown by default as on the client.
     if template == "UIPanelScrollFrameTemplate" then w.ScrollBar = newWidget("Slider", w) end
+    -- The radio template's own label (CheckButtonTemplates.xml: parentKey "text").
+    if template == "UIRadioButtonTemplate" then w.text = Methods.CreateFontString(w) end
     table.insert(WoW.frames, w)
     if name then rawset(_G, name, w) end
     return w
@@ -395,6 +397,12 @@ end
 -- The send tab: its two bars, plus a texture anchored to something else
 -- (SendMailErrorIcon-like) that the skin must leave alone.
 mail.SendMailFrame = CreateFrame("Frame", "SendMailFrame", mail)
+INBOXITEMS_TO_DISPLAY = 7   -- MailFrame.lua:1
+-- The money box: an inset (faded) and its gold-edged value field (kept).
+CreateFrame("Frame", "SendMailMoneyInset", SendMailFrame)
+SendMailMoneyInset.Bg = Methods.CreateTexture(SendMailMoneyInset)
+SendMailMoneyInset.NineSlice = CreateFrame("Frame", nil, SendMailMoneyInset)
+CreateFrame("Frame", "SendMailMoneyBg", SendMailFrame)
 bar(SendMailFrame, "SendMailHorizontalBarLeft")
 bar(SendMailFrame, "SendMailHorizontalBarLeft2")
 local errorText = Methods.CreateFontString(SendMailFrame, "SendMailErrorText")

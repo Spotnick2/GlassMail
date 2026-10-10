@@ -30,12 +30,10 @@ GM.Skin = Skin
 
 Skin.PRESETS = {
     clear = {
-        label = "Clear glass",
         tint = { 0.13, 0.16, 0.22, 0.24 }, grain = 0.45, wash = 0.18,
         pane = { 0.04, 0.05, 0.07, 0.62 },
     },
     smoked = {
-        label = "Smoked glass",
         tint = { 0.05, 0.06, 0.08, 0.62 }, grain = 0.35, wash = 0.14,
         pane = { 0.03, 0.03, 0.04, 0.80 },
     },
@@ -52,7 +50,14 @@ local BARS = {
     MailFrame = { "SendMailHorizontalBarLeft", "SendMailHorizontalBarLeft2" },
     OpenMailFrame = { "OpenMailHorizontalBarLeft" },
 }
-local ROWS = 7   -- INBOXITEMS_TO_DISPLAY (MailFrame.lua:1)
+-- The send tab's money box: an inset like the window's (MailFrame.xml:791). Its
+-- gold-edged value field (SendMailMoneyBg) stays, as the edit boxes' borders do.
+local INSETS = { MailFrame = { "SendMailMoneyInset" } }
+
+local function rowCount()
+    local n = rawget(_G, "INBOXITEMS_TO_DISPLAY")   -- MailFrame.lua:1
+    return type(n) == "number" and n or 7
+end
 
 local skinned = {}   -- window -> { panel = frame, g = glass regions, art = { region, ... } }
 local pane           -- { frame, tex } under the inbox rows
@@ -91,8 +96,9 @@ end
 local function collectArt(window, name)
     local art = {}
     for _, key in ipairs(ART) do add(art, window[key]) end
-    local inset = window.Inset
-    if inset then
+    local insets = { window.Inset }
+    for _, insetName in ipairs(INSETS[name] or {}) do insets[#insets + 1] = rawget(_G, insetName) end
+    for _, inset in pairs(insets) do
         add(art, inset.Bg)
         add(art, inset.NineSlice)
     end
@@ -114,7 +120,7 @@ local function collectArt(window, name)
         -- Each inbox row's own textures: the two MailItemBorder halves and the
         -- divider line (MailFrame.xml:15-35). Its font strings (sender,
         -- subject) are regions too, and stay.
-        for i = 1, ROWS do
+        for i = 1, rowCount() do
             local row = rawget(_G, "MailItem" .. i)
             if row then
                 for _, region in ipairs({ row:GetRegions() }) do
@@ -129,12 +135,14 @@ end
 -- A panel just under the window: a child at one frame level below, so the
 -- window's own regions and children draw over it (GlassChat's edit-box panel).
 local function addPanel(window, name)
+    -- The art first: if reading the regions fails, nothing half-built is left.
+    local art = collectArt(window, name)
     local panel = CreateFrame("Frame", nil, window)
     panel:SetAllPoints(window)
     panel:SetFrameLevel(math.max(0, window:GetFrameLevel() - 1))
     pushStyle(preset() or Skin.PRESETS.clear)
     local g = Glass.Apply(panel, "large")
-    skinned[window] = { panel = panel, g = g, art = collectArt(window, name) }
+    skinned[window] = { panel = panel, g = g, art = art }
 end
 
 -- The reading pane: a plain translucent fill under the seven rows, rounded by
@@ -142,7 +150,7 @@ end
 -- Blizzard's row text over a bright world.
 local function addPane()
     local inbox = rawget(_G, "InboxFrame")
-    local first, last = rawget(_G, "MailItem1"), rawget(_G, "MailItem" .. ROWS)
+    local first, last = rawget(_G, "MailItem1"), rawget(_G, "MailItem" .. rowCount())
     if not (inbox and first and last) then return end
     local f = CreateFrame("Frame", nil, inbox)
     f:SetPoint("TOPLEFT", first, "TOPLEFT", -4, 4)
@@ -179,10 +187,11 @@ function Skin.Start()
     Skin.Refresh()
 end
 
--- Repaint everything we built in the current preset, live.
+-- Repaint everything we built in the current preset, live. STYLE is only read
+-- when a surface is built (addPanel pushes the preset there), so it isn't
+-- touched here.
 function Skin.Refresh()
     local p = preset()
-    if p then pushStyle(p) end
     for window in pairs(skinned) do applyOne(window, p) end
     if pane then
         pane.frame:SetShown(p ~= nil)
