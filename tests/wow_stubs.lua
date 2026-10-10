@@ -130,9 +130,14 @@ function CreateFrame(ftype, name, parent, template)
     -- The radio template's own label (CheckButtonTemplates.xml: parentKey "text").
     if template == "UIRadioButtonTemplate" then w.text = Methods.CreateFontString(w) end
     table.insert(WoW.frames, w)
+    if parent then
+        parent._children = parent._children or {}
+        table.insert(parent._children, w)
+    end
     if name then rawset(_G, name, w) end
     return w
 end
+function Methods.GetChildren(w) return unpack(w._children or {}) end
 
 function Methods.Show(w) w._shown = true; if w._scripts.OnShow then w._scripts.OnShow(w) end end
 function Methods.Hide(w)
@@ -246,7 +251,30 @@ function Methods.SetText(fs, text)
     fs._text = text
     if fs._type == "EditBox" and fs._scripts.OnTextChanged then fs._scripts.OnTextChanged(fs, false) end
 end
-function Methods.SetTextColor(fs, r, g, b, a) fs._textColor = { r, g, b, a } end
+-- A SimpleHTML colours per text type ("P", "H1", ...), its first argument.
+function Methods.SetTextColor(fs, ...)
+    if fs._type == "SimpleHTML" then
+        local textType, r, g, b, a = ...
+        assert(type(textType) == "string", "SimpleHTML:SetTextColor needs a text type first")
+        fs._htmlColor = fs._htmlColor or {}
+        fs._htmlColor[textType] = { r, g, b, a }
+        return
+    end
+    local r, g, b, a = ...
+    fs._textColor = { r, g, b, a }
+end
+function Methods.GetTextColor(fs, textType)
+    local c
+    if fs._type == "SimpleHTML" then
+        assert(type(textType) == "string", "SimpleHTML:GetTextColor needs a text type")
+        c = fs._htmlColor and fs._htmlColor[textType]
+    else
+        c = fs._textColor
+    end
+    c = c or { 1, 1, 1, 1 }
+    return c[1], c[2], c[3], c[4]
+end
+function Methods.GetFontObject(fs) return fs._fontObject end
 function Methods.GetText(fs) return fs._text end
 function Methods.SetFormattedText(fs, fmt, ...)
     local n = select("#", ...)
@@ -409,9 +437,46 @@ local errorText = Methods.CreateFontString(SendMailFrame, "SendMailErrorText")
 local errorIcon = Methods.CreateTexture(SendMailFrame, "SendMailErrorIcon", "BACKGROUND")
 Methods.SetPoint(errorIcon, "LEFT", errorText, "RIGHT", 1, -1)
 
--- The open letter: its bar, and the stationery, which stays.
+-- The open letter: its bar.
 bar(open, "OpenMailHorizontalBarLeft")
-Methods.CreateTexture(open, "OpenStationeryBackgroundLeft", "BACKGROUND")
+
+-- The letters (MailFrame.xml:510-580, 975-1160): a scroll frame drawing the
+-- stationery, and in its scroll child the text in the dark mail fonts. The
+-- shared font objects are client globals; only the mail widgets are ours to
+-- recolour.
+MailTextFontNormal = newWidget("Font")
+InvoiceTextFontNormal = newWidget("Font")
+NumberFontNormal = newWidget("Font")
+local DARK = { 0.18, 0.12, 0.06, 1 }
+local function letter(owner, prefix)
+    local scroll = CreateFrame("ScrollFrame", prefix .. "ScrollFrame", owner)
+    Methods.CreateTexture(scroll, prefix:gsub("Mail$", "") .. "StationeryBackgroundLeft", "BACKGROUND")
+    Methods.CreateTexture(scroll, prefix:gsub("Mail$", "") .. "StationeryBackgroundRight", "BACKGROUND")
+    return scroll, CreateFrame("Frame", prefix .. "ScrollChildFrame", scroll)
+end
+local _, sendChild = letter(SendMailFrame, "SendMail")
+-- The money area (MailFrame.xml:740-788): a small frame with the label as a
+-- region and the amount boxes and the two radios as children.
+local moneyHolder = CreateFrame("Frame", "SendMailMoneyButton", SendMailFrame)
+Methods.CreateFontString(moneyHolder, "SendMailMoneyText")
+CreateFrame("Frame", "SendMailMoney", moneyHolder)
+CreateFrame("CheckButton", "SendMailSendMoneyButton", moneyHolder)
+CreateFrame("CheckButton", "SendMailCODButton", moneyHolder)
+local edit = CreateFrame("EditBox", "SendMailBodyEditBox", sendChild)
+edit._fontObject, edit._textColor = MailTextFontNormal, DARK
+local _, openChild = letter(open, "OpenMail")
+local body = CreateFrame("SimpleHTML", "OpenMailBodyText", openChild)
+body._htmlColor = { P = DARK }
+-- The AH invoice: labels in the invoice font, a money amount in a number font
+-- (stays), nested a frame deeper.
+local invoice = CreateFrame("Frame", "OpenMailInvoiceFrame", openChild)
+for _, n in ipairs({ "OpenMailInvoiceItemLabel", "OpenMailInvoiceSalePrice" }) do
+    local fs = Methods.CreateFontString(invoice, n)
+    fs._fontObject, fs._textColor = InvoiceTextFontNormal, DARK
+end
+local money = CreateFrame("Frame", nil, invoice)
+local amount = Methods.CreateFontString(money, "OpenMailInvoiceMoneyAmount")
+amount._fontObject, amount._textColor = NumberFontNormal, { 1, 1, 1, 1 }
 
 --------------------------------------------------------------------------------
 -- Driving

@@ -17,9 +17,13 @@
 -- repaint them (LibGlass SetSurfaceTint, the grain's alpha, the wash's
 -- gradient), where AltStable has too many to repaint and asks for a /reload.
 --
--- The letter's stationery (OpenStationeryBackground*, SendStationeryBackground*)
--- is NOT faded: the letter body is a dark mail font made for parchment, and
--- recolouring Blizzard's text is not ours to do.
+-- The letter (the send tab's body and the open letter) goes dark under glass,
+-- as in docs/mockups/inbox-and-send.png (owner, 2026-10-10): the stationery is
+-- faded like the rest of the art, a pane takes its place, and the letter's
+-- text, a dark font made for parchment, is turned light. Only the mail widgets
+-- are recoloured (SetTextColor on each), never the shared font objects
+-- MailTextFontNormal / InvoiceTextFontNormal, which other windows use too.
+-- Under "stock" every colour goes back to what it was.
 
 GlassMailbox = GlassMailbox or {}
 local GM = GlassMailbox
@@ -53,6 +57,17 @@ local BARS = {
 -- The send tab's money box: an inset like the window's (MailFrame.xml:791). Its
 -- gold-edged value field (SendMailMoneyBg) stays, as the edit boxes' borders do.
 local INSETS = { MailFrame = { "SendMailMoneyInset" } }
+-- The letters: each scroll frame and the stationery it draws (MailFrame.xml:
+-- 510-533, 975-1000). Blizzard sets the stationery's texture and height per
+-- letter (MailFrame.lua:777-781, 967-970), never its alpha, so a fade holds.
+local LETTERS = {
+    MailFrame = { scroll = "SendMailScrollFrame", paper = { "SendStationeryBackgroundLeft", "SendStationeryBackgroundRight" },
+        edit = "SendMailBodyEditBox" },
+    OpenMailFrame = { scroll = "OpenMailScrollFrame", paper = { "OpenStationeryBackgroundLeft", "OpenStationeryBackgroundRight" },
+        html = "OpenMailBodyText", child = "OpenMailScrollChildFrame" },
+}
+-- The letter's text under glass: a warm off-white, the same in both presets.
+Skin.LETTER_TEXT = { 0.92, 0.90, 0.86 }
 
 local function rowCount()
     local n = rawget(_G, "INBOXITEMS_TO_DISPLAY")   -- MailFrame.lua:1
@@ -61,6 +76,10 @@ end
 
 local skinned = {}   -- window -> { panel = frame, g = glass regions, art = { region, ... } }
 local pane           -- { frame, tex } under the inbox rows
+-- window name -> { paper = { texture, ... }, pane = { frame, tex }, text = { { widget, kind, r, g, b, a }, ... } }:
+-- the stationery, the pane in its place, and the letter's text with Blizzard's colours.
+local letters = {}
+local moneyPane      -- { frame, tex } under the send tab's amount and Send Money / C.O.D.
 
 -- The current preset, or nil under "stock".
 local function preset()
@@ -145,21 +164,105 @@ local function addPanel(window, name)
     skinned[window] = { panel = panel, g = g, art = art }
 end
 
--- The reading pane: a plain translucent fill under the seven rows, rounded by
--- the material's small mask. Not another glass layer: just enough density for
--- Blizzard's row text over a bright world.
+-- A pane: a plain translucent fill from one region's top left to another's
+-- bottom right, rounded by the material's small mask. Not another glass
+-- layer: just enough density for text over a bright world.
+local function newPane(parent, topLeft, bottomRight, level, pad)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetPoint("TOPLEFT", topLeft, "TOPLEFT", -pad, pad)
+    f:SetPoint("BOTTOMRIGHT", bottomRight, "BOTTOMRIGHT", pad, -pad)
+    f:SetFrameLevel(level)
+    local tex = f:CreateTexture(nil, "BACKGROUND")
+    tex:SetAllPoints(f)
+    tex:AddMaskTexture(Glass.Mask(f, "body_mask_small", 8))
+    return { frame = f, tex = tex }
+end
+
+-- The reading pane under the inbox rows.
 local function addPane()
     local inbox = rawget(_G, "InboxFrame")
     local first, last = rawget(_G, "MailItem1"), rawget(_G, "MailItem" .. rowCount())
     if not (inbox and first and last) then return end
-    local f = CreateFrame("Frame", nil, inbox)
-    f:SetPoint("TOPLEFT", first, "TOPLEFT", -4, 4)
-    f:SetPoint("BOTTOMRIGHT", last, "BOTTOMRIGHT", 4, -4)
-    f:SetFrameLevel(inbox:GetFrameLevel())
-    local tex = f:CreateTexture(nil, "BACKGROUND")
-    tex:SetAllPoints(f)
-    tex:AddMaskTexture(Glass.Mask(f, "body_mask_small", 8))
-    pane = { frame = f, tex = tex }
+    pane = newPane(inbox, first, last, inbox:GetFrameLevel(), 4)
+end
+
+-- The letter's text, with the colours Blizzard gave it: the send tab's edit
+-- box, the open letter's body (SimpleHTML, coloured per text type: "P"), and
+-- every font string under the open letter that uses the mail or invoice font
+-- (the AH invoice, crafting order notes). Picked out by font object, never by
+-- text.
+local function letterTextOf(letter)
+    local list = {}
+    local function keep(widget, kind)
+        local r, g, b, a
+        if kind == "html" then r, g, b, a = widget:GetTextColor("P") else r, g, b, a = widget:GetTextColor() end
+        list[#list + 1] = { widget = widget, kind = kind, r = r, g = g, b = b, a = a }
+    end
+    local edit, body = letter.edit and rawget(_G, letter.edit), letter.html and rawget(_G, letter.html)
+    if edit then keep(edit, "plain") end
+    if body then keep(body, "html") end
+    local fonts = {}
+    for _, fontName in ipairs({ "MailTextFontNormal", "InvoiceTextFontNormal" }) do
+        local font = rawget(_G, fontName)
+        if font then fonts[font] = true end
+    end
+    local function walk(frame, depth)
+        for _, region in ipairs({ frame:GetRegions() }) do
+            if region:GetObjectType() == "FontString" and fonts[region:GetFontObject()] then keep(region, "plain") end
+        end
+        if depth < 6 then
+            for _, child in ipairs({ frame:GetChildren() }) do walk(child, depth + 1) end
+        end
+    end
+    local child = letter.child and rawget(_G, letter.child)
+    if child then walk(child, 0) end
+    return list
+end
+
+-- A skinned window's letter: its text read first (if that fails, nothing is
+-- built and the stationery stays), then a pane over the stationery's area,
+-- anchored to the stationery so it follows the height Blizzard gives it per
+-- letter. The pane sits beside the scroll frame at its level: the scroll
+-- child, and the text in it, draw above. The stationery, the pane and the
+-- text change together: light text on parchment, or dark text on bare glass,
+-- would be unreadable.
+local function addLetter(name)
+    local letter = LETTERS[name]
+    local scroll = rawget(_G, letter.scroll)
+    local left, right = rawget(_G, letter.paper[1]), rawget(_G, letter.paper[2])
+    if not (scroll and left and right) then return end
+    local text = letterTextOf(letter)
+    letters[name] = { paper = { left, right }, text = text,
+        pane = newPane(scroll:GetParent(), left, right, scroll:GetFrameLevel(), 0) }
+end
+
+-- The send tab's money area: "Amount to send", the amount boxes and the Send
+-- Money / C.O.D. radios (MailFrame.xml:740-788). They hang off a 37x37 frame,
+-- SendMailMoneyButton, so the pane gets its corner from a frame of ours: right
+-- at the letter's right edge, bottom at the C.O.D. radio's. No fixed width, so
+-- a longer localized label still fits. Under the money frame's level, so its
+-- label (one of its regions) and its children draw above. Only with the send
+-- letter built: same window, same reason.
+local function addMoneyPane()
+    local holder, label = rawget(_G, "SendMailMoneyButton"), rawget(_G, "SendMailMoneyText")
+    local cod, right = rawget(_G, "SendMailCODButton"), rawget(_G, LETTERS.MailFrame.paper[2])
+    if not (holder and label and cod and right) then return end
+    local parent = holder:GetParent()
+    local corner = CreateFrame("Frame", nil, parent)
+    corner:SetPoint("TOPRIGHT", right, "TOPRIGHT")
+    corner:SetPoint("BOTTOMLEFT", cod, "BOTTOMLEFT")
+    local level = math.max(parent:GetFrameLevel(), holder:GetFrameLevel() - 1)
+    moneyPane = newPane(parent, label, corner, level, 6)
+end
+
+-- Light under glass; Blizzard's own colours back under "stock".
+local function paintLetterText(text, p)
+    local c = Skin.LETTER_TEXT
+    for _, t in ipairs(text) do
+        local r, g, b, a = t.r, t.g, t.b, t.a
+        if p then r, g, b, a = c[1], c[2], c[3], 1 end
+        if t.kind == "html" then t.widget:SetTextColor("P", r, g, b, a) else t.widget:SetTextColor(r, g, b, a) end
+    end
 end
 
 local function applyOne(window, p)
@@ -184,6 +287,17 @@ function Skin.Start()
         local ok, err = pcall(addPane)
         if not ok then API.Fail("skin pane", err) end
     end
+    for name in pairs(LETTERS) do
+        local window = rawget(_G, name)
+        if window and skinned[window] and not letters[name] then
+            local ok, err = pcall(addLetter, name)
+            if not ok then API.Fail("skin letter " .. name, err) end
+        end
+    end
+    if letters.MailFrame and not moneyPane then
+        local ok, err = pcall(addMoneyPane)
+        if not ok then API.Fail("skin money pane", err) end
+    end
     Skin.Refresh()
 end
 
@@ -193,9 +307,18 @@ end
 function Skin.Refresh()
     local p = preset()
     for window in pairs(skinned) do applyOne(window, p) end
-    if pane then
-        pane.frame:SetShown(p ~= nil)
-        if p then pane.tex:SetColorTexture(p.pane[1], p.pane[2], p.pane[3], p.pane[4]) end
+    local panes = {}
+    for _, pn in ipairs({ pane or false, moneyPane or false }) do
+        if pn then panes[#panes + 1] = pn end
+    end
+    for _, letter in pairs(letters) do
+        panes[#panes + 1] = letter.pane
+        for _, paper in ipairs(letter.paper) do paper:SetAlpha(p and 0 or 1) end
+        paintLetterText(letter.text, p)
+    end
+    for _, pn in ipairs(panes) do
+        pn.frame:SetShown(p ~= nil)
+        if p then pn.tex:SetColorTexture(p.pane[1], p.pane[2], p.pane[3], p.pane[4]) end
     end
 end
 
@@ -204,4 +327,5 @@ function Skin.IsSkinned(window) return skinned[window] ~= nil end
 function Skin.IsValid(name) return name == "stock" or Skin.PRESETS[name] ~= nil end
 
 GM._test = GM._test or {}
-GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end }
+GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end, letters = letters,
+    moneyPane = function() return moneyPane end }

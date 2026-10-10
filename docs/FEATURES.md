@@ -22,7 +22,9 @@ APIs and `C:\Projects\wow-ui-source`. No code is copied.
 
 Two glass presets, **clear** and **smoked**, plus Blizzard's own art (owner, 2026-10-09). The
 presets are AltStable's (`AltStable/Skin.lua`), so the addons look alike; they change the body and
-the reading pane, never the rim. The choice switches live.
+the reading pane, never the rim. The choice switches live. Under glass the letters are dark with
+light text (owner, 2026-10-10); the target for the rest of the look is
+[mockups/inbox-and-send.png](mockups/inbox-and-send.png).
 
 ## Features
 
