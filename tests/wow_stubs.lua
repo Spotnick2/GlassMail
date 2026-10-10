@@ -127,6 +127,8 @@ function CreateFrame(ftype, name, parent, template)
     if ftype == "StatusBar" then w._min, w._max, w._value = 0, 1, 0 end
     -- The template's bar, shown by default as on the client.
     if template == "UIPanelScrollFrameTemplate" then w.ScrollBar = newWidget("Slider", w) end
+    -- The radio template's own label (CheckButtonTemplates.xml: parentKey "text").
+    if template == "UIRadioButtonTemplate" then w.text = Methods.CreateFontString(w) end
     table.insert(WoW.frames, w)
     if name then rawset(_G, name, w) end
     return w
@@ -193,14 +195,36 @@ end
 function Methods.UnregisterEvent(w, e) w._events[e] = nil end
 function Methods.IsEventRegistered(w, e) return w._events[e] == true end
 
--- Regions.
+-- Regions: listed in creation order for GetRegions, as the client lists a
+-- frame's textures and font strings.
+local function addRegion(w, r)
+    w._regions = w._regions or {}
+    table.insert(w._regions, r)
+    return r
+end
 function Methods.CreateTexture(w, name, layer, template, sublevel)
-    local t = newWidget("Texture", w)
+    local t = addRegion(w, newWidget("Texture", w, name))
     t._layer, t._sublevel = layer, sublevel
+    if name then rawset(_G, name, t) end
     return t
 end
 function Methods.CreateMaskTexture(w) return newWidget("MaskTexture", w) end
-function Methods.CreateFontString(w) return newWidget("FontString", w) end
+function Methods.CreateFontString(w, name)
+    local fs = addRegion(w, newWidget("FontString", w, name))
+    if name then rawset(_G, name, fs) end
+    return fs
+end
+function Methods.GetRegions(w) return unpack(w._regions or {}) end
+function Methods.GetObjectType(w) return w._type end
+-- A button's state textures: Set*Texture(file) makes one, Get*Texture reads it.
+for _, state in ipairs({ "Normal", "Pushed", "Highlight", "Checked", "Disabled" }) do
+    local key = "_" .. state:lower() .. "Texture"
+    Methods["Set" .. state .. "Texture"] = function(b, file)
+        b[key] = b[key] or newWidget("Texture", b)
+        b[key]._file = file
+    end
+    Methods["Get" .. state .. "Texture"] = function(b) return b[key] end
+end
 function Methods.SetTexture(t, file) t._file = file; return true end
 function Methods.SetColorTexture(t, r, g, b, a) t._color = { r, g, b, a } end
 function Methods.SetVertexColor(t, r, g, b, a) t._vertex = { r, g, b, a } end
@@ -339,11 +363,55 @@ local function mailWindow(name)
     w.NineSlice = CreateFrame("Frame", nil, w)
     w.Bg = Methods.CreateTexture(w)
     w.TopTileStreaks = Methods.CreateTexture(w)
+    -- InsetFrameTemplate: its own Bg texture and NineSlice frame.
     w.Inset = CreateFrame("Frame", nil, w)
+    w.Inset.Bg = Methods.CreateTexture(w.Inset)
+    w.Inset.NineSlice = CreateFrame("Frame", nil, w.Inset)
     return w
 end
-mailWindow("MailFrame")
-mailWindow("OpenMailFrame")
+local mail = mailWindow("MailFrame")
+local open = mailWindow("OpenMailFrame")
+
+-- A named horizontal bar and its unnamed right-hand piece, anchored to it
+-- (MailFrame.xml:479-506, 922-935).
+local function bar(owner, name)
+    local left = Methods.CreateTexture(owner, name, "BACKGROUND")
+    Methods.SetPoint(left, "TOPLEFT", owner, "TOPLEFT", 2, -337)
+    local right = Methods.CreateTexture(owner, nil, "BACKGROUND")
+    Methods.SetPoint(right, "LEFT", left, "RIGHT", 0, 0)
+    return left, right
+end
+
+-- The inbox: InboxFrameBg and seven MailItemTemplate rows, each with its two
+-- MailItemBorder halves and divider line (textures) and its sender and
+-- subject (font strings), as MailFrame.xml:11-50 declares them.
+mail.InboxFrame = CreateFrame("Frame", "InboxFrame", mail)
+Methods.CreateTexture(InboxFrame, "InboxFrameBg", "BACKGROUND")
+for i = 1, 7 do
+    local row = CreateFrame("Frame", "MailItem" .. i, InboxFrame)
+    for _ = 1, 3 do Methods.CreateTexture(row, nil, "BACKGROUND") end
+    Methods.CreateFontString(row, "MailItem" .. i .. "Sender")
+    Methods.CreateFontString(row, "MailItem" .. i .. "Subject")
+end
+
+-- The send tab: its two bars, plus a texture anchored to something else
+-- (SendMailErrorIcon-like) that the skin must leave alone.
+mail.SendMailFrame = CreateFrame("Frame", "SendMailFrame", mail)
+INBOXITEMS_TO_DISPLAY = 7   -- MailFrame.lua:1
+-- The money box: an inset (faded) and its gold-edged value field (kept).
+CreateFrame("Frame", "SendMailMoneyInset", SendMailFrame)
+SendMailMoneyInset.Bg = Methods.CreateTexture(SendMailMoneyInset)
+SendMailMoneyInset.NineSlice = CreateFrame("Frame", nil, SendMailMoneyInset)
+CreateFrame("Frame", "SendMailMoneyBg", SendMailFrame)
+bar(SendMailFrame, "SendMailHorizontalBarLeft")
+bar(SendMailFrame, "SendMailHorizontalBarLeft2")
+local errorText = Methods.CreateFontString(SendMailFrame, "SendMailErrorText")
+local errorIcon = Methods.CreateTexture(SendMailFrame, "SendMailErrorIcon", "BACKGROUND")
+Methods.SetPoint(errorIcon, "LEFT", errorText, "RIGHT", 1, -1)
+
+-- The open letter: its bar, and the stationery, which stays.
+bar(open, "OpenMailHorizontalBarLeft")
+Methods.CreateTexture(open, "OpenStationeryBackgroundLeft", "BACKGROUND")
 
 --------------------------------------------------------------------------------
 -- Driving

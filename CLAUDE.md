@@ -16,9 +16,9 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 [docs/FOREVER-PROBE.md](docs/FOREVER-PROBE.md).
 
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
-results in docs/FOREVER-PROBE.md). **Next: M1**, planned and reviewed with Codex before coding.
-Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which milestone
-measures each one, before the feature that depends on it ships.
+results in docs/FOREVER-PROBE.md). **M1 in progress** (issue #4, five PRs; the reviewed plan is in
+docs/PLAN.md). Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
+milestone measures each one, before the feature that depends on it ships.
 
 ## The UI contract (non-negotiable)
 
@@ -55,9 +55,14 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   `MEASURED_ON_BUILD`. A subset of GlassChat's; lift more from there.
 - **`Glass.lua`**: `GlassMailbox.Glass = LibStub("LibGlass-1.0"):New()`, this addon's instance of
   the material. Material changes are LibGlass PRs.
-- **`Skin.lua`**: a glass panel under each mail window; the stock art (`NineSlice`, `Bg`,
-  `TopTileStreaks`) faded with `SetAlpha`, never hidden.
+- **`Skin.lua`**: the look, `GM.db.skin` = `clear` / `smoked` (glass presets, AltStable's
+  numbers) or `stock`. A glass panel under each mail window and a reading pane under the inbox
+  rows, repainted live by `Skin.Refresh()`. The stock art (template parentKeys, the inset,
+  `InboxFrameBg`, the row borders, the horizontal bars and their unnamed ends) is faded with
+  `SetAlpha`, never hidden, and found by structure, never by texture path (`GetTexture` returns
+  file IDs). The letter stationery stays: the letter text is dark.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
+  Choices are radio groups (`radios`), not dropdowns.
 - **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the
   `Settings` helpers, `/gmail`.
 - **`Tools/MailProbe/`**: the throwaway measurement addon (`/mailprobe help`).

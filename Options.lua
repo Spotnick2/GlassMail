@@ -4,8 +4,9 @@
 -- controls built on the first OnShow, every value re-read on every OnShow,
 -- registered once at PLAYER_LOGIN from GlassMailbox.lua.
 --
--- M0 holds the glass toggle and the version; each feature adds its own
--- controls here as it lands.
+-- The look (clear / smoked / stock) and the version; each feature adds its own
+-- controls here as it lands. Choices are radio groups, not dropdowns (the
+-- porting guide's measured recipe).
 
 GlassMailbox = GlassMailbox or {}
 local GM = GlassMailbox
@@ -13,12 +14,7 @@ local API = GM.API
 local Options = {}
 GM.Options = Options
 
-local CHECK_ART = {
-    normal = "Interface\\Buttons\\UI-CheckBox-Up",
-    pushed = "Interface\\Buttons\\UI-CheckBox-Down",
-    highlight = "Interface\\Buttons\\UI-CheckBox-Highlight",
-    checked = "Interface\\Buttons\\UI-CheckBox-Check",
-}
+local RADIO_ART = "Interface\\Buttons\\UI-RadioButton"   -- 4 cells: normal, checked, highlight, pushed
 
 local panel = CreateFrame("Frame")
 panel.name = "Glass Mailbox"
@@ -33,22 +29,49 @@ local function label(parent, text, font)
     return fs
 end
 
--- A labelled check button: UICheckButtonTemplate when the client has it, else
--- the client's own checkbox art.
-local function checkButton(parent, text, get, set)
-    local cb, templated = API.SafeFrame("CheckButton", parent, "UICheckButtonTemplate", "text")
-    if not templated then
-        cb:SetNormalTexture(CHECK_ART.normal)
-        cb:SetPushedTexture(CHECK_ART.pushed)
-        cb:SetHighlightTexture(CHECK_ART.highlight)
-        cb:SetCheckedTexture(CHECK_ART.checked)
+-- A labelled radio button: UIRadioButtonTemplate when the client has it (its
+-- own label, rb.text, takes the text), else the client's own radio art and a
+-- label of ours.
+local function radioButton(parent, text)
+    local rb, templated = API.SafeFrame("CheckButton", parent, "UIRadioButtonTemplate", "text")
+    if templated then
+        rb.text:SetFontObject("GameFontHighlight")
+        rb.text:SetText(text)
+        return rb
     end
-    cb:SetSize(24, 24)
+    rb:SetSize(16, 16)
+    rb:SetNormalTexture(RADIO_ART)
+    rb:GetNormalTexture():SetTexCoord(0, 0.25, 0, 1)
+    rb:SetCheckedTexture(RADIO_ART)
+    rb:GetCheckedTexture():SetTexCoord(0.25, 0.5, 0, 1)
+    rb:SetHighlightTexture(RADIO_ART)
+    rb:GetHighlightTexture():SetTexCoord(0.5, 0.75, 0, 1)
+    rb:GetHighlightTexture():SetBlendMode("ADD")   -- as the template's (CheckButtonTemplates.xml:18)
     local fs = label(parent, text)
-    fs:SetPoint("LEFT", cb, "RIGHT", 4, 0)
-    cb:SetScript("OnClick", function(self) set(self:GetChecked() and true or false) end)
-    refreshers[#refreshers + 1] = function() cb:SetChecked(get()) end
-    return cb
+    fs:SetPoint("LEFT", rb, "RIGHT", 4, 0)
+    return rb
+end
+
+-- Mutually exclusive choices, stacked under `anchor`: { {value, text}, ... }.
+-- Returns the last button, to anchor what follows. The whole group re-syncs
+-- after a click, so a refused choice snaps back.
+local function radios(parent, anchor, options, get, set)
+    local group = {}
+    local function sync()
+        local current = get()
+        for _, rb in ipairs(group) do rb:SetChecked(rb.value == current) end
+    end
+    local prev = anchor
+    for _, o in ipairs(options) do
+        local rb = radioButton(parent, o[2])
+        rb.value = o[1]
+        rb:SetPoint("TOPLEFT", prev, "BOTTOMLEFT", 0, prev == anchor and -8 or -4)
+        rb:SetScript("OnClick", function() set(o[1]); sync() end)
+        group[#group + 1] = rb
+        prev = rb
+    end
+    refreshers[#refreshers + 1] = sync
+    return prev, group
 end
 
 local function build()
@@ -59,11 +82,14 @@ local function build()
     refreshers[#refreshers + 1] = function()
         version:SetText("Version " .. GM.VersionText() .. " for World of Warcraft: Forever, by Spotnick")
     end
-    local glass = checkButton(panel, "Glass look on the mailbox windows",
-        function() return GM.db.glass end, GM.Settings.SetGlass)
-    glass:SetPoint("TOPLEFT", version, "BOTTOMLEFT", -4, -16)
+    local look = label(panel, "The mailbox windows' look", "GameFontNormal")
+    look:SetPoint("TOPLEFT", version, "BOTTOMLEFT", 0, -16)
+    local options = {}
+    for _, name in ipairs(GM.Skin.NAMES) do options[#options + 1] = { name, GM.Skin.LABELS[name] } end
+    local last, group = radios(panel, look, options, function() return GM.db.skin end, GM.Settings.SetSkin)
+    Options._test.skinRadios = group
     local hint = label(panel, "Type /gmail help for every command.", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", glass, "BOTTOMLEFT", 4, -16)
+    hint:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -16)
 end
 
 panel:SetScript("OnShow", function()

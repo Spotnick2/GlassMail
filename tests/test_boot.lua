@@ -11,13 +11,18 @@ eq(type(GlassMailboxCharDB), "table", "missing per-character saved variables bec
 check(not chatHas("differs from"), "no build warning on the measured build")
 
 -- Only what the player set is saved; the rest follows the shipped defaults.
-eq(rawget(GlassMailboxDB, "glass"), nil, "an untouched setting isn't saved")
-eq(GM.db.glass, true, "it reads the shipped default")
-GM.Settings.SetGlass(false)
-eq(rawget(GlassMailboxDB, "glass"), false, "a setting the player changed is saved")
-GlassMailboxDB = { glass = true }
+eq(rawget(GlassMailboxDB, "skin"), nil, "an untouched setting isn't saved")
+eq(GM.db.skin, "clear", "it reads the shipped default")
+GM.Settings.SetSkin("smoked")
+eq(rawget(GlassMailboxDB, "skin"), "smoked", "a setting the player changed is saved")
+GlassMailboxDB = { skin = "clear" }
 GM._test.ensureDefaults()
-eq(rawget(GlassMailboxDB, "glass"), nil, "a saved value equal to the default is dropped")
+eq(rawget(GlassMailboxDB, "skin"), nil, "a saved value equal to the default is dropped")
+GlassMailboxDB = { skin = "frosted", glass = false }
+GM._test.ensureDefaults()
+eq(rawget(GlassMailboxDB, "skin"), nil, "a saved skin this version doesn't know is dropped")
+eq(GlassMailboxDB.skin, "clear", "  and the default applies")
+eq(rawget(GlassMailboxDB, "glass"), nil, "M0's glass switch is dropped")
 GM.db = GlassMailboxDB
 
 -- The options page: registered once at login, and blank-proof (hidden at
@@ -40,10 +45,10 @@ SlashCmdList.GLASSMAILBOX("version")
 lines = newChat()
 check(lines[1] and lines[1]:find("1.60.1.70291", 1, true), "/gmail version names the measured build")
 check(lines[1] and lines[1]:find("version dev", 1, true), "a deployed copy reports dev")
-SlashCmdList.GLASSMAILBOX("glass off")
-eq(GM.db.glass, false, "/gmail glass off")
+SlashCmdList.GLASSMAILBOX("skin smoked")
+eq(GM.db.skin, "smoked", "/gmail skin smoked")
 SlashCmdList.GLASSMAILBOX("glass on")
-eq(GM.db.glass, true, "/gmail glass on")
+eq(GM.db.skin, "clear", "/gmail glass on")
 SlashCmdList.GLASSMAILBOX("options")
 eq(WoW.openedCategory, WoW.categories[1]:GetID(), "/gmail options opens the page")
 

@@ -13,10 +13,12 @@ review's main corrections are listed at the end.
     [FOREVER-PROBE.md](FOREVER-PROBE.md). **No feature code before the
     measurements its design depends on.** Items still open are listed with the milestone that
     must measure them (FOREVER-PROBE.md, "Still open").
-- **M1, first release** *(next)*: the mail core (`Core/Scan.lua`, `Core/Summary.lua`, `Core/Names.lua`,
-  `Core/Loot.lua`), the skin finished, I1, I2, I3, X3, with the operation records that confirm each
-  action succeeded.
-- **M2:** S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI.
+- **M1, first release** *(in progress, #4)*: the mail core (`Core/Scan.lua`, `Core/Ops.lua`,
+  `Core/Loot.lua`), the skin finished in clear and smoked glass, I1, I2, I3, X3, with the operation
+  records that confirm each action succeeded. Five PRs: look → probe session 5 → core + I1 →
+  I2 + I3 → X3 + v0.1.0. See "M1" below.
+- **M2:** S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI,
+  and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here.
 - **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
@@ -24,9 +26,50 @@ review's main corrections are listed at the end.
 - **M4:** N1 bank character (`Core/Send.lua`, one Send click per batch), N2 local return assistance.
 - **Later:** cross-account N2 over LibAccountSync, shared-settings sync, merged autocomplete, Forward.
 
+## M1 (reviewed with Codex, 4 rounds, consensus)
+
+- **Look.** `skin` = clear / smoked / stock, switched live (see Skin.lua). Choices on the options
+  page are radio groups.
+- **Identity.**
+  - A fingerprint covers sender, subject, money, COD, `wasReturned`, and each slot's item
+    *link* × count. It leaves out `daysLeft`.
+  - A missing link makes the fingerprint unresolved: nothing is dispatched against that mail, and
+    no scan containing it confirms anything.
+  - A remembered target (a selection, a residual) is acted on only when exactly one mail matches.
+    Two identical mails are not interchangeable: expiry, read state, letter text and variants can
+    differ. A twin's checkbox is disabled.
+- **`Core/Ops.lua`, the one operation owner** for Open All, Open selected, Return selected and the
+  row icons.
+  - **Foreign calls.** `TakeInboxItem`, `TakeInboxMoney`, `AutoLootMailItem`, `ReturnInboxItem`
+    and `DeleteInboxItem` are post-hooked, with a flag marking our own calls. A foreign call
+    cancels the run.
+  - **One attempt at a time,** with the residual fingerprint it expects. Success means the
+    before-count fell by one **and** the residual count rose by one, or the mail is gone; "gone"
+    alone proves nothing.
+  - **Unrelated updates** neither confirm nor overwrite an attempt.
+  - **5 s unresolved** stops the run as uncertain.
+  - **Failures.** A failed item joins the skip set. A failed money take, Return or Delete stops the
+    run.
+- **`Core/Loot.lua`, what to take.**
+  - Money first.
+  - Then each attachment, if it fits: in partial stacks, in specialty slots of a matching family,
+    or in general slots above `keepFree`. Unknown means skip.
+  - **Refill** is for Open All only: one `CheckInbox` in flight, a 10 s completion deadline, and a
+    stop on unchanged contents or after 3 refills. It ships only if session 5 sees `total > loaded`.
+- **Probe session 5** (before the PRs that need it):
+  - the AH subject strings and Postmaster fields;
+  - several timed returns;
+  - money with several attachments, step by step;
+  - partial stacks, unique items and locked slots;
+  - the specialty-bag reserve boundary;
+  - overflow past 100 mails;
+  - row controls parented to InboxFrame, in combat;
+  - `HasNewMail` and the minimap icon.
+
 ## The mail core (M1)
 
-In `Core/`, shaped like a library but not published as one until M3.
+In `Core/`, shaped like a library but not published as one until M3. (Superseded where the M1
+section above differs: `Summary` and `Names` moved to M2.)
 - **`Scan()`** returns a plain-value snapshot:
   - header `{guid, name, at, loaded, total, complete}`;
   - each mail `{index, sender, subject, money, cod, daysLeft, wasRead, wasReturned, canReply, isGM,

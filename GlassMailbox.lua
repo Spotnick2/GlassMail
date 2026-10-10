@@ -10,7 +10,7 @@ local say = API.Print
 -- Account-wide (GlassMailboxDB): settings, the same on every character.
 -- Per character (GlassMailboxCharDB): nothing yet.
 local DEFAULTS = {
-    glass = true,   -- the glass panels on the mail windows (off: Blizzard's own art)
+    skin = "clear",   -- the mail windows' look: "clear" or "smoked" glass, or "stock" (Blizzard's own art)
 }
 GM.DEFAULTS = DEFAULTS
 
@@ -24,6 +24,9 @@ local function ensureDefaults()
     for k, v in pairs(DEFAULTS) do
         if db[k] == v then db[k] = nil end
     end
+    -- A skin this version doesn't know falls back to the default.
+    if db.skin ~= nil and not GM.Skin.IsValid(db.skin) then db.skin = nil end
+    db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     setmetatable(db, { __index = DEFAULTS })
     if type(GlassMailboxCharDB) ~= "table" then GlassMailboxCharDB = {} end
     return db, GlassMailboxCharDB
@@ -33,9 +36,12 @@ end
 local Settings = {}
 GM.Settings = Settings
 
-function Settings.SetGlass(on)
-    GM.db.glass = on and true or false
+-- False for a name that isn't a skin; the setting is left as it was.
+function Settings.SetSkin(name)
+    if not GM.Skin.IsValid(name) then return false end
+    GM.db.skin = name
     GM.Skin.Refresh()
+    return true
 end
 
 -- A dev build, by its version: "dev" from the deploy script, or the
@@ -65,12 +71,10 @@ local function failures()
     if not any then say("no failures recorded") end
 end
 
-local function onOff(v) return v and "on" or "off" end
-
 -- The command list: /gmail help prints it, the options page can show it.
 local function helpLines()
     return {
-        "/gmail glass on/off - the glass look on the mailbox (" .. onOff(GM.db.glass) .. ")",
+        "/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")",
         "/gmail options - open the options page",
         "/gmail failures - what failed to build or register",
         "/gmail version - client build vs the measured one",
@@ -78,17 +82,23 @@ local function helpLines()
 end
 GM.HelpLines = helpLines
 
-local function flag(arg)
-    if arg == "on" then return true elseif arg == "off" then return false end
+-- /gmail glass on/off, M0's command: clear glass or Blizzard's own art.
+local GLASS_ALIAS = { on = "clear", off = "stock" }
+
+local function setSkin(name)
+    if Settings.SetSkin(name) then
+        say("skin " .. name)
+    else
+        say("/gmail skin " .. table.concat(GM.Skin.NAMES, "/"))
+    end
 end
 
 local function slash(msg)
     local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
-    if cmd == "glass" then
-        local v = flag(arg)
-        if v == nil then say("/gmail glass on/off"); return end
-        Settings.SetGlass(v)
-        say("glass " .. onOff(v))
+    if cmd == "skin" then
+        setSkin(arg)
+    elseif cmd == "glass" then
+        if GLASS_ALIAS[arg] then setSkin(GLASS_ALIAS[arg]) else say("/gmail glass on/off") end
     elseif cmd == "options" then
         if not GM.Options.Open() then say("Esc > Options > AddOns > Glass Mailbox") end
     elseif cmd == "failures" then

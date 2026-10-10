@@ -18,6 +18,12 @@ APIs and `C:\Projects\wow-ui-source`. No code is copied.
   (`InboxFrame_OnModifiedClick`). Extra actions go on our own controls.
 - Blizzard's Send button and its secure-transfer confirmation stay in the loop for every send.
 
+## The look
+
+Two glass presets, **clear** and **smoked**, plus Blizzard's own art (owner, 2026-10-09). The
+presets are AltStable's (`AltStable/Skin.lua`), so the addons look alike; they change the body and
+the reading pane, never the rim. The choice switches live.
+
 ## Features
 
 | # | Feature | Notes that shape the design |
