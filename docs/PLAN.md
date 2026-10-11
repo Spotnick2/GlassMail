@@ -63,6 +63,28 @@ review's main corrections are listed at the end.
   - Our controls disable in combat and a run stops; combat wasn't measured.
   - X3 has no minimap item: Blizzard hides the icon once every mail is read.
   - Loot: a specialty-bag item goes to the specialty bag first; slots keep their numbers.
+- **PR 3, core + I1** (implementation plan reviewed with Codex, 4 rounds, consensus,
+  2026-10-11):
+  - **Twins in Open All are taken.** Open All has no remembered target: each dispatch takes the
+    mail a fresh scan finds eligible now. A wrong credit between twins only skews the summary.
+    The unique-match rule stays for remembered targets (PR 4's selection and Return).
+  - **"Gone" needs the loaded count to fall too,** besides the fingerprint's count.
+  - **Fingerprints are length-prefixed** fields, so delimiters can't merge two mails.
+  - **`MAIL_FAILED` with no itemID** (the API allows it) on an item stops the run as uncertain;
+    only a real ID joins the skip set. A failed money take stops the run.
+  - **Bags:** locked stacks offer no room; after an item, the next waits for a
+    `BAG_UPDATE_DELAYED` since its dispatch, or 1 s. Bags 0-4 only: the reagent bag is unmeasured.
+  - **"System mail"**, not "Postmaster": not AH and can't be replied to (or GM). Returned mail can
+    be replied to, so it's player mail.
+  - **Resolve on `MAIL_INBOX_UPDATE` only**; `OnUpdate` drives the deadline and the dispatch gate.
+  - **Gamepad UI mode:** Blizzard drives its own Open All from a footer binding. We leave it alone
+    there and don't offer ours; the stock button is hidden from an `OnShow` hook only in mouse
+    mode, so its re-show on a mode change is caught whatever the callback order. Any
+    `INPUT_DEVICE_INTERFACE_TRANSITION` stops our run, and each dispatch re-checks the mode.
+    Reasoned, not measured (no gamepad).
+  - **Cut:** the options-page copy of the filters (the right-click menu only), the invoice check
+    (the six templates classify AH mail), per-frame rescans, repeated skip counting (tallied once
+    at the end).
 - **Probe session 5** (what was asked of it):
   - the AH subject strings and Postmaster fields;
   - several timed returns;

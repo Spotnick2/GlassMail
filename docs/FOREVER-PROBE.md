@@ -181,6 +181,7 @@ ships with a safe fallback until it is measured:
 | 2 | Index shifts when mail arrives during a run; an inbox update while a confirmation is open | when it happens (`watch on`) | nothing: Ops finds every target again from a fresh scan before each call, and acts only on one exact match |
 | 3 | Skipped mail (COD, failed items) filling the loaded window | with over 100 mails | nothing in v0.1.0: without refill, Open All stops at the loaded window anyway |
 | 3 | The `keepFree` boundary itself (general slots only, specialty bags first) | PR 3's in-game check | I1 `keepFree`: counts family-0 free slots, as Blizzard's total does (session 1) |
+| 3 | The reagent bag (`Enum.BagIndex.ReagentBag` = 5): its family, and whether mail loot goes there | when one is carried | nothing: Open All counts bags 0-4 only, so it may stop early, never overfill |
 | 4 | Several `ReturnInboxItem` in a row (`returnmany`) | when convenient | I2 batch Return (v0.1.0: one click each) |
 | 7 | Our controls in combat | when convenient | nothing: they disable in combat |
 | 8 | Postmaster mail and other system senders; senders on a localized client | when one arrives | I1 filter (a reasoned rule until then) |

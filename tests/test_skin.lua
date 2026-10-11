@@ -27,7 +27,10 @@ local T = GM._test.skin
 for _, name in ipairs(WINDOWS) do
     local w = _G[name]
     local after = fields(w)
-    for k, v in pairs(after) do check(before[name][k] == v, name .. ": no field written: " .. tostring(k)) end
+    for k, v in pairs(after) do
+        local hooked = WoW.hooked[w] and WoW.hooked[w][k]
+        check(hooked or before[name][k] == v, name .. ": no field written: " .. tostring(k))
+    end
     for k in pairs(before[name]) do check(after[k] ~= nil, name .. ": no field removed: " .. tostring(k)) end
 end
 

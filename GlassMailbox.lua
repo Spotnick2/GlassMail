@@ -11,6 +11,9 @@ local say = API.Print
 -- Per character (GlassMailboxCharDB): nothing yet.
 local DEFAULTS = {
     skin = "clear",   -- the mail windows' look: "clear" or "smoked" glass, or "stock" (Blizzard's own art)
+    -- Open All (I1): which mail it takes, and the general bag slots it keeps free.
+    openAH = true, openSystem = true, openPlayer = true,
+    keepFree = 0,     -- one of GM.Loot.KEEP_FREE
 }
 GM.DEFAULTS = DEFAULTS
 
@@ -18,6 +21,11 @@ GM.DEFAULTS = DEFAULTS
 -- DEFAULTS, so a changed default reaches everyone. Saved keys equal to the
 -- default are dropped. Nothing may REQUIRE a value to have survived
 -- (GlassChat's rule).
+local function validKeepFree(n)
+    for _, v in ipairs(GM.Loot.KEEP_FREE) do if v == n then return true end end
+    return false
+end
+
 local function ensureDefaults()
     if type(GlassMailboxDB) ~= "table" then GlassMailboxDB = {} end
     local db = GlassMailboxDB
@@ -26,6 +34,7 @@ local function ensureDefaults()
     end
     -- A skin this version doesn't know falls back to the default.
     if db.skin ~= nil and not GM.Skin.IsValid(db.skin) then db.skin = nil end
+    if db.keepFree ~= nil and not validKeepFree(db.keepFree) then db.keepFree = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     setmetatable(db, { __index = DEFAULTS })
     if type(GlassMailboxCharDB) ~= "table" then GlassMailboxCharDB = {} end
@@ -41,6 +50,21 @@ function Settings.SetSkin(name)
     if not GM.Skin.IsValid(name) then return false end
     GM.db.skin = name
     GM.Skin.Refresh()
+    return true
+end
+
+-- Open All's mail types: openAH, openSystem, openPlayer.
+local FILTERS = { openAH = true, openSystem = true, openPlayer = true }
+function Settings.SetOpenFilter(key, on)
+    if not FILTERS[key] then return false end
+    GM.db[key] = on == true
+    return true
+end
+
+-- False unless n is one of the offered reserves (0, 2, 5, 10).
+function Settings.SetKeepFree(n)
+    if not validKeepFree(n) then return false end
+    GM.db.keepFree = n
     return true
 end
 
@@ -133,6 +157,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         if not GM.db then GM.db, GM.charDB = ensureDefaults() end
         start("options", GM.Options.Register)
         start("skin", GM.Skin.Start)
+        start("open all", GM.OpenAll.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.

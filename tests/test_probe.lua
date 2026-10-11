@@ -47,6 +47,12 @@ rawset(_G, "C_Item", { GetItemMaxStackSizeByID = function(id) return id == 2512 
     GetItemFamily = function(id) return id == 2512 and 1 or 0 end,
     GetItemCount = function(id) return id == 2770 and 15 or 0 end,
     GetItemInfo = function(id) if id == 2770 then return "Copper Ore" end end })
+-- Only three templates, and no ReturnInboxItem, on this test's client (the
+-- shared stubs have all of them).
+for _, n in ipairs({ "AUCTION_EXPIRED_MAIL_SUBJECT", "AUCTION_INVOICE_MAIL_SUBJECT", "AUCTION_REMOVED_MAIL_SUBJECT" }) do
+    rawset(_G, n, nil)
+end
+rawset(_G, "ReturnInboxItem", nil)
 rawset(_G, "AUCTION_SOLD_MAIL_SUBJECT", "Auction successful: %s")
 rawset(_G, "AUCTION_OUTBID_MAIL_SUBJECT", "Outbid on %s.")
 -- A localized-style template: positional specifier and a literal percent.
