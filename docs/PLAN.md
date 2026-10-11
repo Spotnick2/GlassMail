@@ -19,7 +19,7 @@ review's main corrections are listed at the end.
   I2 + I3 → X3 + v0.1.0. See "M1" below.
 - **M2:** S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI,
   and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here.
-- **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\LibMailbox`
+- **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
   addon needs them.

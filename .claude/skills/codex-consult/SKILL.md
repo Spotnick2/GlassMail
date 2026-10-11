@@ -87,14 +87,14 @@ For GlassMailbox, good things to hand Codex:
   instead of extending it.
 
 **Always hand it `CLAUDE.md`, `docs/PLAN.md` and `docs/FEATURES.md` alongside the diff or plan**,
-plus `C:/Projects/References/PORTING-TBC-TO-FOREVER.md` and `docs/FOREVER-PROBE.md`. Those findings
+plus `C:/Projects/WoW/References/PORTING-TBC-TO-FOREVER.md` and `docs/FOREVER-PROBE.md`. Those findings
 were measured on the live client. Without them, a cold reviewer argues from Classic-era or Retail
 behaviour that doesn't hold here (that names carry a realm, that the old global mail functions
 exist).
-`C:/Projects/References/forever-api-1.60.1.70291.md` is the full API surface when a question
-turns on whether something exists, and `C:/Projects/wow-ui-source` (branch `forever`) is the
+`C:/Projects/WoW/References/forever-api-1.60.1.70291.md` is the full API surface when a question
+turns on whether something exists, and `C:/Projects/WoW/wow-ui-source` (branch `forever`) is the
 client's own FrameXML (`Blizzard_MailFrame`). The design references are in
-`C:/Projects/References/Mail/` (Postal, PostalReborn, Kerzo); they are behaviour references only,
+`C:/Projects/WoW/References/Mail/` (Postal, PostalReborn, Kerzo); they are behaviour references only,
 their code is never copied, and their RawHooks are the part we deliberately don't use.
 
 Say what you have already established and ask it not to repeat that work. A clean "no defect found"
