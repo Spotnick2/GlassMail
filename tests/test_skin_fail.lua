@@ -20,7 +20,9 @@ eq(MailFrame.Bg:GetAlpha(), 1, "switching looks leaves the unskinned window's ar
 -- Its letter stays Blizzard's: parchment and dark text, no pane over them.
 local T = GM._test.skin
 eq(T.letters.MailFrame, nil, "no letter pane in an unskinned window")
-eq(T.moneyPane(), nil, "  nor a money pane")
+eq(T.sections.MailFrame, nil, "  nor sections")
+eq(T.sections.footer, nil, "  nor a footer")
+check(T.sections.OpenMailFrame ~= nil, "the open letter's window has its section")
 eq(SendStationeryBackgroundLeft:GetAlpha(), 1, "  its stationery stays")
 local r = SendMailBodyEditBox:GetTextColor()
 check(r < 0.5, "  and its text stays dark")

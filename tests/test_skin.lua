@@ -97,20 +97,24 @@ local function darkSelection() local r, g, b = SendMailBodyEditBox:GetHighlightC
     return close(r, H[1]) and close(g, H[2]) and close(b, H[3]) end
 check(darkSelection(), "  and its selection dark enough to read it on")
 
--- The money area's pane: from the label to the letter's right edge and the
--- C.O.D. radio's bottom, under the money frame so its label and boxes draw above.
-local mp = T.moneyPane()
-check(mp and mp.frame:IsShown(), "the send tab's money area has a pane")
-eq(mp.frame:GetParent(), SendMailFrame, "  in the send tab")
-check(mp.frame:GetFrameLevel() < SendMailMoneyButton:GetFrameLevel(), "  under the money frame")
-local _, tl = mp.frame:GetPoint(1)
-local _, br = mp.frame:GetPoint(2)
-eq(tl, SendMailMoneyText, "  from the label")
-eq(select(5, mp.frame:GetPoint(1)), 1, "  its top 1px above it, clear of the send error 2px above")
-local _, cornerRight = br:GetPoint(1)
-local _, cornerBottom = br:GetPoint(2)
-check(cornerRight == SendStationeryBackgroundRight and cornerBottom == SendMailCODButton,
-    "  to a corner at the letter's right edge and the C.O.D. radio's bottom")
+-- The sections: a pane over each window's content box (its Inset, which
+-- Blizzard moves per tab), at the window's level so its children draw above;
+-- and the send tab's footer, from the money inset to Cancel.
+for _, w in ipairs({ MailFrame, OpenMailFrame }) do
+    local sp = T.sections[w:GetName()]
+    check(sp and sp.frame:IsShown(), w:GetName() .. ": its content box has a pane")
+    eq(sp.frame:GetParent(), w, "  in the window")
+    eq(sp.frame:GetFrameLevel(), w:GetFrameLevel(), "  at its level, under its children")
+    local _, tl = sp.frame:GetPoint(1)
+    local _, br = sp.frame:GetPoint(2)
+    check(tl == w.Inset and br == w.Inset, "  on its Inset, so it follows the tab's layout")
+end
+local foot = T.sections.footer
+check(foot and foot.frame:IsShown(), "the send tab has a footer pane")
+eq(foot.frame:GetParent(), SendMailFrame, "  in the send tab, hidden with it")
+local _, fl = foot.frame:GetPoint(1)
+local _, fr = foot.frame:GetPoint(2)
+check(fl == SendMailMoneyInset and fr == SendMailCancelButton, "  from the money inset to Cancel")
 check(light(OpenMailBodyText:GetTextColor("P")), "the open letter's body is light")
 check(light(OpenMailInvoiceItemLabel:GetTextColor()), "the invoice's labels are light, a frame deeper too")
 check(light(OpenMailInvoiceSalePrice:GetTextColor()), "  all of them")
@@ -151,18 +155,23 @@ local function lettersPainted(name)
     return true
 end
 check(lettersPainted("clear"), "  and the letter panes")
-local function moneyPainted(name)
-    local c, pc = T.moneyPane().tex._color, GM.Skin.PRESETS[name].pane
-    return c and close(c[4], pc[4]) and close(c[1], pc[1])
+local function sectionsPainted(name)
+    local pc, n = GM.Skin.PRESETS[name].section, 0
+    for _, sp in pairs(T.sections) do
+        local c = sp.tex._color
+        if not (c and close(c[4], pc[4]) and close(c[1], pc[1])) then return false end
+        n = n + 1
+    end
+    return n == 3
 end
-check(moneyPainted("clear"), "  and the money pane")
+check(sectionsPainted("clear"), "  and the sections")
 
 -- Switched live, both ways, from the setting.
 check(GM.Settings.SetSkin("smoked"), "smoked is accepted")
 eq(GM.db.skin, "smoked", "and saved")
 check(painted("smoked"), "smoked: the same surfaces repainted, no reload")
 check(lettersPainted("smoked"), "  the letter panes too")
-check(moneyPainted("smoked"), "  and the money pane")
+check(sectionsPainted("smoked"), "  and the sections")
 check(light(SendMailBodyEditBox:GetTextColor()), "  the letter text stays light")
 check(GM.Skin.PRESETS.smoked.tint[4] > GM.Skin.PRESETS.clear.tint[4], "smoked is denser than clear")
 check(GM.Skin.PRESETS.smoked.tint[1] < GM.Skin.PRESETS.clear.tint[1], "  and darker")
@@ -188,7 +197,7 @@ eq(SendMailHorizontalBarLeft:GetAlpha(), 1, "  and the bars")
 eq(OpenStationeryBackgroundLeft:GetAlpha(), 1, "  and the letter's stationery")
 for _, letter in pairs(T.letters) do local lp = letter.pane check(not lp.frame:IsShown(), "stock hides the letter panes") end
 check(isDark(SendMailBodyEditBox:GetTextColor()), "stock gives the letter text Blizzard's colour back")
-check(not T.moneyPane().frame:IsShown(), "stock hides the money pane")
+for _, sp in pairs(T.sections) do check(not sp.frame:IsShown(), "stock hides the sections") end
 check(isDark(OpenMailBodyText:GetTextColor("P")), "  the open letter's body")
 check(isDark(OpenMailInvoiceItemLabel:GetTextColor()), "  and the invoice")
 eq(select(1, SendMailBodyEditBox:GetHighlightColor()), 0.82, "  and the send body's selection colour")

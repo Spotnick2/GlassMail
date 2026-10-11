@@ -32,14 +32,22 @@ local Glass = GM.Glass
 local Skin = {}
 GM.Skin = Skin
 
+-- pane: the reading panes (inbox rows, letters), AltStable's numbers. section:
+-- the window's content and footer panels, denser: one pane at the pane's alpha
+-- still let a bright quest tracker read through (owner's screenshots,
+-- 2026-10-11), and so did 0.88 in clear. The same in both presets: they
+-- differ where there is no section (title, headers, rim). The reading panes
+-- stack on a section, darker still.
 Skin.PRESETS = {
     clear = {
         tint = { 0.13, 0.16, 0.22, 0.24 }, grain = 0.45, wash = 0.18,
         pane = { 0.04, 0.05, 0.07, 0.62 },
+        section = { 0.04, 0.05, 0.07, 0.94 },
     },
     smoked = {
         tint = { 0.05, 0.06, 0.08, 0.62 }, grain = 0.35, wash = 0.14,
         pane = { 0.03, 0.03, 0.04, 0.80 },
+        section = { 0.03, 0.03, 0.04, 0.94 },
     },
 }
 -- Every value of the setting, in the order the options page lists them.
@@ -83,8 +91,10 @@ local pane           -- { frame, tex } under the inbox rows
 -- light = bool }: the stationery, the pane in its place, the letter's text with Blizzard's
 -- colours, and whether we have turned it light.
 local letters = {}
-local moneyPane      -- { frame, tex } under the send tab's amount and Send Money / C.O.D.
--- What Start has already tried to build (window name, "money"): a failed build
+-- The sections, in the mockup's dark panels: window name (or "footer") ->
+-- { frame, tex }. Each window's content box, and the send tab's footer.
+local sections = {}
+-- What Start has already tried to build (window name, "sections"): a failed build
 -- is recorded once and not retried on every later ADDON_LOADED.
 local tried = {}
 
@@ -176,10 +186,10 @@ end
 -- layer: just enough density for text over a bright world.
 -- If building it fails, the frame is hidden before the error goes on: no
 -- half-built pane is left showing.
-local function newPane(parent, topLeft, bottomRight, level, pad, padTop)
+local function newPane(parent, topLeft, bottomRight, level, pad)
     local f = CreateFrame("Frame", nil, parent)
     local ok, tex = pcall(function()
-        f:SetPoint("TOPLEFT", topLeft, "TOPLEFT", -pad, padTop or pad)
+        f:SetPoint("TOPLEFT", topLeft, "TOPLEFT", -pad, pad)
         f:SetPoint("BOTTOMRIGHT", bottomRight, "BOTTOMRIGHT", pad, -pad)
         f:SetFrameLevel(level)
         local t = f:CreateTexture(nil, "BACKGROUND")
@@ -260,26 +270,25 @@ local function addLetter(name)
         pane = newPane(scroll:GetParent(), left, right, scroll:GetFrameLevel(), 0) }
 end
 
--- The send tab's money area: "Amount to send", the amount boxes and the Send
--- Money / C.O.D. radios (MailFrame.xml:740-788). They hang off a 37x37 frame,
--- SendMailMoneyButton, so the pane gets its corner from a frame of ours: right
--- at the letter's right edge, bottom at the C.O.D. radio's. No fixed width, so
--- a longer localized label still fits. Under the money frame's level, so its
--- label (one of its regions) and its children draw above. The pane shares
--- SendMailFrame's level, so its top stops 1px above the label: the send error
--- (SendMailErrorText, a SendMailFrame region) sits 2px above it
--- (MailFrame.lua:1181) and stays clear. Only with the send letter built: same
--- window, same reason.
-local function addMoneyPane()
-    local holder, label = rawget(_G, "SendMailMoneyButton"), rawget(_G, "SendMailMoneyText")
-    local cod, right = rawget(_G, "SendMailCODButton"), rawget(_G, LETTERS.MailFrame.paper[2])
-    if not (holder and label and cod and right) then return end
-    local parent = holder:GetParent()
-    local corner = CreateFrame("Frame", nil, parent)
-    corner:SetPoint("TOPRIGHT", right, "TOPRIGHT")
-    corner:SetPoint("BOTTOMLEFT", cod, "BOTTOMLEFT")
-    local level = math.max(parent:GetFrameLevel(), holder:GetFrameLevel() - 1)
-    moneyPane = newPane(parent, label, corner, level, 6, 1)
+-- The sections: a pane over each window's content box, its Inset, whose
+-- geometry Blizzard sets per tab (MailFrame.lua:215, 222, 465; the button bar,
+-- SharedUIPanelTemplates.lua:57-72), so the pane follows it with no offsets of
+-- ours. At the window's own level: the tab frames, their rows, letters and
+-- buttons (children, a level up) draw above, and the window's own regions are
+-- the faded art. And the send tab's footer, from the money inset (left) to
+-- Cancel (right): the balance and Send / Cancel, at SendMailFrame's level,
+-- whose regions there are only the faded art.
+local function addSections()
+    for _, name in ipairs({ "MailFrame", "OpenMailFrame" }) do
+        local window = rawget(_G, name)
+        if window and skinned[window] and window.Inset then
+            sections[name] = newPane(window, window.Inset, window.Inset, window:GetFrameLevel(), 0)
+        end
+    end
+    local send, left, cancel = rawget(_G, "SendMailFrame"), rawget(_G, "SendMailMoneyInset"), rawget(_G, "SendMailCancelButton")
+    if sections.MailFrame and send and left and cancel then
+        sections.footer = newPane(send, left, cancel, send:GetFrameLevel(), 2)
+    end
 end
 
 -- Light under glass; Blizzard's own colours back under "stock". Only on a
@@ -339,10 +348,10 @@ function Skin.Start()
             if not ok then API.Fail("skin letter " .. name, err) end
         end
     end
-    if letters.MailFrame and not tried.money then
-        tried.money = true
-        local ok, err = pcall(addMoneyPane)
-        if not ok then API.Fail("skin money pane", err) end
+    if next(skinned) and not tried.sections then
+        tried.sections = true
+        local ok, err = pcall(addSections)
+        if not ok then API.Fail("skin sections", err) end
     end
     Skin.Refresh()
 end
@@ -350,17 +359,18 @@ end
 -- Repaint everything we built in the current preset, live. STYLE is only read
 -- when a surface is built (addPanel pushes the preset there), so it isn't
 -- touched here.
-local function paintPane(pn, p)
+local function paintPane(pn, p, key)
     if not pn then return end
     pn.frame:SetShown(p ~= nil)
-    if p then pn.tex:SetColorTexture(p.pane[1], p.pane[2], p.pane[3], p.pane[4]) end
+    local c = p and p[key or "pane"]
+    if c then pn.tex:SetColorTexture(c[1], c[2], c[3], c[4]) end
 end
 
 function Skin.Refresh()
     local p = preset()
     for window in pairs(skinned) do applyOne(window, p) end
     paintPane(pane, p)
-    paintPane(moneyPane, p)
+    for _, pn in pairs(sections) do paintPane(pn, p, "section") end
     for name, letter in pairs(letters) do
         paintPane(letter.pane, p)
         for _, paper in ipairs(letter.paper) do paper:SetAlpha(p and 0 or 1) end
@@ -374,4 +384,4 @@ function Skin.IsValid(name) return name == "stock" or Skin.PRESETS[name] ~= nil 
 
 GM._test = GM._test or {}
 GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end, letters = letters,
-    moneyPane = function() return moneyPane end }
+    sections = sections }

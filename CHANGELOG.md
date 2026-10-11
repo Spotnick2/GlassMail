@@ -8,5 +8,6 @@
   clear/smoked/stock` or the options page, switched live. The glass now covers the inset, the inbox
   rows' borders and the divider bars; a reading pane sits under the inbox rows. Under glass the
   letters are dark too, with light text (and a selection colour you can read it on), on the send
-  tab and in an open letter, and a pane sits under the amount to send. Switching looks with a
-  letter open recolours it at once.
+  tab and in an open letter. Each window's content and the send tab's footer sit on their own
+  dark pane, as in the mockup, so busy scenery or the quest tracker don't read through.
+  Switching looks with a letter open recolours it at once.
