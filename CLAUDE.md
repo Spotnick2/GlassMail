@@ -40,9 +40,9 @@ milestone measures each one, before the feature that depends on it ships.
 
 ## Licensing of the references
 
-`C:\Projects\References\Mail\` holds Postal 4.3.5 ("All Rights Reserved"), PostalReborn 1.0.04 and
+`C:\Projects\WoW\References\Mail\` holds Postal 4.3.5 ("All Rights Reserved"), PostalReborn 1.0.04 and
 Kerzo Postal Suite 3.2 (no license). **They are behaviour references only: never copy their code.**
-Write everything from the client APIs and `C:\Projects\wow-ui-source`. This repo is GPL-3.0.
+Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This repo is GPL-3.0.
 
 ## Layout
 
@@ -75,7 +75,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 ## Mail facts for this client
 
 - The mail UI is `Blizzard_MailFrame` (not load-on-demand); there is no `FrameXML` variant. Read
-  `C:\Projects\wow-ui-source\Interface\AddOns\Blizzard_MailFrame\MailFrame.lua` and `.xml` first.
+  `C:\Projects\WoW\wow-ui-source\Interface\AddOns\Blizzard_MailFrame\MailFrame.lua` and `.xml` first.
 - Postal-era globals are gone: `InboxFrame_Update` → `InboxFrame:Update()`, `OpenMail_Update` →
   `OpenMailFrame:Update()`; the page buttons are `InboxFrame.PrevPageButton` / `NextPageButton`.
 - Blizzard already has an Open All button (`OpenAllMail`, `OpenAllMailMixin`): it skips COD and GM
@@ -132,15 +132,15 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 
 ## References: read these before touching an unfamiliar API
 
-- `C:\Projects\References\PORTING-TBC-TO-FOREVER.md`: measured, addon-agnostic field notes. Treat
+- `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`: measured, addon-agnostic field notes. Treat
   them as fact. New addon-agnostic findings go there, not into a copy here.
-- `C:\Projects\References\forever-api-1.60.1.70291.md`: the API dump (functions, events, widget
+- `C:\Projects\WoW\References\forever-api-1.60.1.70291.md`: the API dump (functions, events, widget
   methods, `_G`). **Presence is not a contract.** Mail: `MailInfoDocumentation.lua` in
   wow-ui-source's `Blizzard_APIDocumentationGenerated`.
-- `C:\Projects\References\EMBEDDED-LIBRARIES.md`, `LIBGLASS-MIGRATION.md`: library rules.
-- `C:\Projects\wow-ui-source` (branch `forever`): the client's own FrameXML; line numbers match
+- `C:\Projects\WoW\References\EMBEDDED-LIBRARIES.md`, `LIBGLASS-MIGRATION.md`: library rules.
+- `C:\Projects\WoW\wow-ui-source` (branch `forever`): the client's own FrameXML; line numbers match
   in-game error traces.
-- `C:\Projects\AltStable\PublicAPI.lua` and `docs\PUBLIC-API.md`: the character list we read.
+- `C:\Projects\WoW\AltStable\PublicAPI.lua` and `docs\PUBLIC-API.md`: the character list we read.
 
 ## Toolchain and commands
 
