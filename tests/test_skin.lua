@@ -1,5 +1,5 @@
 -- The glass look on the mail windows: a panel under each, a reading pane under
--- the inbox rows, the stock art faded (never hidden, never a field written on
+-- the inbox rows, a dark letter with light text, the stock art faded (never hidden, never a field written on
 -- a Blizzard frame), and the clear / smoked / stock choice, switched live.
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
@@ -13,7 +13,10 @@ local function fields(w)
     for k, v in pairs(w) do t[k] = v end
     return t
 end
-local WINDOWS = { "MailFrame", "OpenMailFrame", "InboxFrame", "SendMailFrame" }
+local WINDOWS = { "MailFrame", "OpenMailFrame", "InboxFrame", "SendMailFrame", "SendMailScrollFrame",
+    "OpenMailScrollFrame" }
+local DARK = { SendMailBodyEditBox:GetTextColor() }
+local function fontObjectState() return MailTextFontNormal._textColor, InvoiceTextFontNormal._textColor end
 local before = {}
 for _, name in ipairs(WINDOWS) do before[name] = fields(_G[name]) end
 
@@ -68,7 +71,56 @@ eq(SendMailMoneyInset.Bg:GetAlpha(), 0, "the send tab's money inset faded")
 eq(SendMailMoneyInset.NineSlice:GetAlpha(), 0, "  and its border")
 eq(SendMailMoneyBg:GetAlpha(), 1, "the money value field keeps its frame")
 eq(SendMailErrorIcon:GetAlpha(), 1, "a texture anchored to something else stays")
-eq(OpenStationeryBackgroundLeft:GetAlpha(), 1, "the letter's stationery stays (dark text needs it)")
+
+-- The letters go dark: the stationery faded (not hidden), a pane in its place,
+-- the text light. Only the mail widgets are recoloured, never the shared fonts.
+local L = GM.Skin.LETTER_TEXT
+local function light(r, g, b) return close(r, L[1]) and close(g, L[2]) and close(b, L[3]) end
+local function isDark(r, g, b) return close(r, DARK[1]) and close(g, DARK[2]) and close(b, DARK[3]) end
+for _, n in ipairs({ "SendStationeryBackgroundLeft", "SendStationeryBackgroundRight", "OpenStationeryBackgroundLeft",
+        "OpenStationeryBackgroundRight" }) do
+    eq(_G[n]:GetAlpha(), 0, n .. " faded under glass")
+    check(_G[n]:IsShown(), "  not hidden")
+end
+for name, scroll in pairs({ MailFrame = SendMailScrollFrame, OpenMailFrame = OpenMailScrollFrame }) do
+    local lp = T.letters[name] and T.letters[name].pane
+    check(lp and lp.frame:IsShown(), name .. ": the letter has a pane")
+    eq(lp.frame:GetParent(), scroll:GetParent(), "  beside the scroll frame")
+    eq(lp.frame:GetFrameLevel(), scroll:GetFrameLevel(), "  at its level, under the scroll child's text")
+    local _, rel = lp.frame:GetPoint(1)
+    check(rel == _G[name == "MailFrame" and "SendStationeryBackgroundLeft" or "OpenStationeryBackgroundLeft"],
+        "  anchored to the stationery, so it follows its height")
+end
+check(light(SendMailBodyEditBox:GetTextColor()), "the send tab's letter text is light")
+local H = GM.Skin.LETTER_HIGHLIGHT
+local function darkSelection() local r, g, b = SendMailBodyEditBox:GetHighlightColor()
+    return close(r, H[1]) and close(g, H[2]) and close(b, H[3]) end
+check(darkSelection(), "  and its selection dark enough to read it on")
+
+-- The sections: a pane over each window's content box (its Inset, which
+-- Blizzard moves per tab), at the window's level so its children draw above;
+-- and the send tab's footer, from the money inset to Cancel.
+for _, w in ipairs({ MailFrame, OpenMailFrame }) do
+    local sp = T.sections[w:GetName()]
+    check(sp and sp.frame:IsShown(), w:GetName() .. ": its content box has a pane")
+    eq(sp.frame:GetParent(), w, "  in the window")
+    eq(sp.frame:GetFrameLevel(), w:GetFrameLevel(), "  at its level, under its children")
+    local _, tl = sp.frame:GetPoint(1)
+    local _, br = sp.frame:GetPoint(2)
+    check(tl == w.Inset and br == w.Inset, "  on its Inset, so it follows the tab's layout")
+end
+local foot = T.sections.footer
+check(foot and foot.frame:IsShown(), "the send tab has a footer pane")
+eq(foot.frame:GetParent(), SendMailFrame, "  in the send tab, hidden with it")
+local _, fl = foot.frame:GetPoint(1)
+local _, fr = foot.frame:GetPoint(2)
+check(fl == SendMailMoneyInset and fr == SendMailCancelButton, "  from the money inset to Cancel")
+check(light(OpenMailBodyText:GetTextColor("P")), "the open letter's body is light")
+check(light(OpenMailInvoiceItemLabel:GetTextColor()), "the invoice's labels are light, a frame deeper too")
+check(light(OpenMailInvoiceSalePrice:GetTextColor()), "  all of them")
+eq(OpenMailInvoiceMoneyAmount:GetTextColor(), 1, "a font string in another font is left alone")
+local mailFont, invoiceFont = fontObjectState()
+check(mailFont == nil and invoiceFont == nil, "the shared font objects are never recoloured")
 
 -- The reading pane under the rows: ours, in the inbox, under the rows.
 local pane = T.pane()
@@ -94,11 +146,33 @@ local function painted(name)
     return ok
 end
 check(painted("clear"), "clear: the body and the pane carry the clear numbers")
+local function lettersPainted(name)
+    local pc = GM.Skin.PRESETS[name].pane
+    for _, letter in pairs(T.letters) do local lp = letter.pane
+        local c = lp.tex._color
+        if not (c and close(c[4], pc[4]) and close(c[1], pc[1])) then return false end
+    end
+    return true
+end
+check(lettersPainted("clear"), "  and the letter panes")
+local function sectionsPainted(name)
+    local pc, n = GM.Skin.PRESETS[name].section, 0
+    for _, sp in pairs(T.sections) do
+        local c = sp.tex._color
+        if not (c and close(c[4], pc[4]) and close(c[1], pc[1])) then return false end
+        n = n + 1
+    end
+    return n == 3
+end
+check(sectionsPainted("clear"), "  and the sections")
 
 -- Switched live, both ways, from the setting.
 check(GM.Settings.SetSkin("smoked"), "smoked is accepted")
 eq(GM.db.skin, "smoked", "and saved")
 check(painted("smoked"), "smoked: the same surfaces repainted, no reload")
+check(lettersPainted("smoked"), "  the letter panes too")
+check(sectionsPainted("smoked"), "  and the sections")
+check(light(SendMailBodyEditBox:GetTextColor()), "  the letter text stays light")
 check(GM.Skin.PRESETS.smoked.tint[4] > GM.Skin.PRESETS.clear.tint[4], "smoked is denser than clear")
 check(GM.Skin.PRESETS.smoked.tint[1] < GM.Skin.PRESETS.clear.tint[1], "  and darker")
 local rim = T.skinned[MailFrame].g.rim:GetAlpha()
@@ -120,9 +194,34 @@ check(not pane.frame:IsShown(), "stock hides the pane")
 eq(MailFrame.Bg:GetAlpha(), 1, "stock restores the stock art")
 eq(InboxFrameBg:GetAlpha(), 1, "  the inbox background too")
 eq(SendMailHorizontalBarLeft:GetAlpha(), 1, "  and the bars")
+eq(OpenStationeryBackgroundLeft:GetAlpha(), 1, "  and the letter's stationery")
+for _, letter in pairs(T.letters) do local lp = letter.pane check(not lp.frame:IsShown(), "stock hides the letter panes") end
+check(isDark(SendMailBodyEditBox:GetTextColor()), "stock gives the letter text Blizzard's colour back")
+for _, sp in pairs(T.sections) do check(not sp.frame:IsShown(), "stock hides the sections") end
+check(isDark(OpenMailBodyText:GetTextColor("P")), "  the open letter's body")
+check(isDark(OpenMailInvoiceItemLabel:GetTextColor()), "  and the invoice")
+eq(select(1, SendMailBodyEditBox:GetHighlightColor()), 0.82, "  and the send body's selection colour")
 GM.Settings.SetSkin("smoked")
 eq(MailFrame.Bg:GetAlpha(), 0, "glass again fades it again")
 check(painted("smoked"), "  in the chosen preset")
+check(light(OpenMailBodyText:GetTextColor("P")), "  and the letter light again")
+
+-- With the letter open, a switch asks Blizzard to show it again, so the body
+-- (laid out on SetText) takes the new colour; a closed letter isn't touched,
+-- nor one whose look doesn't change.
+OpenMailFrame:Show()
+local updates = OpenMailFrame._updates or 0
+GM.Settings.SetSkin("stock")
+eq(OpenMailFrame._updates, updates + 1, "an open letter is shown again on a switch")
+check(isDark(unpack(OpenMailBodyText._shownColor)), "  and its body shows dark")
+GM.Settings.SetSkin("clear")
+check(light(unpack(OpenMailBodyText._shownColor)), "  then light")
+GM.Settings.SetSkin("smoked")
+eq(OpenMailFrame._updates, updates + 2, "  but not between two glass presets")
+OpenMailFrame:Hide()
+GM.Settings.SetSkin("stock")
+eq(OpenMailFrame._updates, updates + 2, "a closed letter isn't refreshed")
+GM.Settings.SetSkin("smoked")
 
 -- A name that isn't a skin is refused and changes nothing.
 check(not GM.Settings.SetSkin("frosted"), "an unknown skin is refused")
@@ -167,6 +266,9 @@ local m = 0
 for _ in pairs(T.skinned) do m = m + 1 end
 eq(m, n, "a second start adds no panels")
 eq(T.pane(), pane, "  nor a second pane")
+local open = T.letters.OpenMailFrame
+WoW.fire("ADDON_LOADED", "Blizzard_MailFrame")
+eq(T.letters.OpenMailFrame, open, "  nor reads the letter text again (stock would then restore our own colour)")
 eq(next(GM.failures), nil, "no failures recorded")
 
 done("test_skin")

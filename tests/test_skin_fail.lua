@@ -17,5 +17,16 @@ check(GM.Skin.IsSkinned(OpenMailFrame), "the open letter is still skinned")
 GM.Settings.SetSkin("stock")
 GM.Settings.SetSkin("smoked")
 eq(MailFrame.Bg:GetAlpha(), 1, "switching looks leaves the unskinned window's art alone")
+-- Its letter stays Blizzard's: parchment and dark text, no pane over them.
+local T = GM._test.skin
+eq(T.letters.MailFrame, nil, "no letter pane in an unskinned window")
+eq(T.sections.MailFrame, nil, "  nor sections")
+eq(T.sections.footer, nil, "  nor a footer")
+check(T.sections.OpenMailFrame ~= nil, "the open letter's window has its section")
+eq(SendStationeryBackgroundLeft:GetAlpha(), 1, "  its stationery stays")
+local r = SendMailBodyEditBox:GetTextColor()
+check(r < 0.5, "  and its text stays dark")
+check(T.letters.OpenMailFrame ~= nil, "the open letter, in a skinned window, is dark glass")
+eq(OpenStationeryBackgroundLeft:GetAlpha(), 0, "  its stationery faded")
 
 done("test_skin_fail")

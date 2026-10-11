@@ -60,7 +60,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   rows, repainted live by `Skin.Refresh()`. The stock art (template parentKeys, the inset,
   `InboxFrameBg`, the row borders, the horizontal bars and their unnamed ends) is faded with
   `SetAlpha`, never hidden, and found by structure, never by texture path (`GetTexture` returns
-  file IDs). The letter stationery stays: the letter text is dark.
+  file IDs). Under glass the letters go dark (`docs/mockups/inbox-and-send.png`): the stationery is
+  faded, a pane takes its place, and the letter's text is turned light with `SetTextColor` on the
+  mail widgets themselves, never on the shared font objects. Stationery, pane and text change
+  together, per window; `stock` puts Blizzard's colours back. Sections as in the mockup: a pane
+  on each window's content box (its `Inset`, which Blizzard moves per tab) and on the send tab's
+  footer; the letter and row panes stack on them, darker.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns.
 - **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the
