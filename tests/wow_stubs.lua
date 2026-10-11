@@ -568,8 +568,14 @@ function GetInboxHeaderInfo(i)
     if not m then return end
     local n = 0
     for _ in pairs(m.items or {}) do n = n + 1 end
+    -- A secret flag comes back as is; a plain one as the client's boolean.
+    local function flag(v, default)
+        if issecretvalue(v) then return v end
+        if v == nil then return default end
+        return v == true
+    end
     return 134937, nil, m.sender, m.subject, m.money or 0, m.cod or 0, m.daysLeft or 29.5, n > 0 and n or nil,
-        m.wasRead == true, m.wasReturned == true, false, m.canReply ~= false, m.isGM == true
+        flag(m.wasRead, false), flag(m.wasReturned, false), false, flag(m.canReply, true), flag(m.isGM, false)
 end
 -- name, itemID, texture, count, quality, canUse, isCurrency; an uncached
 -- item's name is "" (session 2).
@@ -605,7 +611,8 @@ function WoW.serve(call)
     elseif fn == "TakeInboxItem" then
         local hadItems = next(m.items or {}) ~= nil
         m.items[a] = nil
-        if hadItems and next(m.items) == nil and (m.money or 0) == 0 then table.remove(WoW.inbox, i) end
+        -- Removed once empty, unless it has letter text (m.text): then it stays, empty.
+        if hadItems and next(m.items) == nil and (m.money or 0) == 0 and not m.text then table.remove(WoW.inbox, i) end
     elseif fn == "ReturnInboxItem" or fn == "DeleteInboxItem" then table.remove(WoW.inbox, i) end
     WoW.fire("MAIL_INBOX_UPDATE")
 end

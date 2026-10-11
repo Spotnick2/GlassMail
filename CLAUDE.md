@@ -78,7 +78,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   family, general slots above `keepFree`; unknown when not cached). Bags 0-4.
 - **`Core\Ops.lua`**: the one owner of mail actions. One run, one attempt at a time, confirmed only
   from the inbox: the fingerprint's count fell by one and its residual's rose by one (or, for a
-  mail that should be gone, the loaded count fell by one too). 5 s unconfirmed stops as
+  mail its last take empties, the loaded count fell by one instead: removed; a mail with letter
+  text can stay, empty). 5 s unconfirmed stops as
   uncertain. Foreign mail calls (post-hooks), the mailbox closing, combat and an input-mode change
   stop the run. Open All takes twins (no remembered target); a remembered target needs one match.
 - **`OpenAll.lua`**: I1. Our button in the stock one's place (hidden in mouse mode on every show;

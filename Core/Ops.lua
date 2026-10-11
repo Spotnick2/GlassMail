@@ -4,8 +4,8 @@
 -- records the fingerprint it acts on and the residual it expects, and is
 -- confirmed only from the inbox (MAIL_SUCCESS carries no itemID, session 3):
 -- the acted-on fingerprint's count fell by one AND its residual's count rose
--- by one, or, for a mail that should be gone, the loaded count fell by one
--- too. Anything else is still pending; 5 s without a confirmation stops the
+-- by one, or, for a mail the take empties, the loaded count fell by one (it
+-- was removed) instead. Anything else is still pending; 5 s without a confirmation stops the
 -- run as uncertain, never a blind retry.
 --
 -- Open All has no remembered target: each dispatch takes the mail that a
@@ -87,8 +87,9 @@ local function dispatch(t)
     local action = Loot.Next(snap, bags, run.opts)
     if not action then return finish("done") end
     local m, counts = action.mail, Scan.Count(snap)
-    local residual = Scan.Residual(m, action.kind, action.slot)
+    local residual, mayVanish = Scan.Residual(m, action.kind, action.slot)
     run.attempt = { fp = m.fp, kind = action.kind, itemID = action.itemID, money = m.money, residual = residual,
+        mayVanish = mayVanish,
         before = counts[m.fp] or 0, residualBefore = counts[residual] or 0, loaded = snap.loaded,
         deadline = t + Ops.TIMEOUT }
     run.bagSeen = false
@@ -107,11 +108,9 @@ local function resolve()
     if not snap.resolved then return end   -- a mail still loading confirms nothing
     local counts = Scan.Count(snap)
     if (counts[a.fp] or 0) ~= a.before - 1 then return end
-    if a.residual == Scan.GONE then
-        if snap.loaded ~= a.loaded - 1 then return end
-    elseif (counts[a.residual] or 0) ~= a.residualBefore + 1 then
-        return
-    end
+    local stayed = (counts[a.residual] or 0) == a.residualBefore + 1
+    local removed = a.mayVanish and snap.loaded == a.loaded - 1
+    if not (stayed or removed) then return end
     run.attempt = nil
     if a.kind == "money" then
         run.stats.money = run.stats.money + a.money

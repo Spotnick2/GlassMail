@@ -74,15 +74,18 @@ WoW.fire("BAG_UPDATE_DELAYED")
 step()
 eq(callText(last()), "TakeInboxItem(1, 2)", "  then slot 2, still slot 2")
 
--- The last item of a mail without money: it should be gone. A changed mail
--- that's still there (loaded count unchanged) is not proof.
-WoW.inbox[1].items[2] = nil
+-- The last item of a mail without money: the mail may be removed. That is
+-- proof only if the loaded count fell: a mail arriving in the same update
+-- hides it.
+table.remove(WoW.inbox, 1)
+table.insert(WoW.inbox, { sender = "New", subject = "arrival" })
 WoW.fire("MAIL_INBOX_UPDATE")
 step(1.5)
-eq(#WoW.mailCalls, 3, "the mail emptied but still listed: not confirmed yet")
-table.remove(WoW.inbox, 1)
+eq(GM.Ops.Stats().items, 1, "the mail gone but another arrived: not confirmed")
+eq(#WoW.mailCalls, 3, "  and nothing more dispatched")
+table.remove(WoW.inbox)
 WoW.fire("MAIL_INBOX_UPDATE")
-eq(GM.Ops.Stats().items, 2, "  removed: confirmed")
+eq(GM.Ops.Stats().items, 2, "  the loaded count fell: confirmed")
 
 -- A mail whose attachment isn't linked yet confirms nothing.
 WoW.inbox[2] = { sender = "X", subject = "late", items = { [1] = { id = FOOD, count = 1, link = false } } }
@@ -185,6 +188,21 @@ step(); WoW.serve(last())
 step(1.1); step()
 eq(#WoW.mailCalls, 2, "both twins taken")
 eq(#WoW.inbox, 0, "  the inbox empty")
+
+-- A mail with letter text can stay, empty, after its last item (Blizzard
+-- deletes such a mail itself when the letter closes): that's confirmed too,
+-- and the run goes on.
+WoW.inbox = { { sender = "A", subject = "letter", text = true, items = { [1] = { id = ORE, count = 1 } } },
+    { sender = "B", subject = "more", money = 5 } }
+WoW.mailCalls = {}
+click(button)
+step()
+WoW.serve(last())
+eq(#WoW.inbox, 2, "the emptied letter stays listed")
+eq(GM.Ops.Stats().items, 1, "  and its take is confirmed")
+step(1.1)
+eq(callText(last()), "TakeInboxMoney(2)", "  the run goes on to the next mail")
+click(button)
 
 -- Pacing: 0.15 s between two commands, counted from the last dispatch.
 WoW.inbox = { { sender = "A", subject = "m1", money = 10 }, { sender = "A", subject = "m2", money = 20 } }

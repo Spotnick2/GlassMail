@@ -53,12 +53,21 @@ for _, n in pairs(Scan.Count(s2)) do counted = counted + n end
 eq(counted, 5, "  an unresolved mail isn't counted (5 of 6)")
 WoW.inbox[1].items[1] = ARROW
 
--- A secret field: unresolved, and never touched.
-WoW.inbox[3].subject = WoW.Secret("subject")
-local s3 = Scan.Inbox()
-check(not s3.mails[3].resolved, "a secret subject leaves the mail unresolved")
-eq(s3.mails[3].type, nil, "  and unclassified")
-WoW.inbox[3].subject = "Outbid on Copper Ore"
+-- A secret field: unresolved, and checked before any other use (a secret
+-- can't even be compared on the client; the stub's == can't throw, so the
+-- secrets here throw on the other uses: concat, ordering, indexing).
+for _, field in ipairs({ "subject", "sender", "money", "wasReturned", "canReply", "isGM" }) do
+    local keep = WoW.inbox[3][field]
+    WoW.inbox[3][field] = WoW.Secret(field)
+    local ok, s3 = pcall(Scan.Inbox)
+    check(ok and not s3.mails[3].resolved, "a secret " .. field .. " leaves the mail unresolved, no error")
+    check(ok and s3.mails[3].type == nil and s3.mails[3].sender == nil, "  unclassified, its values not kept")
+    WoW.inbox[3][field] = keep
+end
+WoW.inbox[2].items[1].id = WoW.Secret("itemID")
+local okItem, s6 = pcall(Scan.Inbox)
+check(okItem and not s6.mails[2].resolved, "a secret attachment ID leaves the mail unresolved, no error")
+WoW.inbox[2].items[1].id = 1180
 
 -- Fingerprints: what identifies a mail, and what doesn't.
 local fp = Scan.Inbox().mails[1].fp
@@ -92,11 +101,14 @@ eq(Scan.Inbox().mails[1].fp, afterMoney, "after its money: the same mail with mo
 local afterSlot1 = Scan.Residual(Scan.Inbox().mails[1], "item", 1)
 WoW.inbox[1].items[1] = nil
 eq(Scan.Inbox().mails[1].fp, afterSlot1, "after slot 1: the same mail without slot 1, slot 2 unmoved")
-eq(Scan.Residual(Scan.Inbox().mails[1], "item", 2), Scan.GONE, "taking the last item of a mail without money: gone")
+local emptied, mayVanish = Scan.Residual(Scan.Inbox().mails[1], "item", 2)
+check(mayVanish, "taking the last item of a mail without money: it may be removed")
+WoW.inbox[1].items[2] = nil
+eq(Scan.Inbox().mails[1].fp, emptied, "  or stay, empty (a mail with letter text): that's its residual")
 local moneyOnly = Scan.Inbox().mails[3]
-check(Scan.Residual(moneyOnly, "money") ~= Scan.GONE, "a money-only mail stays, at money 0 (session 3)")
+check(not select(2, Scan.Residual(moneyOnly, "money")), "a money-only mail stays, at money 0 (session 3)")
 local withMoney = { sender = "x", subject = "y", money = 5, cod = 0, items = { { slot = 1, link = "l", count = 1 } } }
-check(Scan.Residual(withMoney, "item", 1) ~= Scan.GONE, "an item mail still holding money stays")
+check(not select(2, Scan.Residual(withMoney, "item", 1)), "an item mail still holding money stays")
 
 -- The template patterns: magic characters, positional specifiers, %%.
 local T = GM._test.scan

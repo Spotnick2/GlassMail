@@ -11,9 +11,6 @@ local API = GM.API
 local Scan = {}
 GM.Scan = Scan
 
--- The fingerprint of a mail that leaves the inbox after an action.
-Scan.GONE = "gone"
-
 -- The six AH subjects (session 5), by global name: localized with the client.
 -- AH mail is classified by these, never by its faction-specific sender.
 local AH_SUBJECTS = {
@@ -82,10 +79,12 @@ local function attachments(i)
     local max = rawget(_G, "ATTACHMENTS_MAX_RECEIVE") or 16
     for a = 1, max do
         local _, itemID, _, count, _, _, isCurrency = GetInboxItem(i, a)
+        -- Secrecy first: a secret may not even be compared (CLAUDE.md).
+        if secret(itemID, count, isCurrency) then return items, false end
         -- Occupied when it has an ID: an uncached item's name is "".
         if itemID ~= nil then
             local link = GetInboxItemLink(i, a)
-            if secret(itemID, count, link) then return items, false end
+            if secret(link) then return items, false end
             if link == nil then resolved = false end
             items[#items + 1] = { slot = a, itemID = itemID, link = link, count = count or 1,
                 isCurrency = isCurrency == true }
@@ -100,13 +99,14 @@ end
 local function readMail(i)
     local _, _, sender, subject, money, cod, daysLeft, itemCount, wasRead, wasReturned, _, canReply, isGM =
         GetInboxHeaderInfo(i)
+    -- Secrecy first, before any comparison, truth test or copy (CLAUDE.md):
+    -- such a mail is kept only as unresolved, with no values.
+    if secret(sender, subject, money, cod, daysLeft, itemCount, wasRead, wasReturned, canReply, isGM) then
+        return { index = i, resolved = false, items = {} }
+    end
     if sender == nil and subject == nil and money == nil then return nil end
     local m = { index = i, daysLeft = daysLeft, wasRead = wasRead == true, wasReturned = wasReturned == true,
         canReply = canReply == true, isGM = isGM == true, items = {} }
-    if secret(sender, subject, money, cod, itemCount) then
-        m.resolved = false
-        return m
-    end
     m.sender, m.subject, m.money, m.cod = sender or "", subject or "", money or 0, cod or 0
     local resolved
     if itemCount then m.items, resolved = attachments(i) else resolved = true end
@@ -123,6 +123,7 @@ end
 -- when any mail is.
 function Scan.Inbox()
     local loaded, total = GetInboxNumItems()
+    if secret(loaded, total) then return { loaded = 0, total = 0, mails = {}, resolved = false } end
     local snap = { loaded = loaded or 0, total = total or loaded or 0, mails = {}, resolved = true }
     for i = 1, snap.loaded do
         local m = readMail(i)
@@ -144,8 +145,11 @@ function Scan.Count(snap)
 end
 
 -- The fingerprint the mail should have after taking its money ("money") or
--- slot k: the same mail without it, or GONE when that empties a mail that had
--- items (removed, session 3). A money-only mail stays at money 0 (measured).
+-- slot k: the same mail without it. The second return is true when that
+-- empties a mail that had items: the server may then remove it (session 3),
+-- or keep it, empty, when it has letter text (Blizzard deletes such a mail
+-- itself when the letter closes, MailFrame.lua:581). A money-only mail stays
+-- at money 0 (session 3).
 function Scan.Residual(m, kind, slot)
     local after = { sender = m.sender, subject = m.subject, money = m.money, cod = m.cod,
         wasReturned = m.wasReturned, items = {} }
@@ -153,8 +157,7 @@ function Scan.Residual(m, kind, slot)
         if not (kind == "item" and it.slot == slot) then after.items[#after.items + 1] = it end
     end
     if kind == "money" then after.money = 0 end
-    if #m.items > 0 and #after.items == 0 and after.money == 0 then return Scan.GONE end
-    return fingerprint(after)
+    return fingerprint(after), #m.items > 0 and #after.items == 0 and after.money == 0
 end
 
 GM._test = GM._test or {}

@@ -68,7 +68,11 @@ review's main corrections are listed at the end.
   - **Twins in Open All are taken.** Open All has no remembered target: each dispatch takes the
     mail a fresh scan finds eligible now. A wrong credit between twins only skews the summary.
     The unique-match rule stays for remembered targets (PR 4's selection and Return).
-  - **"Gone" needs the loaded count to fall too,** besides the fingerprint's count.
+  - **"Gone" needs the loaded count to fall too,** besides the fingerprint's count. A mail emptied
+    by its last take may also stay, empty, when it has letter text (Blizzard deletes such a mail
+    itself on closing the letter, MailFrame.lua:581): its empty residual confirms too (PR 9 review).
+  - **Secrecy first:** every header and attachment value is checked with `issecretvalue` before any
+    comparison or copy; such a mail is kept unresolved, with no values (PR 9 review).
   - **Fingerprints are length-prefixed** fields, so delimiters can't merge two mails.
   - **`MAIL_FAILED` with no itemID** (the API allows it) on an item stops the run as uncertain;
     only a real ID joins the skip set. A failed money take stops the run.
