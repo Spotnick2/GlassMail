@@ -56,7 +56,14 @@ review's main corrections are listed at the end.
     or in general slots above `keepFree`. Unknown means skip.
   - **Refill** is for Open All only: one `CheckInbox` in flight, a 10 s completion deadline, and a
     stop on unchanged contents or after 3 refills. It ships only if session 5 sees `total > loaded`.
-- **Probe session 5** (before the PRs that need it):
+- **After probe session 5** (2026-10-10, FOREVER-PROBE.md):
+  - Return selected ships as "Return next (n left)", one click per mail: several returns in a row
+    weren't measured. Returnable means `not InboxItemCanDelete(i)`, as Blizzard decides it.
+  - Refill isn't in v0.1.0 (no overflow seen); Open All stops at the loaded window.
+  - Our controls disable in combat and a run stops; combat wasn't measured.
+  - X3 has no minimap item: Blizzard hides the icon once every mail is read.
+  - Loot: a specialty-bag item goes to the specialty bag first; slots keep their numbers.
+- **Probe session 5** (what was asked of it):
   - the AH subject strings and Postmaster fields;
   - several timed returns;
   - money with several attachments, step by step;

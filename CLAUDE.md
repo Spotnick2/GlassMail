@@ -97,6 +97,14 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   **`GetInboxText` marks mail read**, and so did a *failed* take: never call it on unread mail
   for a snapshot, and expect any take attempt to flip `wasRead`. The stock Open All button
   reappears on every mailbox open.
+- Measured in session 5: **slots don't renumber** after a take (take by the slots the mail has
+  now; a take on an empty slot does nothing, no event at all). A partial stack is room enough, and
+  an item that fits a specialty bag goes there before a general slot. Item links carry fields
+  beyond the item ID: a fingerprint is per session, saved data keys items by itemID. AH mail is
+  told by the six `AUCTION_*_MAIL_SUBJECT` templates (a canceled auction has no invoice).
+  Return vs Delete is Blizzard's rule, `InboxItemCanDelete(i)` (a returned mail keeps
+  `canReply = true`). `HasNewMail()` turns false when the last unread mail is read, and the
+  minimap icon follows it.
 - Use `C_Mail.CanCheckInbox()` before `CheckInbox()`; the inbox loads at most 100 mails at a time
   (`GetInboxNumItems` returns loaded, total).
 - Containers are `C_Container.*` only; `GetContainerItemInfo` returns a struct. Items:
