@@ -92,6 +92,10 @@ for name, scroll in pairs({ MailFrame = SendMailScrollFrame, OpenMailFrame = Ope
         "  anchored to the stationery, so it follows its height")
 end
 check(light(SendMailBodyEditBox:GetTextColor()), "the send tab's letter text is light")
+local H = GM.Skin.LETTER_HIGHLIGHT
+local function darkSelection() local r, g, b = SendMailBodyEditBox:GetHighlightColor()
+    return close(r, H[1]) and close(g, H[2]) and close(b, H[3]) end
+check(darkSelection(), "  and its selection dark enough to read it on")
 
 -- The money area's pane: from the label to the letter's right edge and the
 -- C.O.D. radio's bottom, under the money frame so its label and boxes draw above.
@@ -102,6 +106,7 @@ check(mp.frame:GetFrameLevel() < SendMailMoneyButton:GetFrameLevel(), "  under t
 local _, tl = mp.frame:GetPoint(1)
 local _, br = mp.frame:GetPoint(2)
 eq(tl, SendMailMoneyText, "  from the label")
+eq(select(5, mp.frame:GetPoint(1)), 1, "  its top 1px above it, clear of the send error 2px above")
 local _, cornerRight = br:GetPoint(1)
 local _, cornerBottom = br:GetPoint(2)
 check(cornerRight == SendStationeryBackgroundRight and cornerBottom == SendMailCODButton,
@@ -186,10 +191,28 @@ check(isDark(SendMailBodyEditBox:GetTextColor()), "stock gives the letter text B
 check(not T.moneyPane().frame:IsShown(), "stock hides the money pane")
 check(isDark(OpenMailBodyText:GetTextColor("P")), "  the open letter's body")
 check(isDark(OpenMailInvoiceItemLabel:GetTextColor()), "  and the invoice")
+eq(select(1, SendMailBodyEditBox:GetHighlightColor()), 0.82, "  and the send body's selection colour")
 GM.Settings.SetSkin("smoked")
 eq(MailFrame.Bg:GetAlpha(), 0, "glass again fades it again")
 check(painted("smoked"), "  in the chosen preset")
 check(light(OpenMailBodyText:GetTextColor("P")), "  and the letter light again")
+
+-- With the letter open, a switch asks Blizzard to show it again, so the body
+-- (laid out on SetText) takes the new colour; a closed letter isn't touched,
+-- nor one whose look doesn't change.
+OpenMailFrame:Show()
+local updates = OpenMailFrame._updates or 0
+GM.Settings.SetSkin("stock")
+eq(OpenMailFrame._updates, updates + 1, "an open letter is shown again on a switch")
+check(isDark(unpack(OpenMailBodyText._shownColor)), "  and its body shows dark")
+GM.Settings.SetSkin("clear")
+check(light(unpack(OpenMailBodyText._shownColor)), "  then light")
+GM.Settings.SetSkin("smoked")
+eq(OpenMailFrame._updates, updates + 2, "  but not between two glass presets")
+OpenMailFrame:Hide()
+GM.Settings.SetSkin("stock")
+eq(OpenMailFrame._updates, updates + 2, "a closed letter isn't refreshed")
+GM.Settings.SetSkin("smoked")
 
 -- A name that isn't a skin is refused and changes nothing.
 check(not GM.Settings.SetSkin("frosted"), "an unknown skin is refused")

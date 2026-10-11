@@ -275,6 +275,12 @@ function Methods.GetTextColor(fs, textType)
     return c[1], c[2], c[3], c[4]
 end
 function Methods.GetFontObject(fs) return fs._fontObject end
+-- An EditBox's selection colour (MailFrame.xml:581 gives the send body 0.82 grey).
+function Methods.SetHighlightColor(e, r, g, b, a) e._highlight = { r, g, b, a } end
+function Methods.GetHighlightColor(e)
+    local c = e._highlight or { 1, 1, 1, 1 }
+    return c[1], c[2], c[3], c[4]
+end
 function Methods.GetText(fs) return fs._text end
 function Methods.SetFormattedText(fs, fmt, ...)
     local n = select("#", ...)
@@ -463,10 +469,16 @@ CreateFrame("Frame", "SendMailMoney", moneyHolder)
 CreateFrame("CheckButton", "SendMailSendMoneyButton", moneyHolder)
 CreateFrame("CheckButton", "SendMailCODButton", moneyHolder)
 local edit = CreateFrame("EditBox", "SendMailBodyEditBox", sendChild)
-edit._fontObject, edit._textColor = MailTextFontNormal, DARK
+edit._fontObject, edit._textColor, edit._highlight = MailTextFontNormal, DARK, { 0.82, 0.82, 0.82, 1 }
 local _, openChild = letter(open, "OpenMail")
 local body = CreateFrame("SimpleHTML", "OpenMailBodyText", openChild)
 body._htmlColor = { P = DARK }
+-- OpenMailMixin:Update, Blizzard's refresh of the open letter (MailFrame.lua:747):
+-- it sets the body's text again, which lays it out in the current colour.
+rawset(open, "Update", function(self)
+    self._updates = (self._updates or 0) + 1
+    body._shownColor = { body:GetTextColor("P") }
+end)
 -- The AH invoice: labels in the invoice font, a money amount in a number font
 -- (stays), nested a frame deeper.
 local invoice = CreateFrame("Frame", "OpenMailInvoiceFrame", openChild)

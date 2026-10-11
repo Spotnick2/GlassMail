@@ -68,6 +68,9 @@ local LETTERS = {
 }
 -- The letter's text under glass: a warm off-white, the same in both presets.
 Skin.LETTER_TEXT = { 0.92, 0.90, 0.86 }
+-- The send body's selection under glass. Blizzard's is a pale grey
+-- (MailFrame.xml:581), made for dark text: light text on it can't be read.
+Skin.LETTER_HIGHLIGHT = { 0.30, 0.36, 0.48 }
 
 local function rowCount()
     local n = rawget(_G, "INBOXITEMS_TO_DISPLAY")   -- MailFrame.lua:1
@@ -76,10 +79,14 @@ end
 
 local skinned = {}   -- window -> { panel = frame, g = glass regions, art = { region, ... } }
 local pane           -- { frame, tex } under the inbox rows
--- window name -> { paper = { texture, ... }, pane = { frame, tex }, text = { { widget, kind, r, g, b, a }, ... } }:
--- the stationery, the pane in its place, and the letter's text with Blizzard's colours.
+-- window name -> { paper = { texture, ... }, pane = { frame, tex }, text = { { widget, kind, r, g, b, a }, ... },
+-- light = bool }: the stationery, the pane in its place, the letter's text with Blizzard's
+-- colours, and whether we have turned it light.
 local letters = {}
 local moneyPane      -- { frame, tex } under the send tab's amount and Send Money / C.O.D.
+-- What Start has already tried to build (window name, "money"): a failed build
+-- is recorded once and not retried on every later ADDON_LOADED.
+local tried = {}
 
 -- The current preset, or nil under "stock".
 local function preset()
@@ -167,14 +174,23 @@ end
 -- A pane: a plain translucent fill from one region's top left to another's
 -- bottom right, rounded by the material's small mask. Not another glass
 -- layer: just enough density for text over a bright world.
-local function newPane(parent, topLeft, bottomRight, level, pad)
+-- If building it fails, the frame is hidden before the error goes on: no
+-- half-built pane is left showing.
+local function newPane(parent, topLeft, bottomRight, level, pad, padTop)
     local f = CreateFrame("Frame", nil, parent)
-    f:SetPoint("TOPLEFT", topLeft, "TOPLEFT", -pad, pad)
-    f:SetPoint("BOTTOMRIGHT", bottomRight, "BOTTOMRIGHT", pad, -pad)
-    f:SetFrameLevel(level)
-    local tex = f:CreateTexture(nil, "BACKGROUND")
-    tex:SetAllPoints(f)
-    tex:AddMaskTexture(Glass.Mask(f, "body_mask_small", 8))
+    local ok, tex = pcall(function()
+        f:SetPoint("TOPLEFT", topLeft, "TOPLEFT", -pad, padTop or pad)
+        f:SetPoint("BOTTOMRIGHT", bottomRight, "BOTTOMRIGHT", pad, -pad)
+        f:SetFrameLevel(level)
+        local t = f:CreateTexture(nil, "BACKGROUND")
+        t:SetAllPoints(f)
+        t:AddMaskTexture(Glass.Mask(f, "body_mask_small", 8))
+        return t
+    end)
+    if not ok then
+        f:Hide()
+        error(tex, 0)
+    end
     return { frame = f, tex = tex }
 end
 
@@ -193,13 +209,21 @@ end
 -- text.
 local function letterTextOf(letter)
     local list = {}
+    -- A colour that can't be read is an error: the letter then isn't built,
+    -- rather than "restored" to nothing under stock.
     local function keep(widget, kind)
         local r, g, b, a
         if kind == "html" then r, g, b, a = widget:GetTextColor("P") else r, g, b, a = widget:GetTextColor() end
-        list[#list + 1] = { widget = widget, kind = kind, r = r, g = g, b = b, a = a }
+        if type(r) ~= "number" then error("no text colour on a " .. kind .. " widget", 0) end
+        local t = { widget = widget, kind = kind, r = r, g = g, b = b, a = a }
+        if kind == "edit" then
+            t.hr, t.hg, t.hb, t.ha = widget:GetHighlightColor()
+            if type(t.hr) ~= "number" then error("no highlight colour on the send body", 0) end
+        end
+        list[#list + 1] = t
     end
     local edit, body = letter.edit and rawget(_G, letter.edit), letter.html and rawget(_G, letter.html)
-    if edit then keep(edit, "plain") end
+    if edit then keep(edit, "edit") end
     if body then keep(body, "html") end
     local fonts = {}
     for _, fontName in ipairs({ "MailTextFontNormal", "InvoiceTextFontNormal" }) do
@@ -232,7 +256,7 @@ local function addLetter(name)
     local left, right = rawget(_G, letter.paper[1]), rawget(_G, letter.paper[2])
     if not (scroll and left and right) then return end
     local text = letterTextOf(letter)
-    letters[name] = { paper = { left, right }, text = text,
+    letters[name] = { paper = { left, right }, text = text, light = false,
         pane = newPane(scroll:GetParent(), left, right, scroll:GetFrameLevel(), 0) }
 end
 
@@ -241,8 +265,11 @@ end
 -- SendMailMoneyButton, so the pane gets its corner from a frame of ours: right
 -- at the letter's right edge, bottom at the C.O.D. radio's. No fixed width, so
 -- a longer localized label still fits. Under the money frame's level, so its
--- label (one of its regions) and its children draw above. Only with the send
--- letter built: same window, same reason.
+-- label (one of its regions) and its children draw above. The pane shares
+-- SendMailFrame's level, so its top stops 1px above the label: the send error
+-- (SendMailErrorText, a SendMailFrame region) sits 2px above it
+-- (MailFrame.lua:1181) and stays clear. Only with the send letter built: same
+-- window, same reason.
 local function addMoneyPane()
     local holder, label = rawget(_G, "SendMailMoneyButton"), rawget(_G, "SendMailMoneyText")
     local cod, right = rawget(_G, "SendMailCODButton"), rawget(_G, LETTERS.MailFrame.paper[2])
@@ -252,16 +279,33 @@ local function addMoneyPane()
     corner:SetPoint("TOPRIGHT", right, "TOPRIGHT")
     corner:SetPoint("BOTTOMLEFT", cod, "BOTTOMLEFT")
     local level = math.max(parent:GetFrameLevel(), holder:GetFrameLevel() - 1)
-    moneyPane = newPane(parent, label, corner, level, 6)
+    moneyPane = newPane(parent, label, corner, level, 6, 1)
 end
 
--- Light under glass; Blizzard's own colours back under "stock".
-local function paintLetterText(text, p)
-    local c = Skin.LETTER_TEXT
-    for _, t in ipairs(text) do
+-- Light under glass; Blizzard's own colours back under "stock". Only on a
+-- change: a letter never turned light is never touched, so under stock the
+-- widgets keep following their font objects. The open letter's body is a
+-- SimpleHTML, which lays its text out on SetText: if the letter is open, ask
+-- Blizzard to show it again (OpenMailFrame:Update, its own refresh) so the
+-- text on screen takes the new colour.
+local function paintLetterText(name, letter, p)
+    local light = p ~= nil
+    if letter.light == light then return end
+    letter.light = light
+    local c, h = Skin.LETTER_TEXT, Skin.LETTER_HIGHLIGHT
+    for _, t in ipairs(letter.text) do
         local r, g, b, a = t.r, t.g, t.b, t.a
-        if p then r, g, b, a = c[1], c[2], c[3], 1 end
+        if light then r, g, b, a = c[1], c[2], c[3], 1 end
         if t.kind == "html" then t.widget:SetTextColor("P", r, g, b, a) else t.widget:SetTextColor(r, g, b, a) end
+        if t.kind == "edit" then
+            if light then t.widget:SetHighlightColor(h[1], h[2], h[3], 1)
+            else t.widget:SetHighlightColor(t.hr, t.hg, t.hb, t.ha) end
+        end
+    end
+    local window = rawget(_G, name)
+    if LETTERS[name].html and window and window:IsShown() then
+        local ok, err = pcall(window.Update, window)
+        if not ok then API.Fail("skin letter refresh", err) end
     end
 end
 
@@ -289,12 +333,14 @@ function Skin.Start()
     end
     for name in pairs(LETTERS) do
         local window = rawget(_G, name)
-        if window and skinned[window] and not letters[name] then
+        if window and skinned[window] and not tried[name] then
+            tried[name] = true
             local ok, err = pcall(addLetter, name)
             if not ok then API.Fail("skin letter " .. name, err) end
         end
     end
-    if letters.MailFrame and not moneyPane then
+    if letters.MailFrame and not tried.money then
+        tried.money = true
         local ok, err = pcall(addMoneyPane)
         if not ok then API.Fail("skin money pane", err) end
     end
@@ -304,21 +350,21 @@ end
 -- Repaint everything we built in the current preset, live. STYLE is only read
 -- when a surface is built (addPanel pushes the preset there), so it isn't
 -- touched here.
+local function paintPane(pn, p)
+    if not pn then return end
+    pn.frame:SetShown(p ~= nil)
+    if p then pn.tex:SetColorTexture(p.pane[1], p.pane[2], p.pane[3], p.pane[4]) end
+end
+
 function Skin.Refresh()
     local p = preset()
     for window in pairs(skinned) do applyOne(window, p) end
-    local panes = {}
-    for _, pn in ipairs({ pane or false, moneyPane or false }) do
-        if pn then panes[#panes + 1] = pn end
-    end
-    for _, letter in pairs(letters) do
-        panes[#panes + 1] = letter.pane
+    paintPane(pane, p)
+    paintPane(moneyPane, p)
+    for name, letter in pairs(letters) do
+        paintPane(letter.pane, p)
         for _, paper in ipairs(letter.paper) do paper:SetAlpha(p and 0 or 1) end
-        paintLetterText(letter.text, p)
-    end
-    for _, pn in ipairs(panes) do
-        pn.frame:SetShown(p ~= nil)
-        if p then pn.tex:SetColorTexture(p.pane[1], p.pane[2], p.pane[3], p.pane[4]) end
+        paintLetterText(name, letter, p)
     end
 end
 
