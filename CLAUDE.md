@@ -17,7 +17,8 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 in progress** (issue #4, five PRs; the reviewed plan is in
-docs/PLAN.md). Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
+docs/PLAN.md): the look, probe session 5 and the mail core with Open All are built; selection and
+row extras (PR 4), then X3 and the release (PR 5). Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
 ## The UI contract (non-negotiable)
@@ -47,7 +48,8 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
-`Options.lua` → `GlassMailbox.lua`. M1 adds `Core\*.lua` (the mail core) before the feature files.
+`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Options.lua` →
+`GlassMailbox.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMailbox.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `Fail(key, err)` (the **one** failure recorder,
@@ -66,6 +68,23 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   together, per window; `stock` puts Blizzard's colours back. Sections as in the mockup: a pane
   on each window's content box (its `Inset`, which Blizzard moves per tab) and on the send tab's
   footer; the letter and row panes stack on them, darker.
+- **`Core\Scan.lua`**: the inbox as plain values (`Scan.Inbox()`), never `GetInboxText`. Each mail
+  has a type (`ah` by the six `AUCTION_*_MAIL_SUBJECT` templates, `system` when it can't be
+  replied to, else `player`) and a fingerprint (length-prefixed sender, subject, money, COD,
+  returned, and each slot's number, link and count). A secret field or a missing link leaves the
+  mail unresolved: no fingerprint. `Scan.Residual` is the fingerprint an action should leave.
+- **`Core\Loot.lua`**: what Open All takes next (`Loot.Next`, money first, then slots from the
+  lowest) and whether an item fits (`Loot.Fits`: unlocked partial stacks, a specialty bag of its
+  family, general slots above `keepFree`; unknown when not cached). Bags 0-4.
+- **`Core\Ops.lua`**: the one owner of mail actions. One run, one attempt at a time, confirmed only
+  from the inbox: the fingerprint's count fell by one and its residual's rose by one (or, for a
+  mail its last take empties, the loaded count fell by one instead: removed; a mail with letter
+  text can stay, empty). 5 s unconfirmed stops as
+  uncertain. Foreign mail calls (post-hooks), the mailbox closing, combat and an input-mode change
+  stop the run. Open All takes twins (no remembered target); a remembered target needs one match.
+- **`OpenAll.lua`**: I1. Our button in the stock one's place (hidden in mouse mode on every show;
+  left alone in gamepad UI mode), right-click filters (`MenuUtil`), the message count, a chat
+  summary at the end.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns.
 - **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the

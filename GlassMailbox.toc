@@ -11,5 +11,9 @@ Libs\LibGlass-1.0\LibGlass-1.0.xml
 Compat.lua
 Glass.lua
 Skin.lua
+Core\Scan.lua
+Core\Loot.lua
+Core\Ops.lua
+OpenAll.lua
 Options.lua
 GlassMailbox.lua

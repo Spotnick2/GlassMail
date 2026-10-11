@@ -173,6 +173,11 @@ function Methods.SetFrameLevel(w, l) w._level = l end
 function Methods.SetFrameStrata(w, s) w._strata = s end
 function Methods.GetFrameStrata(w) return w._strata or "MEDIUM" end
 function Methods.EnableMouse(w, v) w._mouse = v end
+-- A button's enabled state (enabled until told otherwise).
+function Methods.Enable(b) b._disabled = false end
+function Methods.Disable(b) b._disabled = true end
+function Methods.SetEnabled(b, v) b._disabled = not v end
+function Methods.IsEnabled(b) return not b._disabled end
 function Methods.IsMouseEnabled(w) return w._mouse == true end
 function Methods.GetName(w) return w._name end
 function Methods.GetDebugName(w) return w._name or ("<" .. w._type .. ">") end
@@ -361,8 +366,14 @@ Settings = {
     OpenToCategory = function(id) WoW.openedCategory = id end,
 }
 
+-- The client's secure hook replaces t[name] with a wrapper: the sanctioned way
+-- to hook a Blizzard method. WoW.hooked records it, so the "no field written"
+-- checks can tell it from a field the addon wrote.
+WoW.hooked = {}
 function hooksecurefunc(t, name, fn)
     if type(t) == "string" then t, name, fn = _G, t, name end
+    WoW.hooked[t] = WoW.hooked[t] or {}
+    WoW.hooked[t][name] = true
     local orig = rawget(t, name) or t[name]
     rawset(t, name, function(...)
         local r = { orig(...) }
@@ -432,6 +443,12 @@ end
 -- (SendMailErrorIcon-like) that the skin must leave alone.
 mail.SendMailFrame = CreateFrame("Frame", "SendMailFrame", mail)
 INBOXITEMS_TO_DISPLAY = 7   -- MailFrame.lua:1
+-- Blizzard's Open All (MailFrame.xml:444): its OnHide stops it, which calls
+-- C_Mail.SetOpeningAll(false) (session 2). And InboxMixin:Update, which the
+-- addon post-hooks.
+InboxFrame.OpenAllMail = CreateFrame("Button", "OpenAllMail", InboxFrame, "UIPanelButtonTemplate")
+InboxFrame.OpenAllMail:SetScript("OnHide", function() C_Mail.SetOpeningAll(false) end)
+rawset(InboxFrame, "Update", function() end)
 -- The money box: an inset (faded) and its gold-edged value field (kept).
 CreateFrame("Frame", "SendMailMoneyInset", SendMailFrame)
 SendMailMoneyInset.Bg = Methods.CreateTexture(SendMailMoneyInset)
@@ -524,6 +541,129 @@ function WoW.tick(elapsed)
         if fn and Methods.IsVisible(w) then fn(w, elapsed) end
     end
 end
+
+--------------------------------------------------------------------------------
+-- The mail server and the bags, as plain tables the tests script.
+-- WoW.inbox = { { sender, subject, money, cod, daysLeft, wasRead, wasReturned,
+--   canReply, isGM, items = { [slot] = { id, count, link } } }, ... }
+-- A take or return is only RECORDED (WoW.mailCalls); WoW.serve(call) applies
+-- its effect the way the server did in the probe sessions, and fires
+-- MAIL_INBOX_UPDATE, so tests choose the order and timing of every reply.
+--------------------------------------------------------------------------------
+
+WoW.inbox, WoW.mailCalls, WoW.inboxTotal = {}, {}, nil
+WoW.commandPending, WoW.openingAll = false, nil
+ATTACHMENTS_MAX_RECEIVE = 16
+-- The six AH subjects as session 5 read them.
+AUCTION_EXPIRED_MAIL_SUBJECT = "Auction expired: %s"
+AUCTION_INVOICE_MAIL_SUBJECT = "Sale Pending: %s"
+AUCTION_OUTBID_MAIL_SUBJECT = "Outbid on %s"
+AUCTION_REMOVED_MAIL_SUBJECT = "Auction canceled: %s"
+AUCTION_SOLD_MAIL_SUBJECT = "Auction successful: %s"
+AUCTION_WON_MAIL_SUBJECT = "Auction won: %s"
+
+function GetInboxNumItems() return #WoW.inbox, WoW.inboxTotal or #WoW.inbox end
+function GetInboxHeaderInfo(i)
+    local m = WoW.inbox[i]
+    if not m then return end
+    local n = 0
+    for _ in pairs(m.items or {}) do n = n + 1 end
+    -- A secret flag comes back as is; a plain one as the client's boolean.
+    local function flag(v, default)
+        if issecretvalue(v) then return v end
+        if v == nil then return default end
+        return v == true
+    end
+    return 134937, nil, m.sender, m.subject, m.money or 0, m.cod or 0, m.daysLeft or 29.5, n > 0 and n or nil,
+        flag(m.wasRead, false), flag(m.wasReturned, false), false, flag(m.canReply, true), flag(m.isGM, false)
+end
+-- name, itemID, texture, count, quality, canUse, isCurrency; an uncached
+-- item's name is "" (session 2).
+function GetInboxItem(i, a)
+    local it = WoW.inbox[i] and WoW.inbox[i].items and WoW.inbox[i].items[a]
+    if it then return it.name or "", it.id, 134, it.count or 1, 1, true, it.currency == true end
+end
+function GetInboxItemLink(i, a)
+    local it = WoW.inbox[i] and WoW.inbox[i].items and WoW.inbox[i].items[a]
+    if it then
+        if it.link == false then return nil end
+        return it.link or ("|Hitem:" .. it.id .. "::::::::16:1485|h[item " .. it.id .. "]|h")
+    end
+end
+for _, fn in ipairs({ "TakeInboxMoney", "TakeInboxItem", "AutoLootMailItem", "ReturnInboxItem", "DeleteInboxItem" }) do
+    _G[fn] = function(...) table.insert(WoW.mailCalls, { fn, ... }) end
+end
+C_Mail = {
+    IsCommandPending = function() return WoW.commandPending end,
+    SetOpeningAll = function(v) WoW.openingAll = v end,
+    CanCheckInbox = function() return true, 0 end,
+    HasInboxMoney = function(i) return WoW.inbox[i] ~= nil and (WoW.inbox[i].money or 0) > 0 end,
+}
+
+-- The server's answer to a recorded call: money taken, a slot emptied (slots
+-- keep their numbers), an emptied item mail removed; then MAIL_INBOX_UPDATE.
+function WoW.serve(call)
+    local fn, i, a = call[1], call[2], call[3]
+    local m = WoW.inbox[i]
+    if not m then return end
+    m.wasRead = true
+    if fn == "TakeInboxMoney" then m.money = 0
+    elseif fn == "TakeInboxItem" then
+        local hadItems = next(m.items or {}) ~= nil
+        m.items[a] = nil
+        -- Removed once empty, unless it has letter text (m.text): then it stays, empty.
+        if hadItems and next(m.items) == nil and (m.money or 0) == 0 and not m.text then table.remove(WoW.inbox, i) end
+    elseif fn == "ReturnInboxItem" or fn == "DeleteInboxItem" then table.remove(WoW.inbox, i) end
+    WoW.fire("MAIL_INBOX_UPDATE")
+end
+
+-- Bags 0-4: WoW.bags[b] = { size, family, items = { [slot] = { id, count, locked } } }.
+-- Item facts: WoW.itemInfo[id] = { maxStack, family } (nil = not cached).
+WoW.bags, WoW.itemInfo = {}, {}
+NUM_BAG_SLOTS = 4
+C_Container = {
+    GetContainerNumSlots = function(b) return WoW.bags[b] and WoW.bags[b].size or 0 end,
+    GetContainerNumFreeSlots = function(b)
+        local bag = WoW.bags[b]
+        if not bag then return 0, 0 end
+        local used = 0
+        for _ in pairs(bag.items) do used = used + 1 end
+        return bag.size - used, bag.family or 0
+    end,
+    GetContainerItemInfo = function(b, s)
+        local it = WoW.bags[b] and WoW.bags[b].items[s]
+        if it then return { itemID = it.id, stackCount = it.count, isLocked = it.locked == true } end
+    end,
+    CalculateTotalNumberOfFreeBagSlots = function() return 0 end,
+}
+C_Item = {
+    GetItemMaxStackSizeByID = function(id) return WoW.itemInfo[id] and WoW.itemInfo[id].maxStack end,
+    GetItemFamily = function(id) return WoW.itemInfo[id] and WoW.itemInfo[id].family end,
+}
+C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c) .. "c" end }
+-- The client's bit library (Lua 5.1 has none): band over non-negative ints.
+bit = { band = function(a, b)
+    local r, p = 0, 1
+    while a > 0 and b > 0 do
+        if a % 2 == 1 and b % 2 == 1 then r = r + p end
+        a, b, p = math.floor(a / 2), math.floor(b / 2), p * 2
+    end
+    return r
+end }
+-- MenuUtil.CreateContextMenu (Blizzard_Menu): the generator fills a root
+-- description; WoW.menu holds its elements ({ kind, text, isSelected,
+-- setSelected, data }) so a test can read and click them.
+MenuUtil = { CreateContextMenu = function(owner, gen)
+    local root = { items = {} }
+    local function add(kind) return function(self, text, isSel, setSel, data)
+        table.insert(self.items, { kind = kind, text = text, isSelected = isSel, setSelected = setSel, data = data })
+    end end
+    root.CreateTitle, root.CreateCheckbox, root.CreateRadio = add("title"), add("checkbox"), add("radio")
+    gen(owner, root)
+    WoW.menu = root
+end }
+WoW.gamepad = false
+InputUtil = { IsGamepadUIEnabled = function() return WoW.gamepad end }
 
 -- Strict globals: any read of an undefined global is an error, except the
 -- addon's own globals that are legitimately nil before first assignment.
