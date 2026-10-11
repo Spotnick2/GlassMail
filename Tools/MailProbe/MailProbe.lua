@@ -726,6 +726,16 @@ function C.showstock()
     say("stock Open All shown=" .. show(b:IsShown()))
 end
 
+-- The mail's first occupied attachment slot, or nil. Slots don't renumber
+-- after a take (session 5): slot 1 empties, slot 2 stays slot 2. An uncached
+-- item has the name "" but its itemID, so either one marks the slot taken.
+local function firstSlot(i)
+    for a = 1, ATTACH_MAX do
+        local ok, nm, itemID = try("GetInboxItem", global("GetInboxItem"), i, a)
+        if ok and (nm ~= nil or itemID ~= nil) then return a end
+    end
+end
+
 -- Our own row controls, as M1 will build them: children of InboxFrame (so
 -- they show and hide with it), one level above each row, never fields on
 -- Blizzard's frames. Click them in and out of combat; watch for "!" lines.
@@ -735,9 +745,11 @@ local ROW_ACTIONS = {
         if (plain(h.CODAmount) or 0) > 0 then say("rows: mail " .. i .. " is COD; not taken"); return end
         if plain(h.money) and h.money > 0 then
             try("TakeInboxMoney", global("TakeInboxMoney"), i)
-        else
-            try("TakeInboxItem", global("TakeInboxItem"), i, 1)
+            return
         end
+        local a = firstSlot(i)
+        if not a then say("rows: mail " .. i .. " has nothing left to take"); return end
+        try("TakeInboxItem", global("TakeInboxItem"), i, a)
     end },
     { "R", function(i, h)
         if not returnable(i) then say("rows: mail " .. i .. " can't be returned; not sent"); return end

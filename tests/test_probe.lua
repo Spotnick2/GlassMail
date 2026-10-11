@@ -275,9 +275,26 @@ eq(#returned, 0, "R never returns a mail that can't be replied to")
 button("D", 7)._scripts.OnClick(button("D", 7))
 button("T", 7)._scripts.OnClick(button("T", 7))
 eq(#calls, 2, "an empty row's buttons do nothing")
+-- Slots don't renumber after a take (session 5): T takes the first occupied
+-- slot, so a second click takes slot 2, not the empty slot 1.
+calls = {}
+inbox[1].items = { ORE, ORE }
+button("T", 1)._scripts.OnClick(button("T", 1))
+eq(calls[1], "take 1:1", "T takes slot 1 first")
+inbox[1].items = { false, ORE }
+button("T", 1)._scripts.OnClick(button("T", 1))
+eq(calls[2], "take 1:2", "  then slot 2, slot 1 being empty")
+inbox[1].items = { false, { "", 2770, "", 1 } }
+button("T", 1)._scripts.OnClick(button("T", 1))
+eq(calls[3], "take 1:2", "  an uncached item (name \"\") still counts as there")
+inbox[1].items = { false, false }
+button("T", 1)._scripts.OnClick(button("T", 1))
+eq(#calls, 3, "  and nothing is taken from an emptied mail")
+check(chatHas("mail 1 has nothing left to take"), "  saying so")
+inbox[1].items = { ORE }
 inbox[1].cod = 500
 button("T", 1)._scripts.OnClick(button("T", 1))
-eq(#calls, 2, "T never takes from a COD mail (that needs Blizzard's confirmation)")
+eq(#calls, 3, "T never takes from a COD mail (that needs Blizzard's confirmation)")
 SlashCmdList.MAILPROBE("rows off")
 check(not button("T", 1):IsShown(), "rows off hides them")
 
