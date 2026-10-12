@@ -87,4 +87,20 @@ eq(t.full, 1, "  one whose items don't fit")
 eq(t.loading, 1, "  one with an item not cached yet")
 eq(t.left, 0, "  nothing left to take")
 
+-- Only the selection (a set of fingerprints): no type filter; a twin is never taken.
+WoW.inbox = {
+    { sender = "Horde Auction House", subject = "Auction won: Copper Ore", canReply = false, items = { [1] = { id = ORE, count = 1 } } },
+    { sender = "C", subject = "x", items = { [1] = { id = FOOD, count = 1 } } },
+    { sender = "C", subject = "x", items = { [1] = { id = FOOD, count = 1 } } },
+}
+bags(4, 4)
+local snap = GM.Scan.Inbox()
+local sel = { only = { [snap.mails[1].fp] = true }, keepFree = 0, failed = {}, types = { ah = false } }
+a = Loot.Next(snap, Loot.Bags(), sel)
+eq(a and a.mail.index, 1, "only: the selected mail, its type filter ignored")
+sel.only = { [snap.mails[2].fp] = true }
+eq(Loot.Next(snap, Loot.Bags(), sel), nil, "  a selected mail with a twin is never taken")
+eq(Loot.Tally(snap, Loot.Bags(), sel).twin, 2, "  tallied as twins; unselected mail isn't counted")
+eq(Loot.Tally(snap, Loot.Bags(), sel).left, 0, "  nothing left")
+
 done("test_loot")

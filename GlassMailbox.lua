@@ -157,7 +157,9 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         if not GM.db then GM.db, GM.charDB = ensureDefaults() end
         start("options", GM.Options.Register)
         start("skin", GM.Skin.Start)
+        start("ops", GM.Ops.Start)
         start("open all", GM.OpenAll.Start)
+        start("inbox", GM.Inbox.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.

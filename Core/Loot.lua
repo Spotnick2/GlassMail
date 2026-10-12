@@ -59,12 +59,18 @@ end
 -- What this mail offers now, or nil, and why not: "cod", "filtered",
 -- "loading", "full", "failed". Money first (it needs no slot), then the
 -- occupied slots from the lowest; COD and GM mail are left to the player, as
--- Blizzard's Open All does.
-local function mailAction(m, bags, opts)
+-- Blizzard's Open All does. With opts.only (the selection, a set of
+-- fingerprints, counted in `counts`) only those mails count, each only while
+-- it is unique, and the type filters don't apply: the player chose them.
+local function mailAction(m, bags, opts, counts)
+    if opts.only then
+        if not (m.fp and opts.only[m.fp]) then return nil, nil end
+        if counts[m.fp] ~= 1 then return nil, "twin" end
+    end
     if not m.resolved then return nil, "loading" end
     if m.cod > 0 then return nil, "cod" end
     if m.isGM then return nil, "gm" end
-    if opts.types and opts.types[m.type] == false then return nil, "filtered" end
+    if not opts.only and opts.types and opts.types[m.type] == false then return nil, "filtered" end
     if m.money > 0 then return { mail = m, kind = "money" } end
     local why
     for _, it in ipairs(m.items) do
@@ -81,19 +87,21 @@ end
 
 -- The next action in inbox order, or nil.
 function Loot.Next(snap, bags, opts)
+    local counts = opts.only and GM.Scan.Count(snap)
     for _, m in ipairs(snap.mails) do
-        local action = mailAction(m, bags, opts)
+        local action = mailAction(m, bags, opts, counts)
         if action then return action end
     end
 end
 
 -- How many mails still offer something, and why the others don't:
--- { left = n, cod = n, full = n, loading = n, failed = n, filtered = n, gm = n }.
+-- { left = n, cod = n, full = n, loading = n, failed = n, filtered = n, gm = n, twin = n }.
 -- Read once at the end of a run for the summary, and for "Stop (n)".
 function Loot.Tally(snap, bags, opts)
     local t = { left = 0 }
+    local counts = opts.only and GM.Scan.Count(snap)
     for _, m in ipairs(snap.mails) do
-        local action, why = mailAction(m, bags, opts)
+        local action, why = mailAction(m, bags, opts, counts)
         if action then t.left = t.left + 1
         elseif why then t[why] = (t[why] or 0) + 1 end
     end

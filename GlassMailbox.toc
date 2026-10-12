@@ -15,5 +15,6 @@ Core\Scan.lua
 Core\Loot.lua
 Core\Ops.lua
 OpenAll.lua
+Inbox.lua
 Options.lua
 GlassMailbox.lua

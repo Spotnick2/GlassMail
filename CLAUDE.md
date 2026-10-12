@@ -17,8 +17,8 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 in progress** (issue #4, five PRs; the reviewed plan is in
-docs/PLAN.md): the look, probe session 5 and the mail core with Open All are built; selection and
-row extras (PR 4), then X3 and the release (PR 5). Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
+docs/PLAN.md): the look, probe session 5, the mail core with Open All, and selection with row
+extras are built; then X3 and the release (PR 5). Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
 ## The UI contract (non-negotiable)
@@ -48,7 +48,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
-`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Options.lua` →
+`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Inbox.lua` → `Options.lua` →
 `GlassMailbox.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMailbox.API`, the only route to client APIs that moved or may be absent:
@@ -81,10 +81,20 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   mail its last take empties, the loaded count fell by one instead: removed; a mail with letter
   text can stay, empty). 5 s unconfirmed stops as
   uncertain. Foreign mail calls (post-hooks), the mailbox closing, combat and an input-mode change
-  stop the run. Open All takes twins (no remembered target); a remembered target needs one match.
+  stop the run, and so does a letter being opened: nothing runs while one is open (Blizzard keeps it
+  as a bare index; a removal above it would shift it). Open All takes twins (no remembered target);
+  a remembered target (the selection, a Return / Delete) needs one match. Run kinds: `openall`,
+  `selected` (its targets move to their residuals), `return`, `delete`; `Ops.Watch` repaints
+  every control when a run starts or stops.
 - **`OpenAll.lua`**: I1. Our button in the stock one's place (hidden in mouse mode on every show;
   left alone in gamepad UI mode), right-click filters (`MenuUtil`), the message count, a chat
   summary at the end.
+- **`Inbox.lua`**: I2 + I3. Per row, our checkbox and Return / Delete icon (Blizzard's rule,
+  `InboxItemCanDelete`; Delete only for empty mail; Return never falls through), enabled only for a
+  mail with no twin. The selection is a set of fingerprints for this visit (shift: range, ctrl:
+  sender); the bar has Open (n), Return next (n left) (one click per mail) and Clear. The row
+  tooltip gets each attachment and the full subject. Everything disables in combat and while
+  another run or a letter is open.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns.
 - **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the

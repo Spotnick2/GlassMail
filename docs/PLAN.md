@@ -89,6 +89,23 @@ review's main corrections are listed at the end.
   - **Cut:** the options-page copy of the filters (the right-click menu only), the invoice check
     (the six templates classify AH mail), per-frame rescans, repeated skip counting (tallied once
     at the end).
+- **PR 4, I2 + I3** (implementation plan reviewed with Codex, 3 rounds, consensus,
+  2026-10-12):
+  - **Nothing runs while a letter is open**, Open All included: Blizzard keeps the open letter as
+    a bare index, re-read on every inbox update, and closing it may delete the mail at that index
+    (MailFrame.lua:146, 581). A letter opened mid-run stops the run. **Known limit:** the one action
+    already sent can't be recalled; Blizzard's own Open All and shift-click leave the same window,
+    and a stock row click is never blocked. Closing the letter from our code is worse (its OnHide
+    deletes by a possibly stale index).
+  - **Row icons need a unique fingerprint**, as the checkboxes do: a twin can shift into the
+    clicked index before the paced dispatch.
+  - **During Open (n) the run owns the selection:** its targets move to their residuals inside
+    Ops, and the checkboxes show that live set, because Blizzard's `InboxFrame:Update` runs before
+    Ops confirms on the same `MAIL_INBOX_UPDATE`. What is left becomes the selection at the end.
+  - **Open (n) ignores the type filters** (the player chose the mails); COD and GM mail are still
+    left, `keepFree` still applies.
+  - **Cut:** a tooltip rebuild on `GET_ITEM_INFO_RECEIVED` (Blizzard's row `OnUpdate` rebuilds the
+    tooltip every frame, MailFrame.xml:160).
 - **Probe session 5** (what was asked of it):
   - the AH subject strings and Postmaster fields;
   - several timed returns;

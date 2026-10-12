@@ -432,12 +432,36 @@ end
 -- subject (font strings), as MailFrame.xml:11-50 declares them.
 mail.InboxFrame = CreateFrame("Frame", "InboxFrame", mail)
 Methods.CreateTexture(InboxFrame, "InboxFrameBg", "BACKGROUND")
+InboxFrame.pageNum = 1   -- MailFrame.lua:28
 for i = 1, 7 do
     local row = CreateFrame("Frame", "MailItem" .. i, InboxFrame)
     for _ = 1, 3 do Methods.CreateTexture(row, nil, "BACKGROUND") end
     Methods.CreateFontString(row, "MailItem" .. i .. "Sender")
     Methods.CreateFontString(row, "MailItem" .. i .. "Subject")
+    -- The row's mail button (parentKey Button); InboxMixin:Update sets .index.
+    row.Button = CreateFrame("CheckButton", "MailItem" .. i .. "Button", row)
 end
+
+-- GameTooltip: its owner and lines, as text. SetOwner starts it over.
+GameTooltip = newWidget("GameTooltip", UIParent, "GameTooltip")
+GameTooltip._lines = {}
+function Methods.SetOwner(t, owner) t._owner, t._lines = owner, {} end
+function Methods.IsOwned(t, f) return t._owner == f end
+function Methods.AddLine(t, text) table.insert(t._lines, text) end
+function Methods.SetText(t, text, ...)
+    if t._type == "GameTooltip" then t._lines = { text } else t._text = text end
+end
+function Methods.IsTruncated(fs) return fs._truncated == true end
+function GameTooltip_Hide() GameTooltip:Hide() end
+-- Blizzard's row tooltip (MailFrame.lua:489), shortened: its own first line.
+function InboxFrameItem_OnEnter(self)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine("mail " .. tostring(self.index))
+    GameTooltip:Show()
+end
+WoW.shift, WoW.ctrl = false, false
+function IsShiftKeyDown() return WoW.shift end
+function IsControlKeyDown() return WoW.ctrl end
 
 -- The send tab: its two bars, plus a texture anchored to something else
 -- (SendMailErrorIcon-like) that the skin must leave alone.
@@ -562,6 +586,14 @@ AUCTION_REMOVED_MAIL_SUBJECT = "Auction canceled: %s"
 AUCTION_SOLD_MAIL_SUBJECT = "Auction successful: %s"
 AUCTION_WON_MAIL_SUBJECT = "Auction won: %s"
 
+-- Blizzard's Return-or-Delete rule (MailFrame.lua:1109): a test sets
+-- m.canDelete; else mail that can't be replied to, or was returned, deletes.
+function InboxItemCanDelete(i)
+    local m = WoW.inbox[i]
+    if not m then return false end
+    if m.canDelete ~= nil then return m.canDelete end
+    return m.canReply == false or m.wasReturned == true
+end
 function GetInboxNumItems() return #WoW.inbox, WoW.inboxTotal or #WoW.inbox end
 function GetInboxHeaderInfo(i)
     local m = WoW.inbox[i]
