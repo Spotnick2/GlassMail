@@ -126,6 +126,9 @@ check(not rows[1].check:IsEnabled() and not bar.open:IsEnabled(), "  everything 
 check(not OA.button():IsEnabled(), "  Open All too")
 click(OA.button())
 eq(GM.Ops.Kind(), "return", "  a click on it doesn't stop the return")
+check(not bar.clear:IsEnabled(), "  Clear waits too")
+click(bar.clear)
+eq(selectedCount(), 3, "  and its click changes nothing")
 table.insert(WoW.inbox, 1, hello(9))   -- arrives before the dispatch: indices shift
 step()
 eq(callText(last()), "ReturnInboxItem(2)", "  the mail found again at its new index")
@@ -188,6 +191,12 @@ update()
 OpenMailFrame:Show()
 check(not rows[3].icon:IsEnabled(), "a letter open: icons disabled")
 check(not OA.button():IsEnabled(), "  Open All too")
+check(not rows[1].check:IsEnabled() and not bar.clear:IsEnabled(), "  checkboxes and Clear too")
+local had = selectedCount()
+check(had > 0, "  (something is selected)")
+click(rows[2].check)
+click(bar.clear)
+eq(selectedCount(), had, "  their clicks change nothing")
 click(rows[3].icon)
 eq(GM.Ops.Kind(), nil, "  a click does nothing")
 eq(GM.Ops.OpenAll({ types = {}, keepFree = 0 }), false, "  no run starts")
@@ -196,6 +205,68 @@ click(rows[3].icon)
 OpenMailFrame:Show()
 eq(GM.Ops.Kind(), nil, "a letter opened mid-run stops it")
 OpenMailFrame:Hide()
+update()
+
+-- A mail still loading: a remembered target waits for the whole inbox (it
+-- may be a twin), but not forever.
+WoW.inbox = { hello(1), hello(2) }
+update()
+click(bar.clear)
+WoW.inbox[2].items = { [1] = { id = ORE, count = 1, link = false } }
+update()
+check(rows[1].check:IsEnabled(), "another mail loading: the checkbox still works")
+check(not rows[1].icon:IsEnabled(), "  the icon waits")
+rows[1].icon._scripts.OnEnter(rows[1].icon)
+check(table.concat(GameTooltip._lines, "|"):find("Waiting for mail to load", 1, true) ~= nil, "  and says why")
+click(rows[1].icon)
+eq(GM.Ops.Kind(), nil, "  a click does nothing")
+click(rows[1].check)
+check(not bar.open:IsEnabled() and not bar.ret:IsEnabled(), "  Open (n) and Return next wait")
+click(bar.open)
+click(bar.ret)
+eq(GM.Ops.Kind(), nil, "  their clicks do nothing")
+local stopped
+local function onStop(r) stopped = r.stopReason end
+eq(GM.Ops.Act("return", rows[1].fp, onStop), true, "Ops: a Return started anyway")
+n = calls()
+step(); step(1)
+eq(calls(), n, "  sends nothing while a mail loads")
+eq(GM.Ops.Kind(), "return", "  waits")
+step(5)
+eq(stopped, "mail still loading", "  stops at the bound")
+check(rows[1].check:IsEnabled(), "  the controls come back")
+GM.Ops.OpenSelected({ [rows[1].fp] = true }, { keepFree = 0 }, onStop)
+n = calls()
+step(); step(1)
+eq(calls(), n, "a selected run sends nothing while a mail loads")
+step(5)
+eq(stopped, "mail still loading", "  bounded too")
+GM.Ops.Act("return", rows[1].fp, onStop)
+step()
+WoW.inbox[2].items = nil
+step()
+eq(callText(last()), "ReturnInboxItem(1)", "loaded in time: the Return goes")
+WoW.serve(last())
+eq(stopped, "done", "  confirmed")
+-- Each wait has its own bound: two short waits in one run don't add up.
+WoW.inbox = { supplies(), hello(2) }
+WoW.inbox[2].items = { [1] = { id = ORE, count = 1, link = false } }
+update()
+stopped = nil
+GM.Ops.OpenSelected({ [rows[1].fp] = true }, { keepFree = 0 }, onStop)
+step()
+step(3)
+WoW.inbox[2].items = nil
+step()
+eq(callText(last()), "TakeInboxMoney(1)", "a short wait, then the take")
+WoW.serve(last())
+WoW.inbox[2].items = { [1] = { id = ORE, count = 1, link = false } }
+step(4.5)
+eq(GM.Ops.Kind(), "selected", "  a second short wait: still running")
+WoW.inbox[2].items = nil
+step()
+eq(callText(last()), "TakeInboxItem(1, 1)", "  then the next take")
+GM.Ops.Stop()
 update()
 
 -- Open (n): only the selected mail, through its residuals; no type filter.
@@ -261,7 +332,7 @@ click(rows[2].check)
 WoW.combat = true
 WoW.fire("PLAYER_REGEN_DISABLED")
 check(not rows[1].check:IsEnabled() and not rows[1].icon:IsEnabled(), "combat: rows disabled")
-check(not bar.open:IsEnabled() and not bar.ret:IsEnabled(), "  the bar too")
+check(not bar.open:IsEnabled() and not bar.ret:IsEnabled() and not bar.clear:IsEnabled(), "  the bar too")
 click(bar.ret)
 eq(GM.Ops.Kind(), nil, "  a click does nothing")
 WoW.combat = false

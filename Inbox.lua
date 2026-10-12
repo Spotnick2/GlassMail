@@ -29,6 +29,7 @@ local RETURN_ICON = "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up"
 local DELETE_ICON = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
 local LOADING = "Loading..."
 local TWIN = "Identical to another mail: use the row itself"
+local WAITING = "Waiting for mail to load"
 
 local rows = {}              -- [i] = { check, icon, fp, action, why }
 local rowOf = {}             -- Blizzard's MailItemNButton -> i (our table, nothing written on theirs)
@@ -80,7 +81,9 @@ local function refresh()
     local byIndex = {}
     for _, m in ipairs(snap.mails) do byIndex[m.index] = m end
     local page = InboxFrame.pageNum or 1
-    local set, idle, letter = live(), not busy(), Ops.LetterOpen()
+    local set, letter = live(), Ops.LetterOpen()
+    local idle = not busy() and not letter
+    local ready = idle and snap.resolved   -- an action waits for the whole inbox (Ops)
     for i, row in ipairs(rows) do
         local m = byIndex[(page - 1) * ROWS + i]
         row.fp, row.action, row.why = m and m.fp, nil, nil
@@ -97,7 +100,7 @@ local function refresh()
             row.icon:SetShown(row.action ~= nil)
             if row.action then
                 row.icon:SetNormalTexture(row.action == "return" and RETURN_ICON or DELETE_ICON)
-                row.icon:SetEnabled(one and idle and not letter)
+                row.icon:SetEnabled(one and ready)
             end
         end
     end
@@ -110,12 +113,12 @@ local function refresh()
         bar.open:Enable()
     else
         bar.open:SetText("Open (" .. size(selected) .. ")")
-        bar.open:SetEnabled(idle and not letter and next(selected) ~= nil)
+        bar.open:SetEnabled(ready and next(selected) ~= nil)
     end
     local n = #returnable()
     bar.ret:SetText("Return next (" .. n .. " left)")
-    bar.ret:SetEnabled(idle and not letter and n > 0)
-    bar.clear:SetEnabled(not own)
+    bar.ret:SetEnabled(ready and n > 0)
+    bar.clear:SetEnabled(idle)
 end
 
 local function mailOf(fp)
@@ -130,7 +133,7 @@ end
 local function onCheck(i)
     local row = rows[i]
     local m = row.fp and mailOf(row.fp)
-    if busy() or not unique(m) then return refresh() end
+    if busy() or Ops.LetterOpen() or not unique(m) then return refresh() end
     local from = anchor and select(2, mailOf(anchor))
     if IsShiftKeyDown() and from and unique(snap.mails[from]) then
         local _, to = mailOf(m.fp)
@@ -158,13 +161,13 @@ end
 
 local function onIcon(i)
     local row = rows[i]
-    if busy() or Ops.LetterOpen() or not row.action or counts[row.fp] ~= 1 then return end
+    if busy() or Ops.LetterOpen() or not snap.resolved or not row.action or counts[row.fp] ~= 1 then return end
     act(row.action, row.fp)
 end
 
 local function onOpen()
     if Ops.Kind() == "selected" then return Ops.Stop("stopped") end
-    if busy() or Ops.LetterOpen() or next(selected) == nil then return end
+    if busy() or Ops.LetterOpen() or not snap.resolved or next(selected) == nil then return end
     Ops.OpenSelected(selected, { keepFree = GM.db.keepFree }, function(r)
         -- What is left of the run's targets, moved to their residuals, is the selection again.
         selected = {}
@@ -174,13 +177,13 @@ local function onOpen()
 end
 
 local function onReturnNext()
-    if busy() or Ops.LetterOpen() then return end
+    if busy() or Ops.LetterOpen() or not snap.resolved then return end
     local m = returnable()[1]
     if m then act("return", m.fp) end
 end
 
 local function clear()
-    if Ops.Kind() == "selected" then return end
+    if busy() or Ops.LetterOpen() then return end
     selected, anchor = {}, nil
     refresh()
 end
@@ -196,6 +199,7 @@ local function why(row)
     if row.why then return row.why end
     if InCombatLockdown() then return "Not in combat" end
     if Ops.Running() then return "Busy: wait for the current action" end
+    if Ops.LetterOpen() then return "Close the letter first" end
 end
 
 local function checkTip(i)
@@ -206,7 +210,7 @@ end
 local function iconTip(i)
     local row = rows[i]
     local text = row.action == "return" and "Return to sender" or "Delete"
-    local w = why(row) or (Ops.LetterOpen() and "Close the letter first")
+    local w = why(row) or (not snap.resolved and WAITING)
     tip(row.icon, w and (text .. "\n" .. w) or text)
 end
 

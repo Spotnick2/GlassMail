@@ -83,7 +83,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   uncertain. Foreign mail calls (post-hooks), the mailbox closing, combat and an input-mode change
   stop the run, and so does a letter being opened: nothing runs while one is open (Blizzard keeps it
   as a bare index; a removal above it would shift it). Open All takes twins (no remembered target);
-  a remembered target (the selection, a Return / Delete) needs one match. Run kinds: `openall`,
+  a remembered target (the selection, a Return / Delete) needs one match, and waits for every mail
+  to load (5 s at most; our controls stay disabled meanwhile). Run kinds: `openall`,
   `selected` (its targets move to their residuals), `return`, `delete`; `Ops.Watch` repaints
   every control when a run starts or stops.
 - **`OpenAll.lua`**: I1. Our button in the stock one's place (hidden in mouse mode on every show;

@@ -148,7 +148,6 @@ end
 
 -- A Return or Delete: the one current match, its rule checked again now.
 local function dispatchAct(t, snap)
-    if not snap.resolved then return end   -- wait: a mail still loading may be the target's twin
     local fp = run.opts.target
     if (Scan.Count(snap)[fp] or 0) ~= 1 then return finish("mail changed") end
     local m
@@ -167,9 +166,19 @@ local function dispatch(t)
     if run.bagWait and not run.bagSeen and t - run.bagWait < Ops.BAG_WAIT then return end
     run.bagWait = nil
     local snap, bags = Scan.Inbox(), Loot.Bags()
-    if run.opts.target then return dispatchAct(t, snap) end
     local only = run.opts.only
-    if only and snap.resolved then
+    if run.opts.target or only then
+        -- A remembered target waits for the whole inbox: a mail still loading
+        -- may be its twin, and nothing is confirmed until it loads. Bounded.
+        if not snap.resolved then
+            run.loading = run.loading or t
+            if t - run.loading > Ops.TIMEOUT then return finish("mail still loading") end
+            return
+        end
+        run.loading = nil
+    end
+    if run.opts.target then return dispatchAct(t, snap) end
+    if only then
         -- A target that is gone, or now has a twin, leaves the selection.
         local counts = Scan.Count(snap)
         for fp in pairs(only) do
