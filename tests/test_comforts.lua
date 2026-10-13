@@ -149,6 +149,24 @@ eq(GM._test.comforts.owned(), false, "  and nothing claimed")
 check(GM.failures["trade block"] ~= nil, "  recorded in /gmail failures")
 hide()
 WoW.cvarFail = nil
+GM.failures["trade block"] = nil
+show()
+eq(blocked(), "1", "blocked")
+WoW.cvarRefuse = true   -- SetCVar returns false, no error
+hide()
+eq(blocked(), "1", "the restore refused at close: still blocked")
+eq(GM._test.comforts.owned(), true, "  the claim kept")
+eq(GlassMailCharDB.tradeBlocked, true, "  and its saved flag, for the next login")
+check(GM.failures["trade block"] ~= nil, "  recorded")
+WoW.cvarRefuse = nil
+combat(true); combat(false)
+eq(blocked(), "0", "the next change retries: unblocked")
+eq(GlassMailCharDB.tradeBlocked, nil, "  claim cleared")
+WoW.cvarRefuse = true
+show()
+eq(GM._test.comforts.owned(), false, "a refused block claims nothing")
+WoW.cvarRefuse = nil
+hide()
 
 -- New-mail alert: when the latest senders change, away from the mailbox.
 newChat()

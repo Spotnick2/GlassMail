@@ -54,13 +54,19 @@ local function claim(on)
     GM.charDB.tradeBlocked = on or nil
 end
 
+-- True only when the CVar now reads v: SetCVar can refuse by returning
+-- false, not only by throwing. The claim changes only on a write that held.
 local function write(v)
     ours = true
     local ok, err = pcall(SetCVar, CVAR, v)
     ours = false
     last = value()
-    if not ok then API.Fail("trade block", err) end
-    return ok
+    if not ok then
+        API.Fail("trade block", err)
+    elseif last ~= v then
+        API.Fail("trade block", "blockTrades refused " .. v)
+    end
+    return ok and last == v
 end
 
 -- One rule, re-run on every change: blocked while the mailbox is open and the

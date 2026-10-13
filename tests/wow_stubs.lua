@@ -344,10 +344,12 @@ function GetServerTime() return time() end
 function GetBuildInfo() return "1.60.1", "70291", "Oct 8 2026", 16001 end
 function InCombatLockdown() return WoW.combat == true end
 -- CVars; SetCVar fires CVAR_UPDATE synchronously, as the client documents it.
--- WoW.cvarFail makes SetCVar throw (a refusal).
+-- WoW.cvarFail makes SetCVar throw; WoW.cvarRefuse makes it return false
+-- and change nothing.
 function GetCVar(name) return WoW.cvars[name] end
 function SetCVar(name, value)
     if WoW.cvarFail then error("SetCVar refused") end
+    if WoW.cvarRefuse then return false end
     WoW.cvars[name] = tostring(value)
     WoW.fire("CVAR_UPDATE", name, tostring(value))
     return true
