@@ -69,7 +69,7 @@ jobs:
           args: -d
 
       # The zip is what players install, so assert its SHAPE: the TOC, every
-      # Lua file it loads, LICENSE, and under Libs/LibGlass-1.0 exactly what
+      # Lua file it loads, LICENSE, our Media/*.tga, and under Libs/LibGlass-1.0 exactly what
       # the library ships (its XML, every file the XML loads, LICENSE,
       # Media/*.tga). NOTHING else.
       - name: The package is exactly the addon and its library
@@ -81,6 +81,7 @@ jobs:
             echo GlassMail/GlassMail.toc
             echo GlassMail/LICENSE
             tr -d '\r' < GlassMail.toc | grep -v '^#' | grep '\.lua$' | tr '\\' '/' | sed 's|^|GlassMail/|'
+            ls Media/*.tga | sed 's|^|GlassMail/|'
             echo "$lib/LibGlass-1.0.xml"
             echo "$lib/LICENSE"
             tr -d '\r' < "$LIBGLASS/LibGlass-1.0.xml" | perl -0pe 's/<!--.*?-->//gs' |

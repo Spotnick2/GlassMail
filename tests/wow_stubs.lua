@@ -429,6 +429,10 @@ local function mailWindow(name)
     w.Inset = CreateFrame("Frame", nil, w)
     w.Inset.Bg = Methods.CreateTexture(w.Inset)
     w.Inset.NineSlice = CreateFrame("Frame", nil, w.Inset)
+    -- PortraitFrameTemplate's portrait, masked to a circle (SharedUIPanelTemplates.xml:574-596).
+    w.PortraitContainer = CreateFrame("Frame", nil, w)
+    w.PortraitContainer.portrait = Methods.CreateTexture(w.PortraitContainer)
+    w.PortraitContainer.CircleMask = Methods.CreateTexture(w.PortraitContainer)
     return w
 end
 local mail = mailWindow("MailFrame")
