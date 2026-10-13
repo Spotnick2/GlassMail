@@ -16,9 +16,9 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 [docs/FOREVER-PROBE.md](docs/FOREVER-PROBE.md).
 
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
-results in docs/FOREVER-PROBE.md). **M1 in progress** (issue #4, five PRs; the reviewed plan is in
-docs/PLAN.md): the look, probe session 5, the mail core with Open All, and selection with row
-extras are built; then X3 and the release (PR 5). Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
+results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed plan is in
+docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. Next is
+M2. Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
 ## The UI contract (non-negotiable)
@@ -48,7 +48,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
-`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Inbox.lua` → `Options.lua` →
+`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Inbox.lua` → `Comforts.lua` → `Options.lua` →
 `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
@@ -97,8 +97,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   sender); the bar has Open (n), Return next (n left) (one click per mail) and Clear. The row
   tooltip gets each attachment and the full subject. Everything disables in combat and while
   another run or a letter is open.
+- **`Comforts.lua`**: X3. The gold Ops confirmed this visit (`Ops.TakeVisitMoney`), said at close;
+  the trade block (the `blockTrades` CVar while the mailbox is open; only our own block is undone,
+  nothing written in combat, a per-character claim for crash recovery); the new-mail alert (the
+  latest senders changed, away from the mailbox).
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
-  Choices are radio groups (`radios`), not dropdowns.
+  Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).
 - **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the
   `Settings` helpers, `/gmail`.
 - **`Tools/MailProbe/`**: the throwaway measurement addon (`/mailprobe help`).

@@ -2,13 +2,21 @@
 
 A mailbox addon for **World of Warcraft: Forever**, in the liquid-glass look of the Glass addons.
 
-It keeps Blizzard's mail windows and adds what the mailbox is missing: Open All with filters,
-multi-select, a tooltip of every attachment, an inbox view of all your attachments, an address
-book of your characters and contacts, a memory of every character's mailbox you can browse from
-anywhere, a history of what you sent where, and help sending to your bank character.
+It keeps Blizzard's mail windows and adds what the mailbox is missing.
 
-**Status:** early development (milestone M0). The planned features are in
-[docs/FEATURES.md](docs/FEATURES.md).
+**v0.1.0** (the first release):
+- **Two glass looks**, clear and smoked, or Blizzard's own art, switched live.
+- **Open All with filters**: Auction House, system and player mail, and how many bag slots to keep
+  free. Money first, then each attachment that fits; COD and GM mail are left for you.
+- **Select mail** with a checkbox on each row (shift for a range, ctrl for a sender), then Open the
+  selection or Return it, one mail per click.
+- **Row extras:** a Return or Delete icon, and a tooltip with every attachment and the full subject.
+- **At the mailbox:** the gold collected, trades blocked while it is open, and a chat line with the
+  senders when new mail comes.
+
+**Planned** ([docs/FEATURES.md](docs/FEATURES.md)): an inbox view of all your attachments, an
+address book of your characters and contacts, a memory of every character's mailbox you can
+browse from anywhere, a history of what you sent where, and help sending to your bank character.
 
 `/gmail help` lists the commands.
 

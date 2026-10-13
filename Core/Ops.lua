@@ -33,6 +33,7 @@ Ops.BAG_WAIT = 1       -- after an item, wait for the bags to update, at most th
 local MAILBOX = 17     -- Enum.PlayerInteractionType.MailInfo (session 1)
 
 local run              -- the active run, or nil
+local visitMoney = 0   -- money confirmed taken since the last TakeVisitMoney (X3)
 local ours = false     -- true only around our own mail call
 local driver = CreateFrame("Frame")
 driver:Hide()
@@ -53,6 +54,13 @@ end
 
 -- The active run's counters, for the UI: { money, items, failed }.
 function Ops.Stats() return run and run.stats end
+
+-- The money confirmed taken, any run, since the last call; zeroes it.
+function Ops.TakeVisitMoney()
+    local c = visitMoney
+    visitMoney = 0
+    return c
+end
 
 local function now() return GetTime() end
 
@@ -221,6 +229,7 @@ local function resolve()
     end
     if a.kind == "money" then
         run.stats.money = run.stats.money + a.money
+        visitMoney = visitMoney + a.money
     else
         run.stats.items = run.stats.items + 1
         run.bagWait = now()

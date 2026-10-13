@@ -52,6 +52,19 @@ local function radioButton(parent, text)
     return rb
 end
 
+-- An on/off setting under `anchor`: our own label beside the template's box.
+local function checkbox(parent, anchor, text, get, set)
+    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    cb:SetSize(24, 24)
+    cb:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+    local fs = label(parent, text)
+    fs:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+    local function sync() cb:SetChecked(get() == true) end
+    cb:SetScript("OnClick", function() set(cb:GetChecked() == true); sync() end)
+    refreshers[#refreshers + 1] = sync
+    return cb
+end
+
 -- Mutually exclusive choices, stacked under `anchor`: { {value, text}, ... }.
 -- Returns the last button, to anchor what follows. The whole group re-syncs
 -- after a click, so a refused choice snaps back.
@@ -88,8 +101,15 @@ local function build()
     for _, name in ipairs(GM.Skin.NAMES) do options[#options + 1] = { name, GM.Skin.LABELS[name] } end
     local last, group = radios(panel, look, options, function() return GM.db.skin end, GM.Settings.SetSkin)
     Options._test.skinRadios = group
+    local comforts = label(panel, "At the mailbox", "GameFontNormal")
+    comforts:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -16)
+    local trade = checkbox(panel, comforts, "Block trades while the mailbox is open",
+        function() return GM.db.tradeBlock end, GM.Settings.SetTradeBlock)
+    local alert = checkbox(panel, trade, "Say in chat who sent new mail",
+        function() return GM.db.newMailAlert end, GM.Settings.SetNewMailAlert)
+    Options._test.trade, Options._test.alert = trade, alert
     local hint = label(panel, "Type /gmail help for every command.", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -16)
+    hint:SetPoint("TOPLEFT", alert, "BOTTOMLEFT", 0, -16)
 end
 
 panel:SetScript("OnShow", function()

@@ -84,6 +84,8 @@ end
 --------------------------------------------------------------------------------
 
 function WoW.reset()
+    WoW.cvars = { blockTrades = "0" }
+    WoW.newMail, WoW.senders = false, {}
     WoW.frames = {}
     WoW.chat = {}
     WoW.methodsCalled = {}
@@ -341,6 +343,18 @@ function GetTime() return WoW.now or 0 end
 function GetServerTime() return time() end
 function GetBuildInfo() return "1.60.1", "70291", "Oct 8 2026", 16001 end
 function InCombatLockdown() return WoW.combat == true end
+-- CVars; SetCVar fires CVAR_UPDATE synchronously, as the client documents it.
+-- WoW.cvarFail makes SetCVar throw (a refusal).
+function GetCVar(name) return WoW.cvars[name] end
+function SetCVar(name, value)
+    if WoW.cvarFail then error("SetCVar refused") end
+    WoW.cvars[name] = tostring(value)
+    WoW.fire("CVAR_UPDATE", name, tostring(value))
+    return true
+end
+-- New mail: HasNewMail, and the latest three senders (WoW.senders, up to 3).
+function HasNewMail() return WoW.newMail end
+function GetLatestThreeSenders() return WoW.senders[1], WoW.senders[2], WoW.senders[3] end
 
 -- The player: GUID, and the name split across UnitName's two returns, one of
 -- the two shapes the client has used (AltStable #56).

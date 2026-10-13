@@ -13,7 +13,7 @@ review's main corrections are listed at the end.
     [FOREVER-PROBE.md](FOREVER-PROBE.md). **No feature code before the
     measurements its design depends on.** Items still open are listed with the milestone that
     must measure them (FOREVER-PROBE.md, "Still open").
-- **M1, first release** *(in progress, #4)*: the mail core (`Core/Scan.lua`, `Core/Ops.lua`,
+- **M1, first release** *(done, #4; v0.1.0)*: the mail core (`Core/Scan.lua`, `Core/Ops.lua`,
   `Core/Loot.lua`), the skin finished in clear and smoked glass, I1, I2, I3, X3, with the operation
   records that confirm each action succeeded. Five PRs: look → probe session 5 → core + I1 →
   I2 + I3 → X3 + v0.1.0. See "M1" below.
@@ -106,6 +106,20 @@ review's main corrections are listed at the end.
     left, `keepFree` still applies.
   - **Cut:** a tooltip rebuild on `GET_ITEM_INFO_RECEIVED` (Blizzard's row `OnUpdate` rebuilds the
     tooltip every frame, MailFrame.xml:160).
+- **PR 5, X3 + v0.1.0** (implementation plan reviewed with Codex, 4 rounds, consensus,
+  2026-10-13):
+  - **Trade block = the `blockTrades` CVar** while the mailbox is open (closing the trade window on
+    `TRADE_SHOW` would undo an accept the player made, and the request popup comes first). One
+    rule, re-run on every change: blocked while the mailbox is open and the setting is on. Only our
+    own block is ever undone: our writes are marked (`CVAR_UPDATE` is synchronous), and a change we
+    didn't make ends the claim; an "off" made during a visit lasts until it closes. Nothing is
+    written in combat; the rule re-runs when combat ends. A per-character claim undoes a block left
+    by a session that ended uncleanly (best effort: built-in CVar persistence is unmeasured).
+  - **Gold collected** counts only money Ops confirmed, over every run of the visit; manual takes
+    aren't counted (no `GetMoney`).
+  - **New-mail alert** is "the latest senders changed while you're away", not per arrival: a
+    sender list isn't an arrival ID. Mail seen at the mailbox isn't announced afterwards.
+  - **Cut:** petition blocking (it means unregistering a Blizzard frame's event).
 - **Probe session 5** (what was asked of it):
   - the AH subject strings and Postmaster fields;
   - several timed returns;
