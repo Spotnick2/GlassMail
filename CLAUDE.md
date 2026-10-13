@@ -43,7 +43,7 @@ milestone measures each one, before the feature that depends on it ships.
 
 `C:\Projects\WoW\References\Mail\` holds Postal 4.3.5 ("All Rights Reserved"), PostalReborn 1.0.04 and
 Kerzo Postal Suite 3.2 (no license). **They are behaviour references only: never copy their code.**
-Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This repo is GPL-3.0.
+Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This repo is MIT.
 
 ## Layout
 
