@@ -11,6 +11,7 @@ Released 2026-10-13. The first release.
   letters are dark too, with light text (and a selection colour you can read it on), on the send
   tab and in an open letter. Each window's content and the send tab's footer sit on their own
   dark pane, as in the mockup, so busy scenery or the quest tracker don't read through.
+  The mail window's portrait is the Glass Mail envelope under glass.
   Switching looks with a letter open recolours it at once.
 - **Open All with filters**, in place of Blizzard's button: right-click it to choose Auction House,
   system and player mail, and how many bag slots to keep free (0, 2, 5 or 10). Money first, then

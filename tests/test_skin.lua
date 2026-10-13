@@ -75,6 +75,17 @@ eq(SendMailMoneyInset.NineSlice:GetAlpha(), 0, "  and its border")
 eq(SendMailMoneyBg:GetAlpha(), 1, "the money value field keeps its frame")
 eq(SendMailErrorIcon:GetAlpha(), 1, "a texture anchored to something else stays")
 
+-- The portrait: the envelope over Blizzard's parcel, which is faded, not hidden.
+local portrait = T.portrait()
+local parcel = MailFrame.PortraitContainer.portrait
+check(portrait and portrait.frame:IsShown(), "the envelope shows over the mail window's portrait")
+check(portrait.frame:GetFrameLevel() > MailFrame.PortraitContainer:GetFrameLevel(), "  above Blizzard's")
+local envelope = select(1, portrait.frame:GetRegions())
+eq(envelope._file, "Interface\\AddOns\\GlassMail\\Media\\Envelope", "  our envelope texture")
+eq(parcel:GetAlpha(), 0, "Blizzard's parcel faded")
+check(parcel:IsShown(), "  not hidden")
+eq(OpenMailFrame.PortraitContainer.portrait:GetAlpha(), 1, "the open letter keeps its own portrait")
+
 -- The letters go dark: the stationery faded (not hidden), a pane in its place,
 -- the text light. Only the mail widgets are recoloured, never the shared fonts.
 local L = GM.Skin.LETTER_TEXT
@@ -206,11 +217,14 @@ eq(OpenStationeryBackgroundLeft:GetAlpha(), 1, "  and the letter's stationery")
 for _, letter in pairs(T.letters) do local lp = letter.pane check(not lp.frame:IsShown(), "stock hides the letter panes") end
 check(isDark(SendMailBodyEditBox:GetTextColor()), "stock gives the letter text Blizzard's colour back")
 for _, sp in pairs(T.sections) do check(not sp.frame:IsShown(), "stock hides the sections") end
+check(not portrait.frame:IsShown(), "stock hides the envelope")
+eq(parcel:GetAlpha(), 1, "  and gives Blizzard's parcel back")
 check(isDark(OpenMailBodyText:GetTextColor("P")), "  the open letter's body")
 check(isDark(OpenMailInvoiceItemLabel:GetTextColor()), "  and the invoice")
 eq(select(1, SendMailBodyEditBox:GetHighlightColor()), 0.82, "  and the send body's selection colour")
 GM.Settings.SetSkin("smoked")
 eq(MailFrame.Bg:GetAlpha(), 0, "glass again fades it again")
+check(portrait.frame:IsShown() and parcel:GetAlpha() == 0, "  and the envelope is back")
 check(painted("smoked"), "  in the chosen preset")
 check(light(OpenMailBodyText:GetTextColor("P")), "  and the letter light again")
 

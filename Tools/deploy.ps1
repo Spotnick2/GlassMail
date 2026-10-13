@@ -46,7 +46,10 @@ function Deploy-Addon {
     # The TOC is the list of what ships (subfolders included, e.g. Core\).
     $lua = @(Get-Content -LiteralPath (Join-Path $RepoRoot "GlassMail.toc") | ForEach-Object { $_.Trim() } |
         Where-Object { $_ -notmatch "^#" -and $_ -match "[.]lua$" })
-    $files = @("GlassMail.toc", "LICENSE") + $lua
+    # Our own textures ship too (Media\*.tga).
+    $media = @(Get-ChildItem -LiteralPath (Join-Path $RepoRoot "Media") -Filter *.tga -File -ErrorAction SilentlyContinue |
+        ForEach-Object { "Media\" + $_.Name })
+    $files = @("GlassMail.toc", "LICENSE") + $lua + $media
     foreach ($f in $files) {
         $src = Join-Path $RepoRoot $f
         $to = Join-Path $dest $f

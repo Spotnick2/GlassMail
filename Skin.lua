@@ -25,6 +25,9 @@
 -- are recoloured (SetTextColor on each), never the shared font objects
 -- MailTextFontNormal / InvoiceTextFontNormal, which other windows use too.
 -- Under "stock" every colour goes back to what it was.
+--
+-- Under glass the mail window's portrait (Blizzard's parcel) gives way to the
+-- Glass Mail envelope: ours on top, theirs faded, back under "stock".
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
@@ -66,6 +69,8 @@ local BARS = {
 -- The send tab's money box: an inset like the window's (MailFrame.xml:791). Its
 -- gold-edged value field (SendMailMoneyBg) stays, as the edit boxes' borders do.
 local INSETS = { MailFrame = { "SendMailMoneyInset" } }
+-- The envelope, round already: Blizzard masks its portrait to a circle.
+Skin.PORTRAIT = "Interface\\AddOns\\GlassMail\\Media\\Envelope"
 -- The letters: each scroll frame and the stationery it draws (MailFrame.xml:
 -- 510-533, 975-1000). Blizzard sets the stationery's texture and height per
 -- letter (MailFrame.lua:777-781, 967-970), never its alpha, so a fade holds.
@@ -87,6 +92,7 @@ local function rowCount()
 end
 
 local skinned = {}   -- window -> { panel = frame, g = glass regions, art = { region, ... } }
+local portrait       -- { frame, stock }: the envelope over MailFrame's portrait, and Blizzard's
 local pane           -- { frame, tex } under the inbox rows
 -- window name -> { paper = { texture, ... }, pane = { frame, tex }, text = { { widget, kind, r, g, b, a }, ... },
 -- light = bool }: the stationery, the pane in its place, the letter's text with Blizzard's
@@ -180,6 +186,25 @@ local function addPanel(window, name)
     pushStyle(preset() or Skin.PRESETS.clear)
     local g = Glass.Apply(panel, "large")
     skinned[window] = { panel = panel, g = g, art = art }
+end
+
+-- The envelope over MailFrame's portrait (ButtonFrameTemplate's PortraitContainer,
+-- SharedUIPanelTemplates.xml:574-596): our frame a level above the container, our
+-- texture on the circle Blizzard masks the portrait to. Blizzard sets the
+-- portrait's texture once (MailFrame.lua:26), never its alpha, so a fade holds.
+local function addPortrait()
+    local window = rawget(_G, "MailFrame")
+    local container = window and window.PortraitContainer
+    local stock = container and container.portrait
+    if not stock then return end
+    local circle = container.CircleMask or stock
+    local f = CreateFrame("Frame", nil, window)
+    f:SetFrameLevel(container:GetFrameLevel() + 1)
+    f:SetAllPoints(circle)
+    local t = f:CreateTexture(nil, "OVERLAY")
+    t:SetTexture(Skin.PORTRAIT)
+    t:SetAllPoints(f)
+    portrait = { frame = f, stock = stock }
 end
 
 -- A pane: a plain translucent fill from one region's top left to another's
@@ -349,6 +374,12 @@ function Skin.Start()
             if not ok then API.Fail("skin letter " .. name, err) end
         end
     end
+    local mail = rawget(_G, "MailFrame")
+    if mail and skinned[mail] and not tried.portrait then
+        tried.portrait = true
+        local ok, err = pcall(addPortrait)
+        if not ok then API.Fail("skin portrait", err) end
+    end
     if next(skinned) and not tried.sections then
         tried.sections = true
         local ok, err = pcall(addSections)
@@ -372,6 +403,10 @@ function Skin.Refresh()
     for window in pairs(skinned) do applyOne(window, p) end
     paintPane(pane, p)
     for _, pn in pairs(sections) do paintPane(pn, p, "section") end
+    if portrait then
+        portrait.frame:SetShown(p ~= nil)
+        portrait.stock:SetAlpha(p and 0 or 1)
+    end
     for name, letter in pairs(letters) do
         paintPane(letter.pane, p)
         for _, paper in ipairs(letter.paper) do paper:SetAlpha(p and 0 or 1) end
@@ -385,4 +420,4 @@ function Skin.IsValid(name) return name == "stock" or Skin.PRESETS[name] ~= nil 
 
 GM._test = GM._test or {}
 GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end, letters = letters,
-    sections = sections }
+    sections = sections, portrait = function() return portrait end }
