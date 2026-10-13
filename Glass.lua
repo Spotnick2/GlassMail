@@ -6,8 +6,8 @@
 -- edits here.
 --
 -- An instance, not the library itself: the tuning and the font registry are
--- GlassMailbox's own and never touch another glass addon's surfaces. Call
+-- GlassMail's own and never touch another glass addon's surfaces. Call
 -- sites keep the dot-call shape (Glass.Apply, Glass.Font, Glass.MEDIA, ...).
 
-GlassMailbox = GlassMailbox or {}
-GlassMailbox.Glass = LibStub("LibGlass-1.0"):New()
+GlassMail = GlassMail or {}
+GlassMail.Glass = LibStub("LibGlass-1.0"):New()

@@ -1,4 +1,4 @@
-package-as: GlassMailbox
+package-as: GlassMail
 
 enable-nolib-creation: no
 

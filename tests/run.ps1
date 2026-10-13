@@ -19,7 +19,7 @@ try {
     # The TOCs are the list, so a new file cannot go unchecked: the addon's
     # and the probe's. The embedded library is checked in its own repo.
     $luac = Join-Path (Split-Path -Parent $Lua) "luac.exe"
-    $tocFiles = @(Get-Content "GlassMailbox.toc" | ForEach-Object { $_.Trim() } |
+    $tocFiles = @(Get-Content "GlassMail.toc" | ForEach-Object { $_.Trim() } |
         Where-Object { $_ -notmatch "^#" -and $_ -match "[.]lua$" })
     $probeFiles = @(Get-Content "Tools\MailProbe\MailProbe.toc" | ForEach-Object { $_.Trim() } |
         Where-Object { $_ -notmatch "^#" -and $_ -match "[.]lua$" } | ForEach-Object { "Tools\MailProbe\$_" })

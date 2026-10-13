@@ -3,27 +3,27 @@ dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
 
 -- Missing SavedVariables still load.
-GlassMailboxDB = nil
+GlassMailDB = nil
 local GM = loadAddon()
-eq(type(GlassMailboxDB), "table", "missing saved variables become a table")
-eq(GM.db, GlassMailboxDB, "the addon keeps the saved table")
-eq(type(GlassMailboxCharDB), "table", "missing per-character saved variables become a table")
+eq(type(GlassMailDB), "table", "missing saved variables become a table")
+eq(GM.db, GlassMailDB, "the addon keeps the saved table")
+eq(type(GlassMailCharDB), "table", "missing per-character saved variables become a table")
 check(not chatHas("differs from"), "no build warning on the measured build")
 
 -- Only what the player set is saved; the rest follows the shipped defaults.
-eq(rawget(GlassMailboxDB, "skin"), nil, "an untouched setting isn't saved")
+eq(rawget(GlassMailDB, "skin"), nil, "an untouched setting isn't saved")
 eq(GM.db.skin, "clear", "it reads the shipped default")
 GM.Settings.SetSkin("smoked")
-eq(rawget(GlassMailboxDB, "skin"), "smoked", "a setting the player changed is saved")
-GlassMailboxDB = { skin = "clear" }
+eq(rawget(GlassMailDB, "skin"), "smoked", "a setting the player changed is saved")
+GlassMailDB = { skin = "clear" }
 GM._test.ensureDefaults()
-eq(rawget(GlassMailboxDB, "skin"), nil, "a saved value equal to the default is dropped")
-GlassMailboxDB = { skin = "frosted", glass = false }
+eq(rawget(GlassMailDB, "skin"), nil, "a saved value equal to the default is dropped")
+GlassMailDB = { skin = "frosted", glass = false }
 GM._test.ensureDefaults()
-eq(rawget(GlassMailboxDB, "skin"), nil, "a saved skin this version doesn't know is dropped")
-eq(GlassMailboxDB.skin, "clear", "  and the default applies")
-eq(rawget(GlassMailboxDB, "glass"), nil, "M0's glass switch is dropped")
-GM.db = GlassMailboxDB
+eq(rawget(GlassMailDB, "skin"), nil, "a saved skin this version doesn't know is dropped")
+eq(GlassMailDB.skin, "clear", "  and the default applies")
+eq(rawget(GlassMailDB, "glass"), nil, "M0's glass switch is dropped")
+GM.db = GlassMailDB
 
 -- The options page: registered once at login, and blank-proof (hidden at
 -- creation, built on its first OnShow).
@@ -36,26 +36,26 @@ check(GM.Options.built, "the page builds on its first show")
 
 -- /gmail
 newChat()
-SlashCmdList.GLASSMAILBOX("")
+SlashCmdList.GLASSMAIL("")
 eq(#newChat(), #GM.HelpLines(), "/gmail prints the help list")
-SlashCmdList.GLASSMAILBOX("failures")
+SlashCmdList.GLASSMAIL("failures")
 local lines = newChat()
 check(lines[1] and lines[1]:find("no failures"), "/gmail failures reports none")
-SlashCmdList.GLASSMAILBOX("version")
+SlashCmdList.GLASSMAIL("version")
 lines = newChat()
 check(lines[1] and lines[1]:find("1.60.1.70291", 1, true), "/gmail version names the measured build")
 check(lines[1] and lines[1]:find("version dev", 1, true), "a deployed copy reports dev")
-SlashCmdList.GLASSMAILBOX("skin smoked")
+SlashCmdList.GLASSMAIL("skin smoked")
 eq(GM.db.skin, "smoked", "/gmail skin smoked")
-SlashCmdList.GLASSMAILBOX("glass on")
+SlashCmdList.GLASSMAIL("glass on")
 eq(GM.db.skin, "clear", "/gmail glass on")
-SlashCmdList.GLASSMAILBOX("options")
+SlashCmdList.GLASSMAIL("options")
 eq(WoW.openedCategory, WoW.categories[1]:GetID(), "/gmail options opens the page")
 
 -- A failure recorded anywhere shows up in /gmail failures.
 GM.API.Fail("demo", "boom")
 newChat()
-SlashCmdList.GLASSMAILBOX("failures")
+SlashCmdList.GLASSMAIL("failures")
 lines = newChat()
 check(lines[1] and lines[1]:find("demo: boom", 1, true), "/gmail failures lists recorded failures")
 GM.failures.demo = nil

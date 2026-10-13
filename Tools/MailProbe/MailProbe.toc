@@ -1,9 +1,9 @@
 ## Interface: 16001
 ## Title: MailProbe
-## Notes: Throwaway probe for GlassMailbox: mailbox lifecycle, inbox identity, looting, batch actions, sending, taint. /mailprobe help
+## Notes: Throwaway probe for GlassMail: mailbox lifecycle, inbox identity, looting, batch actions, sending, taint. /mailprobe help
 ## Author: Spotnick
 ## Version: dev
-## OptionalDeps: GlassMailbox
+## OptionalDeps: GlassMail
 ## SavedVariables: MailProbeDB
 
 MailProbe.lua

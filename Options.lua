@@ -2,14 +2,14 @@
 -- guide's measured recipe ("An Options page with sub-pages and an About page"):
 -- a plain Frame with .name, hidden at creation (or the first visit is blank),
 -- controls built on the first OnShow, every value re-read on every OnShow,
--- registered once at PLAYER_LOGIN from GlassMailbox.lua.
+-- registered once at PLAYER_LOGIN from GlassMail.lua.
 --
 -- The look (clear / smoked / stock) and the version; each feature adds its own
 -- controls here as it lands. Choices are radio groups, not dropdowns (the
 -- porting guide's measured recipe).
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local Options = {}
 GM.Options = Options
@@ -17,7 +17,7 @@ GM.Options = Options
 local RADIO_ART = "Interface\\Buttons\\UI-RadioButton"   -- 4 cells: normal, checked, highlight, pushed
 
 local panel = CreateFrame("Frame")
-panel.name = "Glass Mailbox"
+panel.name = "Glass Mail"
 panel:Hide()
 
 local category
@@ -75,7 +75,7 @@ local function radios(parent, anchor, options, get, set)
 end
 
 local function build()
-    local title = label(panel, "Glass Mailbox", "GameFontNormalHuge")
+    local title = label(panel, "Glass Mail", "GameFontNormalHuge")
     title:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -16)
     local version = label(panel, "", "GameFontDisableSmall")
     version:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
@@ -100,7 +100,7 @@ panel:SetScript("OnShow", function()
     for _, refresh in ipairs(refreshers) do refresh() end
 end)
 
--- Called once at PLAYER_LOGIN by GlassMailbox.lua.
+-- Called once at PLAYER_LOGIN by GlassMail.lua.
 function Options.Register()
     if category or not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
     category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)

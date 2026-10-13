@@ -1,4 +1,4 @@
-# GlassMailbox features
+# GlassMail features
 
 The agreed feature list (2026-10-09), chosen by the owner from Postal 4.3.5, PostalReborn 1.0.04 and
 Kerzo Postal Suite 3.2 (`C:\Projects\WoW\References\Mail\`), then reviewed adversarially (Codex,
@@ -46,7 +46,7 @@ light text (owner, 2026-10-10); the target for the rest of the look is
 Characters are keyed by GUID, with "First Surname" as the mail address. Each entry also keeps the
 realm, ruleset and faction, and a character is offered as a recipient only when those show mail
 can reach it from the current character. Two sources:
-1. GlassMailbox's own account-wide record of the characters that have logged in.
+1. GlassMail's own account-wide record of the characters that have logged in.
 2. AltStable, live and read-only, when it is loaded: `AltStable.GetCharacters()` (checked against
    `PUBLIC_API_VERSION`) and `AltStable.RegisterCallback("CharactersChanged", fn)`. AltStable
    already includes its cross-account characters. Nothing from it is saved here.

@@ -271,7 +271,7 @@ update()
 
 -- Open (n): only the selected mail, through its residuals; no type filter.
 WoW.mailCalls = {}
-GlassMailboxDB.openPlayer = false
+GlassMailDB.openPlayer = false
 WoW.inbox = { auction(), supplies(), { sender = "A", subject = "cod", cod = 100, items = { [1] = { id = ORE, count = 1 } } } }
 update()
 click(bar.clear)   -- the AH mail is still selected from above: same fingerprint
@@ -298,7 +298,7 @@ eq(GM.Ops.Kind(), nil, "done: the COD mail is left, the AH mail never touched")
 for _, c in ipairs(WoW.mailCalls) do check(c[2] == 2, "every take was from the selected mail: " .. callText(c)) end
 check(chatHas("took 2 items and 250c"), "the summary line")
 eq(selectedCount(), 1, "the COD mail stays selected; the emptied one is gone")
-GlassMailboxDB.openPlayer = nil
+GlassMailDB.openPlayer = nil
 
 -- Tooltip: each attachment of a mail with two or more, and the full subject.
 WoW.inbox = { supplies(), hello(1) }

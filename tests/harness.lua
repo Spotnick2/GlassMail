@@ -19,7 +19,7 @@ function done(name)
     os.exit(failed == 0 and 0 or 1)
 end
 
-TOC = "GlassMailbox.toc"
+TOC = "GlassMail.toc"
 
 -- Every file line of the TOC, in load order (our .lua files and the embedded
 -- library's .xml).
@@ -93,16 +93,16 @@ function loadAddon(opts)
             error("the harness can't load TOC line " .. line, 0)
         end
         for _, file in ipairs(files) do
-            assert(loadfile((file:gsub("\\", "/"))))("GlassMailbox", ns)
+            assert(loadfile((file:gsub("\\", "/"))))("GlassMail", ns)
         end
     end
-    if opts.db then GlassMailboxDB = opts.db end
-    if opts.charDB then GlassMailboxCharDB = opts.charDB end
-    WoW.fire("ADDON_LOADED", "GlassMailbox")
+    if opts.db then GlassMailDB = opts.db end
+    if opts.charDB then GlassMailCharDB = opts.charDB end
+    WoW.fire("ADDON_LOADED", "GlassMail")
     WoW.fire("PLAYER_LOGIN")
     WoW.fire("PLAYER_ENTERING_WORLD", opts.initialLogin ~= false, false)
     WoW.tick()
-    return GlassMailbox
+    return GlassMail
 end
 
 -- Chat lines printed since the last call.

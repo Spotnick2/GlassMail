@@ -76,11 +76,11 @@ jobs:
         run: |
           zip=$(ls .release/*.zip | head -1)
           rm -rf unpacked && mkdir unpacked && unzip -q "$zip" -d unpacked
-          lib=GlassMailbox/Libs/LibGlass-1.0
+          lib=GlassMail/Libs/LibGlass-1.0
           {
-            echo GlassMailbox/GlassMailbox.toc
-            echo GlassMailbox/LICENSE
-            tr -d '\r' < GlassMailbox.toc | grep -v '^#' | grep '\.lua$' | tr '\\' '/' | sed 's|^|GlassMailbox/|'
+            echo GlassMail/GlassMail.toc
+            echo GlassMail/LICENSE
+            tr -d '\r' < GlassMail.toc | grep -v '^#' | grep '\.lua$' | tr '\\' '/' | sed 's|^|GlassMail/|'
             echo "$lib/LibGlass-1.0.xml"
             echo "$lib/LICENSE"
             tr -d '\r' < "$LIBGLASS/LibGlass-1.0.xml" | perl -0pe 's/<!--.*?-->//gs' |
@@ -99,7 +99,7 @@ jobs:
       - name: The packaged library is the pinned commit
         run: |
           bad=0
-          lib=unpacked/GlassMailbox/Libs/LibGlass-1.0
+          lib=unpacked/GlassMail/Libs/LibGlass-1.0
           while read -r f; do
             case "$f" in
               *.lua|*.xml) cmp -s <(tr -d '\r' < "$lib/$f") <(tr -d '\r' < "$LIBGLASS/$f") ;;
@@ -111,7 +111,7 @@ jobs:
       # The packager must have replaced @project-version@.
       - name: The packaged TOC carries a real version
         run: |
-          v=$(tr -d '\r' < unpacked/GlassMailbox/GlassMailbox.toc | sed -n 's/^## Version: *//p')
+          v=$(tr -d '\r' < unpacked/GlassMail/GlassMail.toc | sed -n 's/^## Version: *//p')
           echo "packaged version: '$v'"
           case "$v" in ''|'@project-version@'|dev) echo "version not substituted"; exit 1 ;; esac
 
@@ -119,7 +119,7 @@ jobs:
       - name: Keep the zip for inspection
         uses: actions/upload-artifact@v4
         with:
-          name: glassmailbox-package
+          name: glassmail-package
           path: .release/*.zip
           include-hidden-files: true
           if-no-files-found: error
@@ -142,13 +142,13 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: glassmailbox-package
+          name: glassmail-package
           path: dist
 
       - name: The zip is the tag's
         run: |
           ls dist
-          zip="dist/GlassMailbox-$TAG-forever.zip"
+          zip="dist/GlassMail-$TAG-forever.zip"
           test -f "$zip" || { echo "no $zip"; exit 1; }
           echo "ZIP=$zip" >> "$GITHUB_ENV"
 
@@ -167,4 +167,4 @@ jobs:
           pre=
           case "${TAG,,}" in *alpha*|*beta*) pre=--prerelease ;; esac
           gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --verify-tag \
-            --title "GlassMailbox ${TAG#v}" --notes-file notes.md $pre
+            --title "GlassMail ${TAG#v}" --notes-file notes.md $pre
