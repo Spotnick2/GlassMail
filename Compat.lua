@@ -25,6 +25,17 @@ function API.IsSecret(v)
     return issecretvalue ~= nil and issecretvalue(v) == true
 end
 
+-- InCombatLockdown() is still false inside the PLAYER_REGEN_DISABLED handler
+-- (porting guide; seen at the mailbox: our controls stayed live). A handler
+-- of the combat events passes them here first, then asks InCombat(). Every
+-- handler does, since the order frames get an event in isn't promised.
+local combat = false
+function API.NoteCombat(event)
+    if event == "PLAYER_REGEN_DISABLED" then combat = true
+    elseif event == "PLAYER_REGEN_ENABLED" then combat = false end
+end
+function API.InCombat() return combat or InCombatLockdown() end
+
 function API.ClientBuild()
     local version, build = GetBuildInfo()
     return tostring(version) .. "." .. tostring(build)

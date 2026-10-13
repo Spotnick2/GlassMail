@@ -329,9 +329,11 @@ update()
 
 -- Combat disables every control.
 click(rows[2].check)
-WoW.combat = true
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.fire("PLAYER_REGEN_DISABLED")   -- InCombatLockdown() is still false here, as on the client
 check(not rows[1].check:IsEnabled() and not rows[1].icon:IsEnabled(), "combat: rows disabled")
+eq(rows[1].icon:GetDisabledTexture()._file, rows[1].icon:GetNormalTexture()._file, "  the icon's disabled look is its own art")
+check(rows[1].icon:GetDisabledTexture()._desaturated, "  greyed")
+WoW.combat = true
 check(not bar.open:IsEnabled() and not bar.ret:IsEnabled() and not bar.clear:IsEnabled(), "  the bar too")
 click(bar.ret)
 eq(GM.Ops.Kind(), nil, "  a click does nothing")

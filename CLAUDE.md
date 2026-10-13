@@ -52,7 +52,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 `GlassMailbox.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMailbox.API`, the only route to client APIs that moved or may be absent:
-  `IsSecret`, `RegisterEvents` (reports failures), `Fail(key, err)` (the **one** failure recorder,
+  `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
+  still false inside the `PLAYER_REGEN_DISABLED` handler), `Fail(key, err)` (the **one** failure recorder,
   read by `/gmail failures`), `PlayerFullName`, `AddOnVersion`, `SafeFrame`, `Button`;
   `MEASURED_ON_BUILD`. A subset of GlassChat's; lift more from there.
 - **`Glass.lua`**: `GlassMailbox.Glass = LibStub("LibGlass-1.0"):New()`, this addon's instance of
