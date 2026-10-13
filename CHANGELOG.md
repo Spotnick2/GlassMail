@@ -25,6 +25,8 @@ Released 2026-10-13. The first release.
 - **At the mailbox:** the gold Open All and Open (n) collected, in one line when you close it (money
   you take by hand from a letter isn't counted). Trades are blocked while it is open, through the
   game's own Block Trades setting, which is put back as it was (`/gmail tradeblock on/off`).
+  `/gmail tradeblock` says who is blocking trades right now, and if the setting can't be put back,
+  a chat line says so and where to turn it off.
 - **New mail:** one chat line with the senders when new mail comes while you are away from the
   mailbox (`/gmail alert on/off`). It goes by the latest senders, so a second mail from the same
   people isn't announced again.

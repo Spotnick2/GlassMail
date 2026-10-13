@@ -99,7 +99,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   another run or a letter is open.
 - **`Comforts.lua`**: X3. The gold Ops confirmed this visit (`Ops.TakeVisitMoney`), said at close;
   the trade block (the `blockTrades` CVar while the mailbox is open; only our own block is undone,
-  nothing written in combat, a per-character claim for crash recovery); the new-mail alert (the
+  nothing written in combat, a per-character claim for crash recovery; never silent: a failed
+  unblock and a login recovery are said in chat, `/gmail tradeblock` names who blocks); the new-mail alert (the
   latest senders changed, away from the mailbox).
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).

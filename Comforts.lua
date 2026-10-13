@@ -42,6 +42,8 @@ local owned = false          -- the CVar's "1" is ours to undo
 local yielded = false        -- someone else turned it off during this visit
 local ours = false           -- true only around our own write (CVAR_UPDATE is synchronous)
 local last                   -- the value last seen, to tell a change from any other CVAR_UPDATE
+local warned = false         -- a failed unblock was said in chat (once, until one works)
+local UNBLOCK_HELP = "Turn off Settings > Social > Block Trades yourself."
 
 local function value()
     local v = GetCVar(CVAR)
@@ -77,10 +79,24 @@ local function sync()
     if want and not owned and value() == "0" then
         if write("1") then claim(true) end
     elseif not want and owned then
-        if write("0") then claim(false) end
+        -- A block left on by mistake is hard to trace in game: never fail silently.
+        if write("0") then
+            claim(false)
+            warned = false
+        elseif not warned then
+            warned = true
+            say("|cffff6060couldn't unblock trades|r (it retries). " .. UNBLOCK_HELP)
+        end
     end
 end
 Comforts.Sync = sync
+
+-- For /gmail tradeblock: who blocks trades right now.
+function Comforts.TradeStatus()
+    if owned then return "trades are blocked by GlassMail until the mailbox closes" end
+    if value() == "1" then return "trades are blocked by the game's Block Trades setting, not by GlassMail" end
+    return "trades aren't blocked"
+end
 
 local function onCVar()
     if ours then return end
@@ -153,8 +169,10 @@ end)
 function Comforts.Start()
     last = value()
     -- The last session ended while we held the block: undo it (sync, out of combat).
-    if GM.charDB.tradeBlocked then owned = true end
+    local leftover = GM.charDB.tradeBlocked == true
+    if leftover then owned = true end
     sync()
+    if leftover and not owned then say("unblocked trades, left blocked when the game last closed at a mailbox.") end
 end
 -- Registered at load: the login UPDATE_PENDING_MAIL pair may come before PLAYER_LOGIN.
 API.RegisterEvents(events, { "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",

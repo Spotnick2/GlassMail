@@ -7,6 +7,7 @@ WoW.cvars.blockTrades = "1"
 local GM = loadAddon({ charDB = { tradeBlocked = true } })
 eq(WoW.cvars.blockTrades, "0", "our block left from the last session: undone at login")
 eq(GlassMailCharDB.tradeBlocked, nil, "  the claim cleared")
+check(chatHas("unblocked trades, left blocked"), "  and said so")
 check(GM.Comforts ~= nil, "  (Comforts started)")
 
 -- A refused restore at login keeps the claim for the next try.

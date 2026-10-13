@@ -142,7 +142,10 @@ local function slash(msg)
     elseif cmd == "glass" then
         if GLASS_ALIAS[arg] then setSkin(GLASS_ALIAS[arg]) else say("/gmail glass on/off") end
     elseif cmd == "tradeblock" then
-        if ONOFF[arg] == nil then return say("/gmail tradeblock on/off") end
+        if ONOFF[arg] == nil then
+            return say("trade block " .. (GM.db.tradeBlock and "on" or "off") .. ": " .. GM.Comforts.TradeStatus()
+                .. ". /gmail tradeblock on/off")
+        end
         Settings.SetTradeBlock(ONOFF[arg])
         say("trade block " .. arg)
     elseif cmd == "alert" then
