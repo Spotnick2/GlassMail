@@ -131,6 +131,11 @@ check(pane and pane.frame:IsShown(), "the reading pane shows")
 eq(pane.frame:GetParent(), InboxFrame, "the pane lives in the inbox")
 check(pane.frame:GetFrameLevel() < MailItem1:GetFrameLevel(), "the pane sits under the rows")
 
+-- The clean material has no grain, and a repaint must not put it back.
+for _, name in ipairs({ "clear", "smoked" }) do
+    eq(GM.Skin.PRESETS[name].grain, GM.Glass.STYLE.grain, name .. ": the clean material's grain (none)")
+end
+
 -- A surface painted in a preset: the body's tint, grain and wash, and the pane.
 local function painted(name)
     local p = GM.Skin.PRESETS[name]

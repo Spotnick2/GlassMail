@@ -10,8 +10,9 @@
 -- for those regions keeps working.
 --
 -- Two glass presets, clear and smoked, plus "stock" (Blizzard's own art). The
--- presets are AltStable's numbers (AltStable/Skin.lua), so the two addons look
--- alike. They differ only in the body (tint, grain, wash) and the pane, never
+-- presets are AltStable's tint, wash and pane numbers (AltStable/Skin.lua), on
+-- LibGlass's clean material (Glass.lua), which has no grain: their grain is 0,
+-- or a repaint would put it back. They differ only in the body (tint, wash) and the pane, never
 -- in the rim: GLASS-MATERIAL.md, a darkened rim reads as smoked plastic.
 -- Unlike AltStable, the switch is live: we own a handful of surfaces and
 -- repaint them (LibGlass SetSurfaceTint, the grain's alpha, the wash's
@@ -40,12 +41,12 @@ GM.Skin = Skin
 -- stack on a section, darker still.
 Skin.PRESETS = {
     clear = {
-        tint = { 0.13, 0.16, 0.22, 0.24 }, grain = 0.45, wash = 0.18,
+        tint = { 0.13, 0.16, 0.22, 0.24 }, grain = 0, wash = 0.18,
         pane = { 0.04, 0.05, 0.07, 0.62 },
         section = { 0.04, 0.05, 0.07, 0.94 },
     },
     smoked = {
-        tint = { 0.05, 0.06, 0.08, 0.62 }, grain = 0.35, wash = 0.14,
+        tint = { 0.05, 0.06, 0.08, 0.62 }, grain = 0, wash = 0.14,
         pane = { 0.03, 0.03, 0.04, 0.80 },
         section = { 0.03, 0.03, 0.04, 0.94 },
     },

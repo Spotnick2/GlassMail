@@ -8,6 +8,11 @@
 -- An instance, not the library itself: the tuning and the font registry are
 -- GlassMail's own and never touch another glass addon's surfaces. Call
 -- sites keep the dot-call shape (Glass.Apply, Glass.Font, Glass.MEDIA, ...).
+--
+-- The clean material (LibGlass r6, issue #14): thin rectangular rims, no
+-- grain, softer gloss and shading. A construction setting: it shapes every
+-- surface built from this instance. The body's tint stays Skin.lua's
+-- (clear / smoked), repainted live.
 
 GlassMail = GlassMail or {}
-GlassMail.Glass = LibStub("LibGlass-1.0"):New()
+GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })
