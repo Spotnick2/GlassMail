@@ -8,12 +8,15 @@ local API = GM.API
 local say = API.Print
 
 -- Account-wide (GlassMailDB): settings, the same on every character.
--- Per character (GlassMailCharDB): nothing yet.
+-- Per character (GlassMailCharDB): tradeBlocked, set while our trade block
+-- holds the CVar (Comforts.lua).
 local DEFAULTS = {
     skin = "clear",   -- the mail windows' look: "clear" or "smoked" glass, or "stock" (Blizzard's own art)
     -- Open All (I1): which mail it takes, and the general bag slots it keeps free.
     openAH = true, openSystem = true, openPlayer = true,
     keepFree = 0,     -- one of GM.Loot.KEEP_FREE
+    -- X3: trades blocked while the mailbox is open, a chat line when new mail comes.
+    tradeBlock = true, newMailAlert = true,
 }
 GM.DEFAULTS = DEFAULTS
 
@@ -68,6 +71,17 @@ function Settings.SetKeepFree(n)
     return true
 end
 
+function Settings.SetTradeBlock(on)
+    GM.db.tradeBlock = on == true
+    GM.Comforts.Sync()
+    return true
+end
+
+function Settings.SetNewMailAlert(on)
+    GM.db.newMailAlert = on == true
+    return true
+end
+
 -- A dev build, by its version: "dev" from the deploy script, or the
 -- packager's token left unreplaced (matched as a pattern, never written whole:
 -- the packager would replace it here too). Unreadable is NOT dev.
@@ -99,6 +113,8 @@ end
 local function helpLines()
     return {
         "/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")",
+        "/gmail tradeblock on/off - block trades while the mailbox is open (" .. (GM.db.tradeBlock and "on" or "off") .. ")",
+        "/gmail alert on/off - a chat line when new mail comes (" .. (GM.db.newMailAlert and "on" or "off") .. ")",
         "/gmail options - open the options page",
         "/gmail failures - what failed to build or register",
         "/gmail version - client build vs the measured one",
@@ -117,12 +133,25 @@ local function setSkin(name)
     end
 end
 
+local ONOFF = { on = true, off = false }
+
 local function slash(msg)
     local cmd, arg = (msg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
     if cmd == "skin" then
         setSkin(arg)
     elseif cmd == "glass" then
         if GLASS_ALIAS[arg] then setSkin(GLASS_ALIAS[arg]) else say("/gmail glass on/off") end
+    elseif cmd == "tradeblock" then
+        if ONOFF[arg] == nil then
+            return say("trade block " .. (GM.db.tradeBlock and "on" or "off") .. ": " .. GM.Comforts.TradeStatus()
+                .. ". /gmail tradeblock on/off")
+        end
+        Settings.SetTradeBlock(ONOFF[arg])
+        say("trade block " .. arg)
+    elseif cmd == "alert" then
+        if ONOFF[arg] == nil then return say("/gmail alert on/off") end
+        Settings.SetNewMailAlert(ONOFF[arg])
+        say("new-mail alert " .. arg)
     elseif cmd == "options" then
         if not GM.Options.Open() then say("Esc > Options > AddOns > Glass Mail") end
     elseif cmd == "failures" then
@@ -160,6 +189,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("ops", GM.Ops.Start)
         start("open all", GM.OpenAll.Start)
         start("inbox", GM.Inbox.Start)
+        start("comforts", GM.Comforts.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.
