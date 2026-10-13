@@ -160,7 +160,7 @@ check(chatLine("couldn't unblock trades") ~= nil, "  said in chat, with where to
 combat(true); combat(false)
 eq(chatLine("couldn't unblock trades"), nil, "  a failed retry doesn't repeat it")
 SlashCmdList.GLASSMAIL("tradeblock")
-check(chatLine("blocked by GlassMail") ~= nil, "  /gmail tradeblock says who blocks trades")
+check(chatLine("still blocked by GlassMail: unblocking failed") ~= nil, "  /gmail tradeblock: ours, the unblock failed")
 eq(GM._test.comforts.owned(), true, "  the claim kept")
 eq(GlassMailCharDB.tradeBlocked, true, "  and its saved flag, for the next login")
 check(GM.failures["trade block"] ~= nil, "  recorded")
@@ -177,6 +177,21 @@ show()
 WoW.cvarRefuse = true
 hide()
 check(chatLine("couldn't unblock trades") ~= nil, "a later failure, after one that worked, warns again")
+WoW.cvarRefuse = nil
+combat(true); combat(false)
+eq(blocked(), "0", "  unblocked on the retry")
+show()
+SlashCmdList.GLASSMAIL("tradeblock")
+check(chatLine("blocked by GlassMail until the mailbox closes") ~= nil, "/gmail tradeblock at the mailbox: ours until it closes")
+WoW.cvarRefuse = true
+hide()
+check(chatLine("couldn't unblock trades") ~= nil, "a failed unblock warns")
+WoW.cvarRefuse = nil
+SetCVar("blockTrades", "0")   -- the player follows the advice
+show()
+WoW.cvarRefuse = true
+hide()
+check(chatLine("couldn't unblock trades") ~= nil, "  unblocked by hand, then failing again on the next visit: warns again")
 WoW.cvarRefuse = nil
 combat(true); combat(false)
 eq(blocked(), "0", "  unblocked on the retry")

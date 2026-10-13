@@ -51,8 +51,10 @@ local function value()
     return v
 end
 
+-- Any change of the claim starts the failed-unblock warning afresh.
 local function claim(on)
     owned = on
+    warned = false
     GM.charDB.tradeBlocked = on or nil
 end
 
@@ -82,7 +84,6 @@ local function sync()
         -- A block left on by mistake is hard to trace in game: never fail silently.
         if write("0") then
             claim(false)
-            warned = false
         elseif not warned then
             warned = true
             say("|cffff6060couldn't unblock trades|r (it retries). " .. UNBLOCK_HELP)
@@ -93,7 +94,8 @@ Comforts.Sync = sync
 
 -- For /gmail tradeblock: who blocks trades right now.
 function Comforts.TradeStatus()
-    if owned then return "trades are blocked by GlassMail until the mailbox closes" end
+    if owned and open then return "trades are blocked by GlassMail until the mailbox closes" end
+    if owned then return "trades are still blocked by GlassMail: unblocking failed (it retries). " .. UNBLOCK_HELP end
     if value() == "1" then return "trades are blocked by the game's Block Trades setting, not by GlassMail" end
     return "trades aren't blocked"
 end
