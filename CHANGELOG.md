@@ -4,7 +4,8 @@
 
 Released 2026-10-13. The first release.
 
-- Two glass looks, **clear** and **smoked**, or Blizzard's own art: `/gmail skin
+- Two glass looks, **clear** and **smoked**, on LibGlass r6's clean material (thin rims, no
+  grain), or Blizzard's own art: `/gmail skin
   clear/smoked/stock` or the options page, switched live. The glass now covers the inset, the inbox
   rows' borders and the divider bars; a reading pane sits under the inbox rows. Under glass the
   letters are dark too, with light text (and a selection colour you can read it on), on the send
