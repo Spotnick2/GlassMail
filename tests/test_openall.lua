@@ -167,9 +167,9 @@ WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 5)
 check(running(), "another interaction's HIDE doesn't stop it")
 click(button)
 check(not running(), "Stop stops it")
-WoW.combat = true
-WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.fire("PLAYER_REGEN_DISABLED")   -- InCombatLockdown() is still false here, as on the client
 check(not button:IsEnabled(), "the button is disabled in combat")
+WoW.combat = true
 click(button)
 check(not running(), "  and can't start a run")
 WoW.combat = false

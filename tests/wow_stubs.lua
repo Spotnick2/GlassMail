@@ -236,6 +236,7 @@ for _, state in ipairs({ "Normal", "Pushed", "Highlight", "Checked", "Disabled" 
     Methods["Get" .. state .. "Texture"] = function(b) return b[key] end
 end
 function Methods.SetTexture(t, file) t._file = file; return true end
+function Methods.SetDesaturated(t, on) t._desaturated = on == true end
 function Methods.SetColorTexture(t, r, g, b, a) t._color = { r, g, b, a } end
 function Methods.SetVertexColor(t, r, g, b, a) t._vertex = { r, g, b, a } end
 function Methods.AddMaskTexture(t, m) t._masks = t._masks or {}; table.insert(t._masks, m) end

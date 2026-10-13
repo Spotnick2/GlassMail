@@ -44,7 +44,7 @@ local function refresh()
     else
         button:SetText("Open All")
         local loaded = GetInboxNumItems()
-        button:SetEnabled((loaded or 0) > 0 and not InCombatLockdown() and not Ops.Running() and not Ops.LetterOpen())
+        button:SetEnabled((loaded or 0) > 0 and not API.InCombat() and not Ops.Running() and not Ops.LetterOpen())
     end
 end
 
@@ -94,7 +94,7 @@ local function onStop(r) summary(r) end
 
 function OpenAll.Toggle()
     if Ops.Kind() == "openall" then return Ops.Stop("stopped") end
-    if Ops.Running() or gamepad() or InCombatLockdown() then return end
+    if Ops.Running() or gamepad() or API.InCombat() then return end
     -- The stock button must be hidden BEFORE SetOpeningAll(true): hiding it
     -- calls SetOpeningAll(false) (session 2).
     local b = stock()
@@ -151,6 +151,7 @@ function OpenAll.Start()
     end
     local events = CreateFrame("Frame")
     events:SetScript("OnEvent", function(_, event)
+        API.NoteCombat(event)
         if event == "MAIL_SHOW" or event == "INPUT_DEVICE_INTERFACE_TRANSITION" then applyMode() end
         if event == "MAIL_INBOX_UPDATE" then refreshCount() end
         refresh()

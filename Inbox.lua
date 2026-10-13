@@ -39,7 +39,7 @@ local bar                    -- { frame, open, ret, clear }
 local itemLines = {}         -- [inbox index] = the tooltip's attachment lines, until the next update
 local snap, counts = { mails = {} }, {}
 
-local function busy() return InCombatLockdown() or Ops.Running() end
+local function busy() return API.InCombat() or Ops.Running() end
 
 -- What the checkboxes show: during the selection's own run, its live targets
 -- (moved to each residual inside Ops, so Blizzard's refresh, which runs
@@ -99,7 +99,10 @@ local function refresh()
             row.action = m.fp and Ops.RowAction(m) or nil
             row.icon:SetShown(row.action ~= nil)
             if row.action then
-                row.icon:SetNormalTexture(row.action == "return" and RETURN_ICON or DELETE_ICON)
+                local file = row.action == "return" and RETURN_ICON or DELETE_ICON
+                row.icon:SetNormalTexture(file)
+                row.icon:SetDisabledTexture(file)   -- greyed: a Button has no disabled look of its own
+                row.icon:GetDisabledTexture():SetDesaturated(true)
                 row.icon:SetEnabled(one and ready)
             end
         end
@@ -197,7 +200,7 @@ end
 
 local function why(row)
     if row.why then return row.why end
-    if InCombatLockdown() then return "Not in combat" end
+    if API.InCombat() then return "Not in combat" end
     if Ops.Running() then return "Busy: wait for the current action" end
     if Ops.LetterOpen() then return "Close the letter first" end
 end
@@ -317,6 +320,7 @@ function Inbox.Start()
     end
     local events = CreateFrame("Frame")
     events:SetScript("OnEvent", function(_, event, arg1)
+        API.NoteCombat(event)
         if event == "MAIL_INBOX_UPDATE" then
             itemLines = {}
         elseif event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
