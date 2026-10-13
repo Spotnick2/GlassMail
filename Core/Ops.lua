@@ -20,8 +20,8 @@
 -- opened mid-run stops the run; the one action already sent can't be
 -- recalled, the same window Blizzard's own Open All and shift-click leave.
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local Scan, Loot = GM.Scan, GM.Loot
 local Ops = {}

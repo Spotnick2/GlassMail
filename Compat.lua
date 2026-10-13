@@ -1,12 +1,12 @@
 -- Compat.lua: the one place this addon touches client APIs that moved, may be
 -- absent, or behave differently on WoW: Forever. Everything else calls through
--- GlassMailbox.API. Nothing is injected into _G.
+-- GlassMail.API. Nothing is injected into _G.
 --
 -- A subset of GlassChat's Compat.lua (same measured rules); lift more from
 -- there, or from GlassRaidFrames', when needed rather than rewriting.
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = {}
 GM.API = API
 
@@ -15,7 +15,7 @@ GM.API = API
 GM.MEASURED_ON_BUILD = "1.60.1.70291"
 
 function API.Print(msg)
-    print("|cff7fd4ffGlassMailbox|r " .. msg)
+    print("|cff7fd4ffGlassMail|r " .. msg)
 end
 
 -- True for a Retail secret value. Such a value may be handed back to the

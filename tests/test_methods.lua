@@ -27,7 +27,7 @@ WoW.fireAllRegistered()
 WoW.tick()
 GM.Options._test.panel:Show()
 for _, cmd in ipairs({ "", "failures", "version", "glass off", "glass on", "options" }) do
-    SlashCmdList.GLASSMAILBOX(cmd)
+    SlashCmdList.GLASSMAIL(cmd)
 end
 
 local n = 0

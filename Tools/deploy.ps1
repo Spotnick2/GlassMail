@@ -1,5 +1,5 @@
 <#
-    deploy.ps1 - Copy GlassMailbox (and optionally MailProbe) into the Forever AddOns folder.
+    deploy.ps1 - Copy GlassMail (and optionally MailProbe) into the Forever AddOns folder.
 
     The repo keeps "## Version: @project-version@" for the packager; the deployed
     copy gets "dev". The repo copy is never modified.
@@ -11,7 +11,7 @@
     is $env:LIBGLASS, else ..\LibGlass. (GlassChat's deploy, trimmed.)
 
     Usage:
-        pwsh Tools/deploy.ps1               # GlassMailbox
+        pwsh Tools/deploy.ps1               # GlassMail
         pwsh Tools/deploy.ps1 -Probe        # ...and MailProbe
         pwsh Tools/deploy.ps1 -ProbeOnly    # just MailProbe
         pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
@@ -31,7 +31,7 @@ if (-not (Test-Path $AddOnsPath)) { Write-Error "AddOns path not found: $AddOnsP
 $LibGlass = if ($env:LIBGLASS) { $env:LIBGLASS } else { Join-Path (Split-Path -Parent $RepoRoot) "LibGlass" }
 
 function Deploy-Addon {
-    $dest = Join-Path $AddOnsPath "GlassMailbox"
+    $dest = Join-Path $AddOnsPath "GlassMail"
     if (-not (Test-Path -LiteralPath (Join-Path $LibGlass "Tools\deploy.ps1"))) {
         Write-Error "LibGlass checkout not found at $LibGlass (clone github.com/Spotnick2/LibGlass there, or set `$env:LIBGLASS)"
         exit 1
@@ -39,14 +39,14 @@ function Deploy-Addon {
     Write-LibGlassPinStatus $RepoRoot $LibGlass "this deploy tests a library the release won't ship"
     # The library first: its deploy checks the checkout and may refuse, and a
     # refusal must leave the deployed addon as it was.
-    & pwsh -NoProfile -File (Join-Path $LibGlass "Tools\deploy.ps1") -Addon GlassMailbox -AddOnsPath $AddOnsPath
-    if ($LASTEXITCODE -ne 0) { Write-Error "LibGlass deploy refused; GlassMailbox was not touched"; exit 1 }
-    Write-Host "Deploying GlassMailbox -> $dest" -ForegroundColor Cyan
+    & pwsh -NoProfile -File (Join-Path $LibGlass "Tools\deploy.ps1") -Addon GlassMail -AddOnsPath $AddOnsPath
+    if ($LASTEXITCODE -ne 0) { Write-Error "LibGlass deploy refused; GlassMail was not touched"; exit 1 }
+    Write-Host "Deploying GlassMail -> $dest" -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
     # The TOC is the list of what ships (subfolders included, e.g. Core\).
-    $lua = @(Get-Content -LiteralPath (Join-Path $RepoRoot "GlassMailbox.toc") | ForEach-Object { $_.Trim() } |
+    $lua = @(Get-Content -LiteralPath (Join-Path $RepoRoot "GlassMail.toc") | ForEach-Object { $_.Trim() } |
         Where-Object { $_ -notmatch "^#" -and $_ -match "[.]lua$" })
-    $files = @("GlassMailbox.toc", "LICENSE") + $lua
+    $files = @("GlassMail.toc", "LICENSE") + $lua
     foreach ($f in $files) {
         $src = Join-Path $RepoRoot $f
         $to = Join-Path $dest $f

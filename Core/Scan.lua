@@ -5,8 +5,8 @@
 -- MAIL_INBOX_UPDATE, so each mail carries a fingerprint, and a remembered
 -- target is found again by fingerprint before any action (CLAUDE.md).
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local Scan = {}
 GM.Scan = Scan

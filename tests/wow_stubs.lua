@@ -17,7 +17,7 @@
 --   so test_methods.lua can check each against the dump's widget methods.
 
 WoW = {}
-local DUMP = os.getenv("GLASSMAILBOX_API_DUMP") or "C:/Projects/WoW/References/forever-api-1.60.1.70291.md"
+local DUMP = os.getenv("GLASSMAIL_API_DUMP") or "C:/Projects/WoW/References/forever-api-1.60.1.70291.md"
 WoW.DUMP = DUMP
 
 --------------------------------------------------------------------------------
@@ -700,7 +700,7 @@ InputUtil = { IsGamepadUIEnabled = function() return WoW.gamepad end }
 
 -- Strict globals: any read of an undefined global is an error, except the
 -- addon's own globals that are legitimately nil before first assignment.
-local allowNil = { GlassMailbox = true, GlassMailboxDB = true, GlassMailboxCharDB = true, MailProbeDB = true,
+local allowNil = { GlassMail = true, GlassMailDB = true, GlassMailCharDB = true, MailProbeDB = true,
     LibStub = true }
 -- Client string alias (in the dump's _G walk); LibStub's version check uses it.
 strmatch = string.match

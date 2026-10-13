@@ -1,4 +1,4 @@
-# Glass Mailbox
+# Glass Mail
 
 A mailbox addon for **World of Warcraft: Forever**, in the liquid-glass look of the Glass addons.
 

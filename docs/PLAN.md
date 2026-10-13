@@ -1,4 +1,4 @@
-# GlassMailbox plan
+# GlassMail plan
 
 What is built, in what order. The features are defined in [FEATURES.md](FEATURES.md). The plan was
 reviewed adversarially with Codex (gpt-6-astra, high effort) over three rounds, to consensus; the

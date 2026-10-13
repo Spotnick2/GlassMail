@@ -45,7 +45,7 @@ timeout 300 codex exec \
 - **`-s read-only`** — advisory/design use: Codex can read but not edit the tree. Use
   `-s workspace-write` only when you actually want it to make changes.
 - **`--skip-git-repo-check`** — safe to run regardless of git state.
-- **`-c model_reasoning_effort=high`** — the owner's standing choice for GlassMailbox reviews
+- **`-c model_reasoning_effort=high`** — the owner's standing choice for GlassMail reviews
   (2026-10-09: "use gpt-6-astra at high effort, loop until you both reach consensus"). Loop
   rounds: round 1 asks for BLOCKER/SHOULD/NIT findings; later rounds ask RESOLVED / NOT RESOLVED
   per finding and end on one line, "CONSENSUS: ..." or "NO CONSENSUS: ...". Add
@@ -77,7 +77,7 @@ nothing, and a whole run is wasted. In code-review mode say the opposite — *"y
 read-only sandbox, read the files yourself with whatever shell commands you need; the sandbox
 already prevents edits."* `-s read-only` is what enforces safety, not the prompt.
 
-For GlassMailbox, good things to hand Codex:
+For GlassMail, good things to hand Codex:
 - anything that takes, returns, deletes or sends mail: index revalidation after inbox updates,
   pacing, what counts as success, what happens when the mailbox closes mid-run;
 - anything that touches a Blizzard mail frame or the send path (`SendMail`, secure transfer),

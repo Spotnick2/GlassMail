@@ -231,14 +231,14 @@ check(not GM.Settings.SetSkin("frosted"), "an unknown skin is refused")
 eq(GM.db.skin, "smoked", "  and the setting stays")
 
 -- /gmail skin, and M0's /gmail glass on/off as its alias.
-SlashCmdList.GLASSMAILBOX("skin clear")
+SlashCmdList.GLASSMAIL("skin clear")
 eq(GM.db.skin, "clear", "/gmail skin clear")
-SlashCmdList.GLASSMAILBOX("glass off")
+SlashCmdList.GLASSMAIL("glass off")
 eq(GM.db.skin, "stock", "/gmail glass off is stock")
-SlashCmdList.GLASSMAILBOX("glass on")
+SlashCmdList.GLASSMAIL("glass on")
 eq(GM.db.skin, "clear", "/gmail glass on is clear glass")
 newChat()
-SlashCmdList.GLASSMAILBOX("skin purple")
+SlashCmdList.GLASSMAIL("skin purple")
 check(chatHas("/gmail skin clear/smoked/stock"), "an unknown skin prints the choices")
 eq(GM.db.skin, "clear", "  and changes nothing")
 

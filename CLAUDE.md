@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-GlassMailbox is a **mailbox addon for World of Warcraft: Forever 1.60.1** (Interface `16001`),
+GlassMail is a **mailbox addon for World of Warcraft: Forever 1.60.1** (Interface `16001`),
 written in **Lua 5.1**. It has a single owner (Spotnick) and uses the same stack and conventions
 as the sibling Forever addons, above all `..\GlassChat` (the template for this repo's tooling,
 tests and CI) and `..\AltStable` (the character tracker it integrates with). When this file
@@ -49,14 +49,14 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
 `Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Inbox.lua` → `Options.lua` →
-`GlassMailbox.lua`. The mail core (`Core\`) loads before the feature files.
+`GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
-- **`Compat.lua`**: `GlassMailbox.API`, the only route to client APIs that moved or may be absent:
+- **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
   still false inside the `PLAYER_REGEN_DISABLED` handler), `Fail(key, err)` (the **one** failure recorder,
   read by `/gmail failures`), `PlayerFullName`, `AddOnVersion`, `SafeFrame`, `Button`;
   `MEASURED_ON_BUILD`. A subset of GlassChat's; lift more from there.
-- **`Glass.lua`**: `GlassMailbox.Glass = LibStub("LibGlass-1.0"):New()`, this addon's instance of
+- **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New()`, this addon's instance of
   the material. Material changes are LibGlass PRs.
 - **`Skin.lua`**: the look, `GM.db.skin` = `clear` / `smoked` (glass presets, AltStable's
   numbers) or `stock`. A glass panel under each mail window and a reading pane under the inbox
@@ -99,7 +99,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   another run or a letter is open.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns.
-- **`GlassMailbox.lua`**: bootstrap, saved settings (only what the player set is saved), the
+- **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the
   `Settings` helpers, `/gmail`.
 - **`Tools/MailProbe/`**: the throwaway measurement addon (`/mailprobe help`).
 
@@ -148,10 +148,10 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 
 ## Forever basics (shared with the siblings)
 
-- One plain `GlassMailbox.toc`, `## Interface: 16001` (**`11601` is a transposed-digit bug**). Never
+- One plain `GlassMail.toc`, `## Interface: 16001` (**`11601` is a transposed-digit bug**). Never
   commit a literal version over `@project-version@`; the deploy script writes `dev` into its copy.
-- One global namespace, `GlassMailbox`; files start `GlassMailbox = GlassMailbox or {}` and alias
-  it `local GM = GlassMailbox`. A `_test` seam table exposes file-local internals to tests.
+- One global namespace, `GlassMail`; files start `GlassMail = GlassMail or {}` and alias
+  it `local GM = GlassMail`. A `_test` seam table exposes file-local internals to tests.
 - **Secret values:** test with `issecretvalue(v)` **before** any other use; never save one.
 - **`RegisterEvent` throws on unknown names and returns `false` for refusals**: always
   `API.RegisterEvents`.

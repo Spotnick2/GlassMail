@@ -25,8 +25,8 @@
 -- MailTextFontNormal / InvoiceTextFontNormal, which other windows use too.
 -- Under "stock" every colour goes back to what it was.
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local Glass = GM.Glass
 local Skin = {}

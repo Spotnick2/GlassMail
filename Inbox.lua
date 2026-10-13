@@ -14,8 +14,8 @@
 -- after Blizzard's own lines (it rebuilds them every frame while the tooltip
 -- is up, MailFrame.xml:160, so the hook runs every frame too).
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local Scan, Ops = GM.Scan, GM.Ops
 local say = API.Print

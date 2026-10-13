@@ -1,14 +1,14 @@
--- GlassMailbox.lua: bootstrap, saved settings, the settings helpers and the
+-- GlassMail.lua: bootstrap, saved settings, the settings helpers and the
 -- /gmail command. Loads last: every module is defined by now.
 
 local ADDON = ...
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local say = API.Print
 
--- Account-wide (GlassMailboxDB): settings, the same on every character.
--- Per character (GlassMailboxCharDB): nothing yet.
+-- Account-wide (GlassMailDB): settings, the same on every character.
+-- Per character (GlassMailCharDB): nothing yet.
 local DEFAULTS = {
     skin = "clear",   -- the mail windows' look: "clear" or "smoked" glass, or "stock" (Blizzard's own art)
     -- Open All (I1): which mail it takes, and the general bag slots it keeps free.
@@ -27,8 +27,8 @@ local function validKeepFree(n)
 end
 
 local function ensureDefaults()
-    if type(GlassMailboxDB) ~= "table" then GlassMailboxDB = {} end
-    local db = GlassMailboxDB
+    if type(GlassMailDB) ~= "table" then GlassMailDB = {} end
+    local db = GlassMailDB
     for k, v in pairs(DEFAULTS) do
         if db[k] == v then db[k] = nil end
     end
@@ -37,8 +37,8 @@ local function ensureDefaults()
     if db.keepFree ~= nil and not validKeepFree(db.keepFree) then db.keepFree = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     setmetatable(db, { __index = DEFAULTS })
-    if type(GlassMailboxCharDB) ~= "table" then GlassMailboxCharDB = {} end
-    return db, GlassMailboxCharDB
+    if type(GlassMailCharDB) ~= "table" then GlassMailCharDB = {} end
+    return db, GlassMailCharDB
 end
 
 -- Every setting goes through here: /gmail and the options page.
@@ -72,12 +72,12 @@ end
 -- packager's token left unreplaced (matched as a pattern, never written whole:
 -- the packager would replace it here too). Unreadable is NOT dev.
 function GM.IsDev()
-    local v = API.AddOnVersion(ADDON or "GlassMailbox")
+    local v = API.AddOnVersion(ADDON or "GlassMail")
     return v ~= nil and (v == "dev" or v:find("@project%-version@") ~= nil)
 end
 
 function GM.VersionText()
-    local v = API.AddOnVersion(ADDON or "GlassMailbox")
+    local v = API.AddOnVersion(ADDON or "GlassMail")
     if v == nil or v == "" or GM.IsDev() then return "dev" end
     return v
 end
@@ -124,7 +124,7 @@ local function slash(msg)
     elseif cmd == "glass" then
         if GLASS_ALIAS[arg] then setSkin(GLASS_ALIAS[arg]) else say("/gmail glass on/off") end
     elseif cmd == "options" then
-        if not GM.Options.Open() then say("Esc > Options > AddOns > Glass Mailbox") end
+        if not GM.Options.Open() then say("Esc > Options > AddOns > Glass Mail") end
     elseif cmd == "failures" then
         failures()
     elseif cmd == "version" then
@@ -135,9 +135,9 @@ local function slash(msg)
     end
 end
 
-SLASH_GLASSMAILBOX1 = "/gmail"
-SLASH_GLASSMAILBOX2 = "/glassmailbox"
-SlashCmdList.GLASSMAILBOX = slash
+SLASH_GLASSMAIL1 = "/gmail"
+SLASH_GLASSMAIL2 = "/glassmail"
+SlashCmdList.GLASSMAIL = slash
 
 local function start(key, fn)
     local ok, err = pcall(fn)

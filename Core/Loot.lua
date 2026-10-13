@@ -7,8 +7,8 @@
 -- free-slot reserve ("keep N free") counts general bags only, as Blizzard's
 -- own total does. Bags 0-4 only: the reagent bag (5) is unmeasured.
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local Loot = {}
 GM.Loot = Loot
 

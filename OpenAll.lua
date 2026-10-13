@@ -8,8 +8,8 @@
 -- binding: we leave it alone there and don't offer ours. Reasoned, not
 -- measured (no gamepad); a mode change stops our run (Core/Ops.lua).
 
-GlassMailbox = GlassMailbox or {}
-local GM = GlassMailbox
+GlassMail = GlassMail or {}
+local GM = GlassMail
 local API = GM.API
 local Scan, Loot, Ops = GM.Scan, GM.Loot, GM.Ops
 local say = API.Print

@@ -1,4 +1,4 @@
--- MailProbe: the throwaway measurement addon for GlassMailbox (M0, and M1's
+-- MailProbe: the throwaway measurement addon for GlassMail (M0, and M1's
 -- session 5). It answers the questions docs/PLAN.md's probe checklist leaves
 -- open before any feature code is written. Every line it prints also goes to
 -- MailProbeDB.log (SavedVariables), so a full client exit leaves the session
