@@ -33,17 +33,24 @@ end
 local function money(c) return C_CurrencyInfo.GetCoinTextureString(c) end
 
 -- "Open All", or "Stop (n)" with the mails still offering something.
+-- Disabled during another run (the selection's, a Return) and while a letter
+-- is open (Core/Ops.lua).
 local function refresh()
     if not button then return end
-    if Ops.Running() then
+    if Ops.Kind() == "openall" then
         local ok, t = pcall(Loot.Tally, Scan.Inbox(), Loot.Bags(), opts())
         button:SetText("Stop (" .. (ok and t.left or "?") .. ")")
         button:Enable()
     else
         button:SetText("Open All")
         local loaded = GetInboxNumItems()
-        button:SetEnabled((loaded or 0) > 0 and not InCombatLockdown())
+        button:SetEnabled((loaded or 0) > 0 and not InCombatLockdown() and not Ops.Running() and not Ops.LetterOpen())
     end
+end
+
+-- The selection bar (Inbox.lua) takes the count's place while it shows.
+function OpenAll.ShowCount(on)
+    if count then count:SetShown(on) end
 end
 
 -- The message count: "5 messages", or "5 of 120 messages" past the loaded window.
@@ -81,20 +88,18 @@ local function summary(r)
     if r.more then line = line .. ". More mail waits on the server: reopen the mailbox." end
     say(line)
 end
+OpenAll.Summary = summary   -- the selection's Open (n) ends with the same line
 
-local function onStop(r)
-    summary(r)
-    refresh()
-end
+local function onStop(r) summary(r) end
 
 function OpenAll.Toggle()
-    if Ops.Running() then return Ops.Stop("stopped") end
-    if gamepad() or InCombatLockdown() then return end
+    if Ops.Kind() == "openall" then return Ops.Stop("stopped") end
+    if Ops.Running() or gamepad() or InCombatLockdown() then return end
     -- The stock button must be hidden BEFORE SetOpeningAll(true): hiding it
     -- calls SetOpeningAll(false) (session 2).
     local b = stock()
     if b and b:IsShown() then b:Hide() end
-    if Ops.OpenAll(opts(), onStop, refresh) then refresh() end
+    Ops.OpenAll(opts(), onStop, refresh)
 end
 
 local TYPES = { { "openAH", "Auction House" }, { "openSystem", "System mail" }, { "openPlayer", "Player mail" } }
@@ -138,6 +143,12 @@ function OpenAll.Start()
         end)
     end
     if inbox.Update then hooksecurefunc(inbox, "Update", function() refreshCount(); refresh() end) end
+    Ops.Watch(refresh)
+    local letter = rawget(_G, "OpenMailFrame")
+    if letter then
+        letter:HookScript("OnShow", refresh)
+        letter:HookScript("OnHide", refresh)
+    end
     local events = CreateFrame("Frame")
     events:SetScript("OnEvent", function(_, event)
         if event == "MAIL_SHOW" or event == "INPUT_DEVICE_INTERFACE_TRANSITION" then applyMode() end

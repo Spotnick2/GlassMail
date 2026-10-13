@@ -17,3 +17,8 @@
   GM mail are left for you. It stops when the mailbox closes, in combat, if anything else takes
   or returns mail, or when a take isn't confirmed within 5 s, and prints one line with what it
   took and what it left. The inbox shows how many messages it holds.
+- **Select mail** with a checkbox on each row (shift-click for a range, ctrl-click for everything
+  from that sender), then **Open** the selection or **Return next**, one mail per click. Each row
+  also has a Return or Delete icon (Delete only for an empty mail), and its tooltip lists every
+  attachment and the full subject. Identical mails can't be selected, nothing runs while a letter
+  is open, and the controls wait out combat.
