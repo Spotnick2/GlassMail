@@ -14,7 +14,8 @@ local GM = loadAddon()
 local T = GM._test.skin
 check(GM.Skin.IsSkinned(OpenMailFrame), "the open letter's window is skinned")
 eq(T.letters.OpenMailFrame, nil, "its letter isn't built")
-eq(children(OpenMailFrame), before + 2, "  and no orphan pane is left (only the glass panel and its section were added)")
+eq(children(OpenMailFrame), before + 3,
+    "  and no orphan pane is left (only the glass panel, its section and the portrait were added)")
 eq(OpenStationeryBackgroundLeft:GetAlpha(), 1, "  its stationery stays")
 check(OpenMailBodyText:GetTextColor("P") < 0.5, "  and its text stays dark")
 check(GM.failures["skin letter OpenMailFrame"] ~= nil, "the failure is recorded")

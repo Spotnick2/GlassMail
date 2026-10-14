@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- An open letter's portrait is the glass scroll under glass, to match the mail window's envelope.
+
 ## v0.1.0
 
 Released 2026-10-13. The first release.
