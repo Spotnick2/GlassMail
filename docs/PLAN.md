@@ -17,7 +17,7 @@ review's main corrections are listed at the end.
   `Core/Loot.lua`), the skin finished in clear and smoked glass, I1, I2, I3, X3, with the operation
   records that confirm each action succeeded. Five PRs: look → probe session 5 → core + I1 →
   I2 + I3 → X3 + v0.1.0. See "M1" below.
-- **M2:** S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI,
+- **M2** *(planned, #17; reviewed, see "M2" below)*: S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI,
   and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here.
 - **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
@@ -129,6 +129,237 @@ review's main corrections are listed at the end.
   - overflow past 100 mails;
   - row controls parented to InboxFrame, in combat;
   - `HasNewMail` and the minimap icon.
+
+## M2 (reviewed with Codex, 5 rounds, consensus; #17)
+
+The memory milestone: S1, X2, X1, I4, and `Core/Names` / `Core/Summary`. Research behind it
+(2026-10-13): Blizzard's send path (MailFrame.lua:1251-1278, 145-183), the secure-transfer UI
+(Blizzard_SecureTransferUI.lua:110-124, 288-304), AltStable's public API (PublicAPI.lua, v1) and
+its mail rule (Core.lua:2717-2772), the API dump, and FOREVER-PROBE sessions 2-3 (a send confirmed
+4.3 s, ~15 s and 99 s after `SendMail`; the picker's `SetText` then Send worked for an alt).
+
+**What the owner wants most** (2026-10-13): "where did I just send that?" without a tour of every
+alt. The window is organised like Gmail: **Inbox** (every character's mailbox), **Sent**, and
+**Trash** (deleted mail, kept until it would have expired, then gone by itself). Drafts and Spam are
+later ideas, not M2.
+
+### The rule for everything saved: it ends by itself (owner, 2026-10-13)
+
+Lists that only grow (Prat's dead characters) are out. Every saved list has an end of life and
+needs no cleanup pass:
+- **Live, never saved:** friends (`C_FriendList`), the guild roster (`GetGuildRosterInfo`), and
+  AltStable's characters. Read when the picker or window opens.
+- **A play-day clock.** `GlassMailDB.playDay` counts the calendar days on which any character of
+  the account played. The local date is checked at `PLAYER_LOGIN`, before any record is written or
+  pruned, and on a 10-minute ticker; the counter advances at most once per date, so a session over
+  midnight counts both days. Ages that should survive a break are in play days: months away change
+  nothing.
+- **Setting `expiryDays`** (default 30 play days; choices 7 / 14 / 30 / 60 / 90): a recent
+  recipient not sent to, an own character not played, and a Sent record, that many play days old,
+  are dropped (at login and on the date change).
+- **Setting `recentMax`** (default 20; choices 10 / 20 / 50): the oldest recent recipient goes.
+- **Real-time ends for real-time things:** mail expires whether you play or not. A snapshot whose
+  last mail has expired (`expires < time()`) is dropped, and its expired mails are left out when
+  shown; a Trash entry goes when the mail it held would have expired.
+- **A snapshot goes with its character** (aged out of the registry). AltStable's "forget" is not
+  mirrored: absence from `GetCharacters()` can't be told from "never known" (a fresh AltStable),
+  and a lost snapshot costs a mailbox visit, a wrong one costs trust.
+- **Every row in the window has a forget action.**
+- **Versioning:** `GlassMailDB.version` covers the new data subtrees (`chars`, `recents`,
+  `snapshots`, `sent`, `trash`) only. A subtree of an unknown or unreadable shape is dropped,
+  never half-read; the settings keep their existing per-key validation (`ensureDefaults`), so a
+  v0.1.0 player's look and Open All choices survive.
+
+### `Core/Names.lua`
+
+- `Names.Key(name)`: the comparison key. Trimmed, inner spaces collapsed, lower-cased. A `-Realm`
+  suffix is **kept** (part of the key) until session 6 shows what the server accepts; candidates
+  with a suffix other than the current realm's are left out of the picker meanwhile.
+- `Names.Display(name)`: trimmed, as the player would type it.
+- A secret name (`issecretvalue`) is never keyed or stored; it is skipped.
+
+### The character registry (S1, X1)
+
+- **Own characters**, account-wide, keyed by GUID: `{ name, realm, faction, lastPlayDay }`,
+  written at `PLAYER_LOGIN` (`UnitGUID`, `API.PlayerFullName`, `GetRealmName`, the
+  `UnitFactionGroup` tag). Aged by `expiryDays`.
+- **AltStable**, when loaded (`## OptionalDeps: AltStable`, `PUBLIC_API_VERSION == 1`):
+  `GetCharacters()` (copies; GUID, name, realm, faction, class, account, hidden, current) and the
+  `CharactersChanged` callback, only to refresh what is shown. Nothing from it is saved.
+- **Reachability**, until session 6 measures it: an own character is offered as a recipient when
+  its faction tag and realm name match the current character's.
+
+### Sent (X2, `Core/Sent.lua`)
+
+A send is captured as it is made and kept, in the state its outcome justifies:
+- **Capture** in `hooksecurefunc("SendMail", ...)` (MailFrame.lua:1273, the only caller; the
+  gamepad footer ends there too, MailFrame.lua:1200). The draft is still in place then (Blizzard
+  resets it only on `MAIL_SEND_SUCCESS`, MailFrame.lua:152-158; session 6 confirms): recipient and
+  subject from the arguments, `GetSendMailMoney()`, `GetSendMailCOD()`, slots
+  1..`ATTACHMENTS_MAX_SEND` by `GetSendMailItem` (itemID, count; no links). Record `{ day, at, char,
+  to, subject, money, cod, items, state = "pending" }`.
+- **States:** `pending` while in memory only; saved as `sent` or `unconfirmed`. `failed` becomes a
+  third saved state only if session 6 proves the case below. An unconfirmed send still shows in Sent, marked,
+  because "where did I send that?" needs it too. There is no inferred `failed`: `MAIL_FAILED`
+  carries no action identity (MailInfoDocumentation.lua:90-97) and an inbox action started before
+  the `SendMail` can report late. A failure leaves the record unconfirmed. Only a failure session 6
+  proves is tied to the call itself (for example one delivered inside `SendMail`) may mark it
+  failed.
+- **Attribution, conservative:**
+  - `sent` only on a `MAIL_SEND_SUCCESS` (a send-only event) while exactly one send is pending and
+    no overlap happened this session.
+  - **Overlap:** a second `SendMail` while one is pending makes both unconfirmed, and **every later
+    send of the session stays unconfirmed**: a late success (99 s measured) from an earlier one
+    could otherwise confirm the wrong record. A `/reload` or a new login starts clean. Session 6
+    measures whether outcomes keep order; only then could this be narrowed.
+  - **A mailbox close does not end a pending send** (a success came 99 s after `SendMail`): a later
+    `MAIL_SEND_SUCCESS` in the same session still confirms it. At logout, a pending send is saved as
+    unconfirmed.
+  - **The stranger confirmation:** accepting sends through `C_SecureTransfer.SendMail()` in the
+    secure environment, unseen by our hook, but the outcome still arrives as `MAIL_SEND_SUCCESS` /
+    `MAIL_FAILED`. A cancelled confirmation leaves the send pending, then unconfirmed; session 6
+    shows whether `SECURE_TRANSFER_CANCEL` reaches an addon and belongs to this dialog before it is
+    used.
+- `SendMail` joins Ops' foreign-call hooks: a send stops any Ops run (session 6 checks whether a
+  failure can fire inside `SendMail`, before the post-hook).
+- **Returns go to Sent too**, as "returned to <sender>": a return is mail travelling back. Captured
+  like a delete (below).
+- A `sent` record updates the recent recipients (`Names.Key` → `{ name, day }`).
+- Expiry: `expiryDays` play days, and at most 1000 records.
+
+### Trash (`Core/Trash.lua`)
+
+- **Capture depends on session 6** (session 4 saw the inbox shrink before `MAIL_SUCCESS` after a
+  return, but not what a post-hook sees):
+  - **If** the `DeleteInboxItem` / `ReturnInboxItem` post-hook still finds the mail at its index and
+    a later `MAIL_INBOX_UPDATE` follows: every call, ours or Blizzard's (the letter's Delete button),
+    is captured from a fresh `Scan` at the hook, with its contents and `expires`, and **confirmed**
+    when that update shows its fingerprint's count and the loaded count each fell by one, within
+    5 s; otherwise dropped.
+  - **Otherwise:** only removals whose mail we knew before the call are captured: Ops' own Return
+    and Delete (the mail is scanned before dispatch), and Blizzard's letter buttons through the open
+    letter: a scan of the mail at `InboxFrame.openMailID` (read, never written) taken when the letter
+    opens, and **re-checked on every `MAIL_INBOX_UPDATE`**: it stays valid only while the mail at
+    that index has the same fingerprint **and that fingerprint is unique in the inbox** (M1's rule:
+    twins aren't interchangeable). A shift, or a twin anywhere in the inbox, voids the letter's
+    capture, and that removal is left out.
+    Removals that can't be attributed are left out, and the UI says Trash holds what Glass Mail saw.
+  - Either way: one capture at a time; **any later inbox-changing call (Take, money, AutoLoot,
+    Return, Delete; Ops' hooks see them all) drops a capture still outstanding**, so a take that
+    empties a mail can't confirm a return; an unresolved mail (missing link, secret) is not
+    captured.
+- A confirmed delete goes to Trash; a confirmed return to Sent ("returned to").
+- Trash shows only in its folder, never in Inbox. Each entry goes when the mail would have expired.
+- Takes by hand (shift-click, the letter's buttons) are not recorded: frequent, paced by the
+  player, and not an answer to "where did it go?".
+
+### S1: the address book picker (`Address.lua`)
+
+- **Our button** to the right of `SendMailNameEditBox` (a child of SendMailFrame), opening a
+  `MenuUtil.CreateContextMenu` with sections, each skipped when empty:
+  1. **My characters**: AltStable's list if loaded, else the registry; reachable ones only, not
+     the current character, AltStable's hidden ones left out.
+  2. **Recent**: newest first.
+  3. **Friends**: `C_FriendList.GetFriendInfoByIndex` (WoW friends), read now.
+  4. **Guild**: the roster, read now, in a submenu with `SetScrollMode`;
+     `C_GuildInfo.GuildRoster()` is requested when the picker opens.
+  Each name appears once (by `Names.Key`, first section wins).
+- **Picking fills the box**: `SendMailNameEditBox:SetText(name)` and nothing else (Blizzard's own
+  reply does the same, MailFrame.lua:1088). `SetText` raises no autocomplete (`userInput` false,
+  AutoComplete.lua:367-378) and re-runs `SendMailFrame_CanSend`. The player still clicks Send, and
+  any confirmation.
+- **Ships only after session 6** shows a picked name then Send to a stranger, through the
+  confirmation, raises no `ADDON_ACTION_BLOCKED` / `_FORBIDDEN` (the alt case passed in session 3).
+- **Contacts** (a saved list the player curates) are **cut**: recents, friends and guild cover
+  them, and a hand-kept list is the upkeep the owner wants gone. FEATURES.md is updated.
+
+### Inbox (X1): alt mailbox memory (`Core/Summary.lua`, `Core/Memory.lua`)
+
+- **Snapshot** per character (account-wide, keyed by GUID), from `Scan.Inbox()` on each
+  `MAIL_INBOX_UPDATE` while the mailbox is open: `{ at, loaded, total, complete, mails = { {
+  sender, subject, money, cod, expires, type, wasReturned, items = { { itemID, count } } } } }`,
+  `expires = time() + daysLeft * 86400` rounded down to the minute (AltStable's rule). No letter
+  text (it would mark mail read).
+- **What may replace a snapshot:** only a scan whose every mail is resolved, taken after the visit's
+  first `MAIL_INBOX_UPDATE` (the inbox before it is stale or empty). `complete` is
+  `loaded == total`; a partial scan (over 100 mails) is still the newest truth and replaces the old
+  one, shown as "N of M loaded". FEATURES.md's X1 line is updated to say this.
+- **`Summary.Of(snapshot)`**: AltStable's rule exactly (Core.lua:2745-2750): mails with items or
+  money and days left, their count, money, and the soonest expiry; empty when none. Its first
+  consumer is the Inbox folder's character rows. (M3 moves it to LibMailbox; AltStable keeps its
+  fields.)
+
+### The window (`Window.lua`)
+
+Our own glass window (LibGlass panel, ScrollBox lists), opened by `/gmail mail` and a small button
+on MailFrame's title. It opens on **Sent**, the owner's first question. Folders down the left, like
+Gmail:
+- **Inbox**: one row per character (name, "last seen 3 days ago", the summary; partial marked),
+  opening into its mails.
+- **Sent**: newest first: to whom, when, state, subject, money, items. The default search target.
+- **Trash**: deleted mail, with "gone in N days".
+A search box above searches the open folder: names, subjects, and item names
+(`C_Item.GetItemNameByID`; an uncached name fills in on `GET_ITEM_INFO_RECEIVED`).
+
+### I4: mail bag grid (`Bag.lua`)
+
+- A panel beside the inbox (our frame, toggled by an "Items" button on InboxFrame's top bar),
+  showing every attachment in the loaded inbox merged by itemID: icon, total count, "in N mails".
+  Plain buttons of ours (`ItemButtonTemplate` is unmeasured here); tooltip by itemID plus the mail
+  count. Refreshed from the `InboxFrame:Update` post-hook.
+- **A click takes every copy**: an Ops run `kind = "items"` with `opts.items = { [itemID] = true }`.
+  In `Loot`, the item filter applies **before** the money-first branch: money and other items are
+  skipped. COD and GM mail are still left, `keepFree` applies, the type filters don't. `items` joins
+  `openall` / `selected` in Ops' start, finish (`SetOpeningAll`, tally) and stop conditions. Twins
+  are fine (no remembered target), as Open All. Disabled while any run, a letter, or combat is on.
+- Ops' item attempts also carry the stack `count` (from the scan), so a confirmed take can be
+  shown.
+
+### Probe session 6 (MailProbe, before Sent, Trash and S1 ship)
+
+1. `sendwatch on`: in a `SendMail` post-hook, log the arguments and what `GetSendMailItem`,
+   `GetSendMailMoney`, `GetSendMailCOD` return; every send-side event in order
+   (`MAIL_SEND_INFO_UPDATE`, `MAIL_SEND_SUCCESS`, `MAIL_FAILED`, `MAIL_SUCCESS`,
+   `SECURE_TRANSFER_*`, `UI_ERROR_MESSAGE`), and whether any fires **inside** `SendMail` (before
+   the post-hook). Cases: an alt, plain, with an item, money, COD; a stranger with an item,
+   confirming and cancelling (which `SECURE_TRANSFER_*` events reach us, with what); an unknown
+   name; not enough money for postage; the other faction; another ruleset; the other account's
+   character.
+2. **Correlation:** close the mailbox right after Send (does the success still come?); take mail
+   while a send is pending (unrelated `MAIL_FAILED` / `MAIL_SUCCESS`); click Send twice quickly
+   (what re-enables Send; do the outcomes keep order).
+3. **Delete and return capture:** in `DeleteInboxItem` / `ReturnInboxItem` post-hooks, is the mail
+   still at its index; the update order after (Blizzard's letter Delete, an AH mail with items).
+4. `picker NAME`: `SetText` then Send to a stranger, through the confirmation. Watch for `!` lines.
+5. Friend and guild name formats (surname, realm suffix), and secrecy, in and out of an instance.
+6. The two v0.1.0 checks never reported: the gold line at close, and `/mailprobe log` after a
+   session with Open All and the row icons.
+
+### Delivery: five PRs, each "Part of #17"
+
+1. **Probe session 6** (MailProbe), results into FOREVER-PROBE.md.
+2. **Core:** `Names`, the play-day clock and expiry, the registry, Sent and Trash capture, recents,
+   the two settings, `SendMail` in Ops' foreign calls, the item count on attempts. No window yet.
+3. **The window:** `Summary`, snapshots, and the Sent, Inbox and Trash folders with search. Sent
+   first: it answers the owner's question.
+4. **S1** picker.
+5. **I4** grid; v0.2.0; closes #17.
+
+Settings added: `expiryDays`, `recentMax` (options page radios, `/gmail`). New saved data in
+`GlassMailDB`: `playDay`, `lastDate`, `version`, `chars`, `recents`, `snapshots`, `sent`, `trash`.
+
+### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
+
+- **Sent:** a pending send survives a mailbox close (a success came 99 s late); no inferred
+  `failed` (`MAIL_FAILED` has no action identity); any overlap leaves the rest of the session
+  unconfirmed; unconfirmed sends still show.
+- **Trash and returns:** capture rule decided by session 6; a fallback for removals known in
+  advance; any later inbox-changing call drops an outstanding capture; the open letter's capture
+  needs the same, unique fingerprint (twins void it).
+- **AltStable forgetting is not mirrored** (a fresh AltStable looks like "forgot everyone").
+- **The play-day clock** also advances over midnight; the version covers only the new data, never
+  the settings; realm suffixes are kept until measured; the item filter precedes money-first.
+- **Order:** the window (Sent first) before the picker; contacts cut.
 
 ## The mail core (M1)
 
