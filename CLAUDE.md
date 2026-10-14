@@ -70,7 +70,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   together, per window; `stock` puts Blizzard's colours back. Sections as in the mockup: a pane
   on each window's content box (its `Inset`, which Blizzard moves per tab) and on the send tab's
   footer; the letter and row panes stack on them, darker. The mail window's portrait becomes the
-  Glass Mail envelope (`Media\Envelope.tga`, our texture over Blizzard's faded one).
+  Glass Mail envelope (`Media\Envelope.tga`) and an open letter's the glass scroll
+  (`Media\Scroll.tga`), our textures over Blizzard's faded ones.
 - **`Core\Scan.lua`**: the inbox as plain values (`Scan.Inbox()`), never `GetInboxText`. Each mail
   has a type (`ah` by the six `AUCTION_*_MAIL_SUBJECT` templates, `system` when it can't be
   replied to, else `player`) and a fingerprint (length-prefixed sender, subject, money, COD,

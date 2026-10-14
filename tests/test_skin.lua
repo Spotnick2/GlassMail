@@ -75,16 +75,23 @@ eq(SendMailMoneyInset.NineSlice:GetAlpha(), 0, "  and its border")
 eq(SendMailMoneyBg:GetAlpha(), 1, "the money value field keeps its frame")
 eq(SendMailErrorIcon:GetAlpha(), 1, "a texture anchored to something else stays")
 
--- The portrait: the envelope over Blizzard's parcel, which is faded, not hidden.
-local portrait = T.portrait()
-local parcel = MailFrame.PortraitContainer.portrait
+-- The portraits: the envelope over Blizzard's parcel, the scroll over an open
+-- letter's stationery icon; Blizzard's are faded, not hidden.
+local portrait, letterPortrait = T.portraits.MailFrame, T.portraits.OpenMailFrame
+local parcel, stationery = MailFrame.PortraitContainer.portrait, OpenMailFrame.PortraitContainer.portrait
 check(portrait and portrait.frame:IsShown(), "the envelope shows over the mail window's portrait")
 check(portrait.frame:GetFrameLevel() > MailFrame.PortraitContainer:GetFrameLevel(), "  above Blizzard's")
 local envelope = select(1, portrait.frame:GetRegions())
 eq(envelope._file, "Interface\\AddOns\\GlassMail\\Media\\Envelope", "  our envelope texture")
 eq(parcel:GetAlpha(), 0, "Blizzard's parcel faded")
 check(parcel:IsShown(), "  not hidden")
-eq(OpenMailFrame.PortraitContainer.portrait:GetAlpha(), 1, "the open letter keeps its own portrait")
+check(letterPortrait and letterPortrait.frame:IsShown(), "the scroll shows over an open letter's portrait")
+check(letterPortrait.frame:GetFrameLevel() > OpenMailFrame.PortraitContainer:GetFrameLevel(), "  above Blizzard's")
+eq(select(1, letterPortrait.frame:GetRegions())._file, "Interface\\AddOns\\GlassMail\\Media\\Scroll",
+    "  our scroll texture")
+stationery:SetTexture(133465)   -- Blizzard sets it per letter (MailFrame.lua:424)
+eq(stationery:GetAlpha(), 0, "the letter's stationery icon faded, and stays faded per letter")
+check(stationery:IsShown(), "  not hidden")
 
 -- The letters go dark: the stationery faded (not hidden), a pane in its place,
 -- the text light. Only the mail widgets are recoloured, never the shared fonts.
@@ -219,12 +226,15 @@ check(isDark(SendMailBodyEditBox:GetTextColor()), "stock gives the letter text B
 for _, sp in pairs(T.sections) do check(not sp.frame:IsShown(), "stock hides the sections") end
 check(not portrait.frame:IsShown(), "stock hides the envelope")
 eq(parcel:GetAlpha(), 1, "  and gives Blizzard's parcel back")
+check(not letterPortrait.frame:IsShown(), "  and the scroll")
+eq(stationery:GetAlpha(), 1, "  and gives the letter its stationery icon back")
 check(isDark(OpenMailBodyText:GetTextColor("P")), "  the open letter's body")
 check(isDark(OpenMailInvoiceItemLabel:GetTextColor()), "  and the invoice")
 eq(select(1, SendMailBodyEditBox:GetHighlightColor()), 0.82, "  and the send body's selection colour")
 GM.Settings.SetSkin("smoked")
 eq(MailFrame.Bg:GetAlpha(), 0, "glass again fades it again")
 check(portrait.frame:IsShown() and parcel:GetAlpha() == 0, "  and the envelope is back")
+check(letterPortrait.frame:IsShown() and stationery:GetAlpha() == 0, "  and the scroll")
 check(painted("smoked"), "  in the chosen preset")
 check(light(OpenMailBodyText:GetTextColor("P")), "  and the letter light again")
 
