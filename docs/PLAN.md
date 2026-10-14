@@ -299,7 +299,12 @@ Gmail:
 - **Sent**: newest first: to whom, when, state, subject, money, items. The default search target.
 - **Trash**: deleted mail, with "gone in N days".
 A search box above searches the open folder: names, subjects, and item names
-(`C_Item.GetItemNameByID`; an uncached name fills in on `GET_ITEM_INFO_RECEIVED`).
+(`C_Item.GetItemNameByID`). Saved records keep only item IDs, and that call needs the item's data
+loaded (`Blizzard_ObjectAPI/Mainline/Item.lua:195`), so waiting is not enough after a restart: on a
+cache miss the window asks with `C_Item.RequestLoadItemDataByID`, once per itemID per session
+(distinct IDs only, never per record), and refreshes the search on `ITEM_DATA_LOAD_RESULT`. A load
+that reports `success = false` isn't retried; that item is left out of name search until the next
+session.
 
 ### I4: mail bag grid (`Bag.lua`)
 
