@@ -1,9 +1,13 @@
 -- MailProbe: the throwaway measurement addon for GlassMail (M0, M1's
--- session 5 and M2's session 6). It answers the questions docs/PLAN.md's probe checklist leaves
--- open before any feature code is written. Every line it prints also goes to
--- MailProbeDB.log (SavedVariables), so a full client exit leaves the session
--- on disk for review. It logs mail headers (senders, subjects, amounts) of
--- the player's own inbox only.
+-- session 5 and M2's session 6). It answers the questions docs/PLAN.md's probe
+-- checklist leaves open before any feature code is written. It is a
+-- ForeverProbe module (..\ForeverProbe, its docs/GUIDE.md): its lines go to the
+-- ForeverProbe console (/fp), never to chat, and to MailProbeDB.log
+-- (SavedVariables), so a /reload leaves the session on disk for review. The
+-- host's baseline logs ADDON_ACTION_BLOCKED / _FORBIDDEN in the same console.
+-- It logs mail headers (senders, subjects, amounts) of the player's own inbox,
+-- and, with `names`, friends' and guild members' names: blur them in anything
+-- shared.
 --
 -- Passive, always on (no command needed):
 --   L  lifecycle: MAIL_SHOW / interaction manager SHOW and HIDE (MailInfo) /
@@ -13,13 +17,12 @@
 --   I  every MAIL_INBOX_UPDATE that changes loaded/total counts
 --   R  results: MAIL_SUCCESS / MAIL_FAILED (itemID), MAIL_SEND_SUCCESS,
 --      CLOSE_INBOX_ITEM, UI_ERROR_MESSAGE, send lock/unlock, money/COD changes,
---      SECURE_TRANSFER_*, and taint: ADDON_ACTION_BLOCKED / _FORBIDDEN;
---      UPDATE_PENDING_MAIL with HasNewMail and the minimap mail indicator
+--      SECURE_TRANSFER_*; UPDATE_PENDING_MAIL with HasNewMail and the minimap mail indicator
 --   C  calls: TakeInboxItem, TakeInboxMoney, AutoLootMailItem, ReturnInboxItem,
 --      DeleteInboxItem, SendMail, ClickSendMailItemButton, C_Mail.SetOpeningAll
 --      (post-hooks, whoever calls them: Blizzard's Open All included)
 --
--- Commands (/mailprobe):
+-- Commands (/fp mail <command>; /fp mail alone lists them):
 --   state            inbox counts, CanCheckInbox, pending command, bag space, money secrecy, new mail
 --   strings          the client's AUCTION_*_MAIL_SUBJECT templates
 --   inbox            every loaded mail's header, attachments with links, invoice, AH template
@@ -52,52 +55,32 @@
 --                    mail still at its index, and do the next updates show it gone (5 s)?
 --   names            (session 6) your own name and realm, friends' and guild members' name
 --                    formats (realm suffix, secrets), in or out of an instance
---   log [N]          the last N log lines (default 30); clear: empty the log
+--   clear            empty the saved log (the console shows it: /fp)
 --
--- Every client call that may be missing or throw goes through try(), so one
--- refusal cannot stop the rest of the probe.
+-- Procedures (/fp steps mail <name>; /fp steps lists them): session 6 as panels
+-- of buttons, every outcome saved: send, timing, capture, picker, names, release.
+--
+-- Every client call that may be missing or throw goes through try() (the
+-- host's Probe:Try), so one refusal cannot stop the rest of the probe.
 
-local ADDON = ...
+local ADDON, NS = ...
 local MAX_LOG = 4000
 
 --------------------------------------------------------------------------------
--- Log
+-- Log: the ForeverProbe module. Lines go to the console and, from this addon's
+-- ADDON_LOADED, to MailProbeDB.log (bound with UseLog).
 --------------------------------------------------------------------------------
 
-local function stamp()
-    local t = GetTime and GetTime() or 0
-    return string.format("%.2f%s", t, InCombatLockdown() and " C" or "")
-end
+local Probe = ForeverProbe:Module("MailProbe", { api = 1, cmd = "mail" })
 
-local function say(msg)
-    msg = tostring(msg)
-    print("|cff7fd4ffMailProbe|r " .. msg)
-    if type(MailProbeDB) == "table" and type(MailProbeDB.log) == "table" then
-        local log = MailProbeDB.log
-        log[#log + 1] = stamp() .. " " .. msg
-        if #log > MAX_LOG then table.remove(log, 1) end
-    end
-end
+local function say(msg) Probe:Say(msg) end
 
--- Describe a value without ever operating on a secret one.
-local function show(v)
-    if issecretvalue and issecretvalue(v) then return "<secret>" end
-    if v == nil then return "nil" end
-    if type(v) == "string" then return string.format("%q", v) end
-    return tostring(v)
-end
+-- A value as text, never operating on a secret one (strings quoted, as the
+-- log always had them).
+local function show(v) return Probe.Show(v) end
 
--- Returns pcall's results, nils inside included (header returns have holes).
-local function pack(...) return { n = select("#", ...), ... } end
-local function try(label, fn, ...)
-    if type(fn) ~= "function" then
-        say(label .. ": MISSING")
-        return false
-    end
-    local r = pack(pcall(fn, ...))
-    if not r[1] then say(label .. ": ERROR " .. show(r[2])) end
-    return unpack(r, 1, r.n)
-end
+local pack = Probe.Pack
+local function try(label, fn, ...) return Probe:Try(label, fn, ...) end
 
 local function args(...)
     local out = {}
@@ -284,18 +267,15 @@ local EVENTS = {
     "PLAYER_LEAVING_WORLD", "MAIL_INBOX_UPDATE", "MAIL_SUCCESS", "MAIL_FAILED", "MAIL_SEND_SUCCESS",
     "MAIL_SEND_INFO_UPDATE", "CLOSE_INBOX_ITEM", "MAIL_LOCK_SEND_ITEMS", "MAIL_UNLOCK_SEND_ITEMS",
     "SEND_MAIL_MONEY_CHANGED", "SEND_MAIL_COD_CHANGED", "UPDATE_PENDING_MAIL", "UI_ERROR_MESSAGE",
-    "SECURE_TRANSFER_CONFIRM_SEND_MAIL", "SECURE_TRANSFER_CANCEL", "ADDON_ACTION_BLOCKED",
-    "ADDON_ACTION_FORBIDDEN", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED", "BAG_UPDATE_DELAYED",
+    "SECURE_TRANSFER_CONFIRM_SEND_MAIL", "SECURE_TRANSFER_CANCEL", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
+    "BAG_UPDATE_DELAYED",
 }
 
 local QUIET = { MAIL_SEND_INFO_UPDATE = true, BAG_UPDATE_DELAYED = true }   -- logged only while a test runs
 local busy = false   -- a timed test is running: log the quiet events too
 
 local frame = CreateFrame("Frame")
-for _, e in ipairs(EVENTS) do
-    local ok, registered = pcall(frame.RegisterEvent, frame, e)
-    if not ok or registered == false then print("MailProbe: could not register " .. e) end
-end
+Probe:RegisterEvents(frame, EVENTS)
 
 local hooksDone = false
 local installHooks   -- defined below
@@ -397,12 +377,14 @@ end
 frame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
         if ... ~= ADDON then return end
+        Probe:Ready()   -- logs EARLY if the host somehow isn't loaded
         if type(MailProbeDB) ~= "table" then MailProbeDB = {} end
         if type(MailProbeDB.log) ~= "table" then MailProbeDB.log = {} end
+        Probe:UseLog(MailProbeDB.log, MAX_LOG)   -- from here on, lines are saved too
         MailProbeDB.loads = (MailProbeDB.loads or 0) + 1
+        say("loaded (" .. MailProbeDB.loads .. " loads). /fp mail for the commands, /fp steps for session 6")
         return
     elseif event == "PLAYER_LOGIN" then
-        say("session " .. tostring(MailProbeDB and MailProbeDB.loads) .. ", build " .. args(GetBuildInfo()))
         installHooks()
         return
     end
@@ -449,7 +431,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
         lastLoaded, lastTotal = nil, nil
     end
     local tag = (event:find("^MAIL_SHOW") or event:find("^MAIL_CLOSED") or event == "PLAYER_LEAVING_WORLD") and "L"
-        or ((event:find("ADDON_ACTION") or event:find("SECURE_TRANSFER")) and "!") or "R"
+        or (event:find("SECURE_TRANSFER") and "!") or "R"
     say(tag .. " " .. event .. " (" .. args(...) .. ")" .. since(event))
     if sendwatch and (event == "MAIL_SEND_SUCCESS" or event == "MAIL_FAILED" or event == "MAIL_SEND_INFO_UPDATE") then
         say("S   Send button enabled=" .. sendButton())
@@ -1173,31 +1155,127 @@ function C.names()
     say("names: guild: " .. suffixed .. " with a realm suffix, " .. secret .. " secret, of " .. count)
 end
 
-function C.log(arg)
-    if arg == "clear" then MailProbeDB.log = {}; print("MailProbe: log cleared"); return end
-    local n = tonumber(arg) or 30
-    local log = MailProbeDB.log
-    for i = math.max(1, #log - n + 1), #log do print(log[i]) end
-end
+function C.clear() Probe:ClearLog(); say("log cleared") end
 
-local HELP = {
-    "state | strings | inbox | dupes | watch on/off | readtest N | bags | fit N | refill",
-    "take N [slot] | money N | taketimer N",
-    "returnnow N | returntimer N | returnmany A B ..  (ONLY test mails: they go back to the sender)",
-    "hidestock | showstock | rows on/off | picker NAME",
-    "draft | split BAG SLOT N | sendnow | sendtimer",
-    "sendwatch on/off | capture on/off | names   (session 6)",
-    "log [N] | log clear",
+-- /fp mail <command>: the commands, with the help /fp mail lists.
+local COMMANDS = {
+    { "state", "inbox counts, CanCheckInbox, pending command, bag space, money secrecy, new mail" },
+    { "strings", "the client's AUCTION_*_MAIL_SUBJECT templates" },
+    { "inbox", "every loaded mail's header, attachments with links, invoice, AH template" },
+    { "dupes", "mails that look identical (identity without a server id)" },
+    { "watch", "on/off: log every mail whenever an inbox update changes it" },
+    { "fit", "N: mail N's attachments against the bags (what Open All decides from)" },
+    { "refill", "CheckInbox() when allowed, and how long until the next update" },
+    { "readtest", "N: does GetInboxText mark mail N read?" },
+    { "bags", "free slots per bag, with the bag family" },
+    { "take", "N [slot]: TakeInboxItem from the command" },
+    { "money", "N: TakeInboxMoney from the command" },
+    { "taketimer", "N: mail N's attachments slot by slot, from timers" },
+    { "returnnow", "N: ReturnInboxItem from the command (ONLY a test mail)" },
+    { "returntimer", "N: ReturnInboxItem from a timer, 1 s later (ONLY a test mail)" },
+    { "returnmany", "A B ..: several returns in a row, each found again (ONLY test mails)" },
+    { "hidestock", "hide Blizzard's Open All button" },
+    { "showstock", "show Blizzard's Open All button" },
+    { "rows", "on/off: our T / R / D buttons on the inbox rows" },
+    { "picker", "NAME: a button by the recipient box that fills it with NAME" },
+    { "draft", "the send draft: recipient, subject, attachments, money, COD, postage" },
+    { "split", "BAG SLOT N: split N off a stack and attach it to the draft" },
+    { "sendnow", "SendMail(draft) from the command" },
+    { "sendtimer", "SendMail(draft) from a timer, 1 s later" },
+    { "sendwatch", "on/off: each send numbered, timed, and what fires inside SendMail (session 6)" },
+    { "capture", "on/off: what a delete/return post-hook sees, and its confirmation (session 6)" },
+    { "names", "own, friends' and guild members' name formats (session 6)" },
+    { "clear", "empty the saved log" },
 }
-
-SLASH_MAILPROBE1 = "/mailprobe"
-SlashCmdList.MAILPROBE = function(msg)
-    local cmd, arg = (msg or ""):match("^%s*(%S*)%s*(.-)%s*$")
-    cmd = cmd:lower()
-    if C[cmd] then
-        local ok, err = pcall(C[cmd], arg)
-        if not ok then say(cmd .. ": ERROR " .. show(err)) end
-    else
-        for _, line in ipairs(HELP) do print("|cff7fd4ffMailProbe|r /mailprobe " .. line) end
-    end
+for _, c in ipairs(COMMANDS) do
+    local fn = C[c[1]]
+    Probe:Command(c[1], function(arg) fn(arg or "") end, c[2])
 end
+
+--------------------------------------------------------------------------------
+-- Session 6 as procedures: /fp steps mail <name>. Each step is one thing to do;
+-- the probe's own lines (S, X, names) are the measurement, the panel's Note box
+-- takes what only the owner sees.
+--------------------------------------------------------------------------------
+
+local function watchBoth()
+    C.sendwatch("on")
+    C.capture("on")
+    return "sendwatch and capture on"
+end
+
+-- A send step: it completes on MAIL_SEND_SUCCESS; Done if the mail never goes.
+local function sendStep(text) return { text = text .. " The step completes when the mail is sent (Done if it isn't).",
+    event = "MAIL_SEND_SUCCESS" } end
+
+Probe:Steps("send", {
+    title = "Session 6: sends",
+    { text = "At a mailbox, open the Send Mail tab.", auto = true, run = watchBoth },
+    sendStep("Send a plain letter to one of your alts: no item, no gold."),
+    sendStep("Send an alt a letter with one item attached."),
+    sendStep("Send an alt a letter with some gold (Send Money)."),
+    sendStep("Send an alt an item with C.O.D. set."),
+    sendStep("Send a stranger an item, and CONFIRM the dialog that appears."),
+    { text = "Did a confirmation dialog appear for the stranger?", ask = true },
+    { text = "Send a stranger an item again, and this time CANCEL the dialog. Then press Next." },
+    { text = "Send a letter to a name that doesn't exist. Press Next once the error shows." },
+    { text = "If you can, send with too little gold for the postage (Skip if not). Press Next after." },
+    { text = "Send to a character of the other faction (Skip if you have none). Note what happened." },
+    { text = "Send to a character on another ruleset (Skip if none). Note what happened." },
+    { text = "Send to a character on your other account (Skip if none). Note what happened." },
+})
+
+Probe:Steps("timing", {
+    title = "Session 6: send timing",
+    { text = "At a mailbox, open the Send Mail tab.", auto = true, run = watchBoth },
+    sendStep("Send an alt a letter, then close the mailbox at once (walk away or Esc)."),
+    { text = "Open the mailbox. Send an alt a letter, then at once shift-click an inbox row to take its mail. "
+        .. "Press Next after." },
+    { text = "Send an alt a letter, and as fast as you can fill a second one and Send it too. "
+        .. "Press Next once both are sent (or failed)." },
+})
+
+Probe:Steps("capture", {
+    title = "Session 6: delete and return",
+    { text = "Open the mailbox's inbox.", auto = true, run = function()
+        C.capture("on")
+        C.rows("on")
+        return "capture on, row buttons on"
+    end },
+    { text = "Open an EMPTY mail (no item, no gold) and press Delete in the letter. Press Next after." },
+    { text = "Open a test mail you can send back and press Return in the letter. Press Next after." },
+    { text = "Press the R button on another test mail's row (it returns it). Press Next after." },
+    { text = "Open an Auction House mail with items, press Delete, and accept the popup. Press Next after." },
+    { text = "Done: turning the row buttons off.", auto = true, run = function()
+        C.rows("off")
+        return "row buttons off"
+    end },
+})
+
+Probe:Steps("picker", {
+    title = "Session 6: picker to a stranger",
+    { text = "At a mailbox's Send Mail tab, type /fp mail picker First Surname with a stranger's name. "
+        .. "An @ button appears by the recipient box. Press Next." },
+    { text = "Attach an item, click @, press Send and CONFIRM the dialog.", event = "MAIL_SEND_SUCCESS" },
+    { text = "Was anything blocked (a red BLOCKED or FORBIDDEN line in /fp, or an error)?", ask = true },
+})
+
+Probe:Steps("names", {
+    title = "Session 6: name formats",
+    { text = "In town: reading your own, your friends' and your guild's names.", auto = true,
+        run = function() C.names() return "names read in town" end },
+    { text = "If the guild count was 0, wait a few seconds and press Retry. Then press Next." },
+    { text = "Enter an instance (a dungeon is fine), then press Read.", button = "Read",
+        run = function() C.names() return "names read in an instance" end },
+})
+
+Probe:Steps("release", {
+    title = "Session 6: the v0.1.0 checks",
+    { text = "At a mailbox with gold in a mail, click Glass Mail's Open All, then close the mailbox." },
+    { text = "Was the gold Open All took said in chat when the mailbox closed?", ask = true },
+    { text = "Open the mailbox again and use a row's Return or Delete icon once (a test mail). Press Next." },
+    { text = "Was anything blocked (a red BLOCKED or FORBIDDEN line in /fp, or an error)?", ask = true },
+    { text = "Type /reload to save the results.", reload = true },
+})
+
+NS._test = { Probe = Probe }   -- the test seam, never on _G

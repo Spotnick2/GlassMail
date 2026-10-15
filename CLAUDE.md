@@ -109,7 +109,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).
 - **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the
   `Settings` helpers, `/gmail`.
-- **`Tools/MailProbe/`**: the throwaway measurement addon (`/mailprobe help`).
+- **`Tools/MailProbe/`**: the throwaway measurement addon, a ForeverProbe module (`..\ForeverProbe`,
+  its `docs/GUIDE.md`): `/fp mail` for its commands, `/fp steps mail <name>` for guided procedures;
+  its lines go to the `/fp` console, never to chat. Its tests run locally only (CI skips them).
 
 ## Mail facts for this client
 
