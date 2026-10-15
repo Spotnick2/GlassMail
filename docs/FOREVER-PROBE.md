@@ -39,10 +39,13 @@ Watch for `!` lines (`ADDON_ACTION_BLOCKED` / `_FORBIDDEN`, `SECURE_TRANSFER_*`)
    - Click Send twice fast (two drafts): `OVERLAP`, what re-enables Send, the order of the
      two results.
 3. **Delete and return:** with `capture on`, delete an empty mail from the letter's button,
-   return a test mail from our row icon, and delete an AH mail with items. The `X` lines say
-   whether the mail was still at its index in the post-hook (an update inside the call is said,
-   and the mail is then compared with the inbox before it) and whether the next update
-   confirmed it. Any take before that drops the capture, as the Trash rule will.
+   return a test mail with the letter's button and with `/mailprobe rows on`'s **R**, and delete
+   an AH mail with items (its confirmation popup). The `X` lines say whether the mail was still
+   at its index in the post-hook and whether an update confirmed it (a frame later). The
+   baseline is the inbox at the button's PreClick, else the last update if none came this
+   frame; an update in the same frame without a PreClick is logged as **AMBIGUOUS**, both
+   candidates shown, nothing captured. Any take before the confirmation drops the capture, as
+   the Trash rule will.
 4. **Picker with a stranger:** `/mailprobe picker First Surname` (a stranger), attach an item,
    click `@`, then Send and **confirm** the dialog. Any `!` line?
 5. **Names:** `/mailprobe names` in town and again inside an instance (realm suffixes, secrets).

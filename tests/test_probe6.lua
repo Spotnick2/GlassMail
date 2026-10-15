@@ -55,11 +55,22 @@ rawset(_G, "DeleteInboxItem", function(i)
     if serveInside then table.remove(WoW.inbox, i); WoW.fire("MAIL_INBOX_UPDATE") end
 end)
 
+-- A take the server answers inside the call: the slot empties (the mail goes
+-- with its last item) and MAIL_INBOX_UPDATE fires before the post-hook.
+local takeInside = false
+local recordTake = TakeInboxItem
+rawset(_G, "TakeInboxItem", function(i, a)
+    recordTake(i, a)
+    if takeInside then WoW.serve({ "TakeInboxItem", i, a }) end
+end)
+-- The open letter's Delete / Return button (MailFrame.xml:1316).
+CreateFrame("Button", "OpenMailDeleteButton", OpenMailFrame)
+
 -- Only the lines since the last mark() count (chatHas searches the whole chat).
 local from = 0
 local function mark() from = #WoW.chat end
 -- A removal clicked in a later frame than the last update (GetTime() is the
--- frame's time; an update in the same frame is taken as inside the call).
+-- frame's time; an update in the same frame makes the baseline ambiguous).
 local function delete(i)
     WoW.now = (WoW.now or 0) + 1
     DeleteInboxItem(i)
@@ -141,7 +152,8 @@ WoW.mailCalls = {}
 mark()
 WoW.now = 199   -- delete() clicks at 200
 delete(2)
-check(saw("X DeleteInboxItem%(2%) post%-hook: loaded 3 before the call, 3 now"), "capture logs the counts at the hook")
+check(saw("X DeleteInboxItem%(2%) post%-hook: loaded 3 before the call %(the last update%), 3 now"),
+    "capture logs the counts at the hook, against the last update when none came this frame")
 check(saw("before: 2: \"Cowruzo Test\" \"b\""), "  the mail at that index before")
 check(saw("SAME mail at its index"), "  and that it is still there")
 WoW.now = 200.4
@@ -149,23 +161,25 @@ mark()
 WoW.serve(WoW.mailCalls[1])
 check(saw("X update %+0%.40 s after DeleteInboxItem of mail 2: loaded 3 %-> 2, its fingerprint 1 %-> 0"),
     "the next update is logged against it")
-check(saw("confirmed: one fewer of it, one mail fewer"), "  and confirms it")
+check(not saw("confirmed"), "  not confirmed in the same frame (a later call's post-hook may still void it)")
+WoW.flushTimers(0)
+check(saw("confirmed: one fewer of it, one mail fewer"), "  confirmed a frame later")
 WoW.flushTimers()
 check(not saw("no update showed"), "  so its 5 s timer says nothing")
 
--- The inbox shrank before the hook: not the same mail at the index.
+-- The inbox shrank before the hook (no update yet): not the same mail at the index.
 local realDelete = rawget(_G, "DeleteInboxItem")
 WoW.mailCalls = {}
 WoW.inbox[#WoW.inbox + 1] = { sender = "Cowruzo Test", subject = "d" }
 WoW.inbox[#WoW.inbox + 1] = { sender = "Cowruzo Test", subject = "e" }
 WoW.fire("MAIL_INBOX_UPDATE")
 mark()
-table.remove(WoW.inbox, 1)   -- as if the server answered inside the call
+table.remove(WoW.inbox, 1)   -- as if the server answered inside the call, without an update
 delete(1)
-check(saw("loaded 4 before the call, 3 now"), "a shrink before the hook shows in the counts")
+check(saw("loaded 4 before the call %(the last update%), 3 now"), "a shrink before the hook shows in the counts")
 check(saw("NOT the same"), "  and the mail at the index is another one")
-WoW.fire("MAIL_INBOX_UPDATE")
-check(saw("confirmed"), "  an update with it gone still confirms it, by count")
+WoW.flushTimers(0)
+check(saw("confirmed"), "  the counts at the hook confirm it, a frame later")
 
 -- Not confirmed: another mail went (its own still there), or its fingerprint
 -- changed with no mail fewer (money taken).
@@ -174,18 +188,21 @@ mark()
 delete(1)
 table.remove(WoW.inbox, 2)
 WoW.fire("MAIL_INBOX_UPDATE")
+WoW.flushTimers(0)
 check(saw("its fingerprint 1 %-> 1") and not saw("confirmed"), "another mail going doesn't confirm it")
 WoW.flushTimers()
 mark()
 delete(1)
 WoW.inbox[1].money = 5
 WoW.fire("MAIL_INBOX_UPDATE")
+WoW.flushTimers(0)
 check(saw("loaded (%d+) %-> %1, its fingerprint 1 %-> 0") and not saw("confirmed"), "  nor its mail changing in place")
 WoW.inbox[1].money = 0
 WoW.flushTimers()
 
 -- A take after a removal voids it: a take that empties the mail must not
--- confirm the delete (PLAN.md, Trash).
+-- confirm the delete (PLAN.md, Trash), whether its update comes after the
+-- take returns or inside it.
 WoW.inbox = { { sender = "Cowruzo Test", subject = "t", items = { { id = 2770, count = 5 } } },
     { sender = "Cowruzo Test", subject = "u" } }
 WoW.fire("MAIL_INBOX_UPDATE")
@@ -195,30 +212,65 @@ delete(1)   -- unanswered
 TakeInboxItem(1, 1)
 check(saw("capture %(DeleteInboxItem of mail 1%) dropped: TakeInboxItem ran"), "a take drops the waiting capture")
 WoW.serve(WoW.mailCalls[2])   -- the take empties the mail: it goes
+WoW.flushTimers(0)
 check(not saw("confirmed"), "  so the take emptying the mail confirms nothing")
 WoW.flushTimers()
 check(not saw("no update showed"), "  and the dropped capture's timer says nothing")
+WoW.inbox = { { sender = "Cowruzo Test", subject = "t", items = { { id = 2770, count = 5 } } },
+    { sender = "Cowruzo Test", subject = "u" } }
+WoW.fire("MAIL_INBOX_UPDATE")
+mark()
+delete(1)   -- unanswered
+takeInside = true
+TakeInboxItem(1, 1)   -- empties the mail; its update fires inside the take
+takeInside = false
+WoW.flushTimers(0)
+check(saw("dropped: TakeInboxItem ran"), "a take whose update fires inside it still drops the capture")
+check(not saw("confirmed"), "  before that update can confirm the delete")
+WoW.flushTimers()
 
--- An update inside the call, before the post-hook: the mail at the index is
--- compared with the inbox before the call, not after it.
+-- The letter's button marks the inbox before its call: an update inside the
+-- call is then told apart, and the removed mail (A) is compared, not B.
 WoW.inbox = { { sender = "Cowruzo Test", subject = "A" }, { sender = "Cowruzo Test", subject = "B" } }
 WoW.now = 300
 WoW.fire("MAIL_INBOX_UPDATE")
 WoW.now = 301
+mark()
+OpenMailDeleteButton._scripts.PreClick(OpenMailDeleteButton, "LeftButton")
 serveInside = true
-mark()
-delete(1)
+DeleteInboxItem(1)   -- as the button's OnClick does
 serveInside = false
-check(saw("an inbox update came in this frame, before the post%-hook"), "an update inside the call is said")
-check(saw('before: 1: "Cowruzo Test" "A"'), "  the baseline is the inbox before the call (A)")
+check(saw("loaded 2 before the call %(the button's PreClick%), 1 now"), "the button's pre-call point is the baseline")
+check(saw('before: 1: "Cowruzo Test" "A"'), "  the mail before the call (A)")
 check(saw("NOT the same"), "  so B at index 1 is not taken for A")
-check(saw("loaded 2 before the call, 1 now"), "  the counts are against the inbox before the call")
-check(saw("confirmed"), "  and the removal is confirmed at the hook, as A is gone")
-WoW.now = 302
+WoW.flushTimers(0)
+check(saw("confirmed"), "  and A's removal is confirmed")
+WoW.flushTimers()
+
+-- An update in the same frame with no pre-call point: inside the call or
+-- before it can't be told, so nothing is captured. Here the update came
+-- before the call, and B, the delete's target, is still there.
+WoW.inbox = { { sender = "Cowruzo Test", subject = "A" }, { sender = "Cowruzo Test", subject = "B" } }
+WoW.now = 310
 WoW.fire("MAIL_INBOX_UPDATE")
+WoW.now = 310.5
+DeleteInboxItem(2)   -- an earlier removal, still waiting
+WoW.now = 311
+table.remove(WoW.inbox, 1)
+WoW.fire("MAIL_INBOX_UPDATE")   -- an unrelated update: A goes
 mark()
-delete(1)   -- a later frame: no update in it
-check(not saw("came in this frame"), "a delete in a frame with no update uses the last update")
+DeleteInboxItem(1)   -- same frame, targets B, the server hasn't answered
+check(saw("AMBIGUOUS, not captured"), "an update this frame without a pre-call point is ambiguous")
+check(saw('before the update: 1: "Cowruzo Test" "A"') and saw('after it: +1: "Cowruzo Test" "B"'),
+    "  both candidates are logged")
+WoW.flushTimers()
+check(saw("previous capture %(DeleteInboxItem of mail 2%) dropped"), "  and the removal still waiting is dropped")
+check(not saw("confirmed") and not saw("no update showed"), "  nothing is confirmed or timed")
+OpenMailDeleteButton._scripts.PreClick(OpenMailDeleteButton, "LeftButton")   -- a click that never called
+WoW.now = 312
+mark()
+DeleteInboxItem(1)   -- a later frame: the PreClick of an earlier frame doesn't count
+check(saw("before the call %(the last update%)"), "an old pre-call point is not reused")
 WoW.flushTimers()
 
 -- A delete with no update: dropped after 5 s; one replaced by the next.

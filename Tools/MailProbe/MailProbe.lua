@@ -310,10 +310,11 @@ local sendwatch = false
 local sendN, lastSend, phase, insideSend = 0, nil, nil, {}
 local draft   -- the send draft, defined with the commands
 -- capture: the inbox as of the last update (index -> { fp, line }, with the
--- GetTime() it was taken), the one before it, and the delete/return waiting
--- for an update that shows its mail gone.
+-- GetTime() it was taken), the one before it, the inbox a button saw just
+-- before its removal call (a pre-call point: PreClick), and the delete/return
+-- waiting for an update that shows its mail gone.
 local capturing = false
-local before, prev, capture = {}, nil, nil
+local before, prev, boundary, capture = {}, nil, nil, nil
 
 -- The mail of each index now ({ fp, line }), the loaded count, and how many
 -- mails share each fingerprint.
@@ -336,14 +337,28 @@ local function fpCount(fp)
 end
 
 -- Confirmed: its fingerprint one fewer and one mail fewer than before the call.
+-- Committed a frame later: an update can fire inside a later call (a take that
+-- empties the mail) before that call's post-hook drops the capture, and every
+-- post-hook of this frame has run by the next one.
 local function checkCapture(label)
-    local loaded, n = counts(), fpCount(capture.fp)
+    local c = capture
+    local loaded, n = counts(), fpCount(c.fp)
     say(string.format("X %s +%.2f s after %s of mail %d: loaded %s -> %s, its fingerprint %d -> %d", label,
-        GetTime() - capture.at, capture.kind, capture.index, show(capture.loaded), show(loaded), capture.count, n))
-    if n == capture.count - 1 and loaded == capture.loaded - 1 then
-        say("X " .. capture.kind .. " of mail " .. capture.index .. " confirmed: one fewer of it, one mail fewer")
-        capture = nil
+        GetTime() - c.at, c.kind, c.index, show(c.loaded), show(loaded), c.count, n))
+    if n == c.count - 1 and loaded == c.loaded - 1 then
+        C_Timer.After(0, function()
+            if capture ~= c then return end
+            say("X " .. c.kind .. " of mail " .. c.index .. " confirmed: one fewer of it, one mail fewer")
+            capture = nil
+        end)
     end
+end
+
+-- A button about to remove a mail: the inbox now is the inbox before the call.
+local function markBoundary()
+    if not capturing then return end
+    boundary = snapshot()
+    boundary.at = GetTime()
 end
 
 -- How long after the last send / delete / return a result came. An event
@@ -526,22 +541,36 @@ installHooks = function()
         if global(kind) then
             hooksecurefunc(kind, function(i)
                 if not capturing or type(i) ~= "number" then return end
-                -- An update in this frame came before the post-hook, from inside
-                -- the call (GetTime() is the frame's time): the inbox before the
-                -- call is the snapshot before that update.
-                local base = before
-                if before.at == GetTime() and prev then
-                    say("X " .. kind .. "(" .. i .. "): an inbox update came in this frame, before the post-hook "
-                        .. "(inside the call?); compared with the inbox before it")
-                    base = prev
+                -- The inbox before the call: a button's PreClick in this frame
+                -- saw it; else, with no update in this frame (GetTime() is the
+                -- frame's time), the last update's snapshot still is it. An
+                -- update in this frame without a pre-call point may have come
+                -- inside the call or before it: ambiguous, logged, not captured.
+                local base, from = nil, nil
+                if boundary and boundary.at == GetTime() then
+                    base, from = boundary, "the button's PreClick"
+                elseif before.at ~= GetTime() then
+                    base, from = before, "the last update"
+                end
+                boundary = nil
+                if not base then
+                    say("X " .. kind .. "(" .. i .. "): an inbox update came in this frame and no button marked the "
+                        .. "inbox before the call: AMBIGUOUS, not captured")
+                    say("X   before the update: " .. (prev and prev[i] and prev[i].line or "(no mail)"))
+                    say("X   after it:          " .. (before[i] and before[i].line or "(no mail)"))
+                    if capture then
+                        say("X   previous capture (" .. capture.kind .. " of mail " .. capture.index .. ") dropped")
+                    end
+                    capture = nil
+                    return
                 end
                 local was, loaded = base[i], counts()
                 local h = header(i)
                 local now = h and fingerprint(h, i)
                 local inbox = global("InboxFrame")
                 local open = global("OpenMailFrame")
-                say("X " .. kind .. "(" .. i .. ") post-hook: loaded " .. show(base.loaded) .. " before the call, "
-                    .. show(loaded) .. " now; open letter=" .. show(inbox and inbox.openMailID) .. " shown="
+                say("X " .. kind .. "(" .. i .. ") post-hook: loaded " .. show(base.loaded) .. " before the call ("
+                    .. from .. "), " .. show(loaded) .. " now; open letter=" .. show(inbox and inbox.openMailID) .. " shown="
                     .. show(open and open:IsShown()))
                 say("X   before: " .. (was and was.line or "(no mail)"))
                 say("X   now:    " .. (h and describe(i) or "(no mail)") .. " -> "
@@ -560,6 +589,15 @@ installHooks = function()
                 end
             end)
         end
+    end
+    -- The letter's Delete / Return button (MailFrame.lua:1104-1120): a pre-call
+    -- point. Its item and money deletes go through a confirmation popup
+    -- instead, which has none.
+    local letterButton = global("OpenMailDeleteButton")
+    if letterButton then
+        letterButton:HookScript("PreClick", markBoundary)
+    else
+        say("OpenMailDeleteButton: MISSING")
     end
     local cm = global("C_Mail")
     if cm and cm.SetOpeningAll then
@@ -938,6 +976,7 @@ local ROW_ACTIONS = {
     end },
     { "R", function(i, h)
         if not returnable(i) then say("rows: mail " .. i .. " can't be returned; not sent"); return end
+        markBoundary()
         try("ReturnInboxItem", global("ReturnInboxItem"), i)
     end },
     { "D", function(i, h)
@@ -946,6 +985,7 @@ local ROW_ACTIONS = {
             say("rows: mail " .. i .. " isn't empty or can't be deleted; not sent")
             return
         end
+        markBoundary()
         try("DeleteInboxItem", global("DeleteInboxItem"), i)
     end },
 }
@@ -1076,7 +1116,7 @@ end
 -- every X line is about the last one.
 function C.capture(arg)
     capturing = arg ~= "off"
-    before, prev = capturing and snapshot() or {}, nil
+    before, prev, boundary = capturing and snapshot() or {}, nil, nil
     before.at = GetTime()
     if not capturing then capture = nil end
     say("capture " .. (capturing and "on: delete or return a mail as usual" or "off"))
