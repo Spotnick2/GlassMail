@@ -1133,7 +1133,7 @@ function C.names()
         end
     end
     local okG, inGuild = try("IsInGuild", global("IsInGuild"))
-    if not (okG and inGuild) then say("names: not in a guild"); return end
+    if not (okG and inGuild) then say("names: not in a guild"); return 0, false end
     local gi = global("C_GuildInfo")
     try("C_GuildInfo.GuildRoster", gi and gi.GuildRoster)
     local okM, members = try("GetNumGuildMembers", global("GetNumGuildMembers"))
@@ -1153,6 +1153,7 @@ function C.names()
         end
     end
     say("names: guild: " .. suffixed .. " with a realm suffix, " .. secret .. " secret, of " .. count)
+    return count, true
 end
 
 function C.clear() Probe:ClearLog(); say("log cleared") end
@@ -1260,13 +1261,34 @@ Probe:Steps("picker", {
     { text = "Was anything blocked (a red BLOCKED or FORBIDDEN line in /fp, or an error)?", ask = true },
 })
 
+-- The guild roster loads on request: ask, wait for it, then read. A read with
+-- an empty roster in a guild is a FAIL on the step, not a silent empty sample.
+local lastNames = {}
+local function readNames(where)
+    local count, inGuild = C.names()
+    lastNames = { count = count, inGuild = inGuild }
+    return "names read " .. where
+end
+local function namesRead()
+    if not lastNames.inGuild then return true, "not in a guild" end
+    return (lastNames.count or 0) > 0, "guild members read: " .. tostring(lastNames.count)
+end
+
 Probe:Steps("names", {
     title = "Session 6: name formats",
-    { text = "In town: reading your own, your friends' and your guild's names.", auto = true,
-        run = function() C.names() return "names read in town" end },
-    { text = "If the guild count was 0, wait a few seconds and press Retry. Then press Next." },
+    rev = 2,
+    { text = "In town: asking for your guild's roster.", auto = true, run = function()
+        local gi = global("C_GuildInfo")
+        try("C_GuildInfo.GuildRoster", gi and gi.GuildRoster)
+        return "roster requested"
+    end },
+    { text = "Waiting for the guild roster. Press Done if you aren't in a guild, or nothing happens within "
+        .. "a few seconds.", event = "GUILD_ROSTER_UPDATE" },
+    { text = "Reading your own, your friends' and your guild's names. If the check fails (no guild member "
+        .. "read), wait a few seconds and press Back, then Done.", auto = true,
+        run = function() return readNames("in town") end, check = namesRead },
     { text = "Enter an instance (a dungeon is fine), then press Read.", button = "Read",
-        run = function() C.names() return "names read in an instance" end },
+        run = function() return readNames("in an instance") end, check = namesRead },
 })
 
 Probe:Steps("release", {

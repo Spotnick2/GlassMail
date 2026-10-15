@@ -309,4 +309,27 @@ SlashCmdList.FOREVERPROBE("mail names")
 check(saw("not in a guild"), "no guild is said")
 eq(rosterAsked, 1, "  and no roster requested")
 
+-- The names procedure waits for the roster: an empty roster at the start is
+-- never taken as the town sample.
+local rosterLoaded = false
+inGuild = true
+rawset(_G, "GetNumGuildMembers", function() return rosterLoaded and #guild or 0 end)
+local asked = rosterAsked
+mark()
+SlashCmdList.FOREVERPROBE("steps mail names")
+eq(rosterAsked, asked + 1, "the names procedure asks for the roster first")
+check(not saw("names: you"), "  and reads nothing before it arrives")
+rosterLoaded = true
+WoW.fire("GUILD_ROSTER_UPDATE", true)
+check(saw("guild: 1 with a realm suffix, 1 secret, of 3"), "  then reads once it arrived")
+check(saw("3/4 CHECK PASS"), "  and its check passes")
+SlashCmdList.FOREVERPROBE("steps stop")
+-- A roster still empty when it is read: the check says so.
+rosterLoaded = false
+mark()
+SlashCmdList.FOREVERPROBE("steps mail names")
+WoW.fire("GUILD_ROSTER_UPDATE", true)
+check(saw("3/4 CHECK FAIL"), "an empty roster in a guild fails the read's check")
+SlashCmdList.FOREVERPROBE("steps stop")
+
 done("test_probe6")
