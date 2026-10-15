@@ -40,8 +40,9 @@ Watch for `!` lines (`ADDON_ACTION_BLOCKED` / `_FORBIDDEN`, `SECURE_TRANSFER_*`)
      two results.
 3. **Delete and return:** with `capture on`, delete an empty mail from the letter's button,
    return a test mail from our row icon, and delete an AH mail with items. The `X` lines say
-   whether the mail was still at its index in the post-hook and whether the next update
-   confirmed it.
+   whether the mail was still at its index in the post-hook (an update inside the call is said,
+   and the mail is then compared with the inbox before it) and whether the next update
+   confirmed it. Any take before that drops the capture, as the Trash rule will.
 4. **Picker with a stranger:** `/mailprobe picker First Surname` (a stranger), attach an item,
    click `@`, then Send and **confirm** the dialog. Any `!` line?
 5. **Names:** `/mailprobe names` in town and again inside an instance (realm suffixes, secrets).

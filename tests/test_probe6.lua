@@ -46,10 +46,24 @@ rawset(_G, "GetNormalizedRealmName", function() return "Doomhowl" end)
 rawset(_G, "IsInInstance", function() return false, "none" end)
 rawset(_G, "Ambiguate", function(n) return (n:gsub("%-.*$", "")) end)
 rawset(_G, "MailProbeDB", nil)
+-- A delete the server can answer inside the call: the mail goes and
+-- MAIL_INBOX_UPDATE fires before the probe's post-hook runs.
+local serveInside = false
+local recordDelete = DeleteInboxItem
+rawset(_G, "DeleteInboxItem", function(i)
+    recordDelete(i)
+    if serveInside then table.remove(WoW.inbox, i); WoW.fire("MAIL_INBOX_UPDATE") end
+end)
 
 -- Only the lines since the last mark() count (chatHas searches the whole chat).
 local from = 0
 local function mark() from = #WoW.chat end
+-- A removal clicked in a later frame than the last update (GetTime() is the
+-- frame's time; an update in the same frame is taken as inside the call).
+local function delete(i)
+    WoW.now = (WoW.now or 0) + 1
+    DeleteInboxItem(i)
+end
 local function saw(pattern)
     for i = from + 1, #WoW.chat do if WoW.chat[i]:find(pattern) then return true end end
     return false
@@ -125,9 +139,9 @@ mark()
 SlashCmdList.MAILPROBE("capture on")
 WoW.mailCalls = {}
 mark()
-WoW.now = 200
-DeleteInboxItem(2)
-check(saw("X DeleteInboxItem%(2%) post%-hook: loaded 3 at the last update, 3 now"), "capture logs the counts at the hook")
+WoW.now = 199   -- delete() clicks at 200
+delete(2)
+check(saw("X DeleteInboxItem%(2%) post%-hook: loaded 3 before the call, 3 now"), "capture logs the counts at the hook")
 check(saw("before: 2: \"Cowruzo Test\" \"b\""), "  the mail at that index before")
 check(saw("SAME mail at its index"), "  and that it is still there")
 WoW.now = 200.4
@@ -147,8 +161,8 @@ WoW.inbox[#WoW.inbox + 1] = { sender = "Cowruzo Test", subject = "e" }
 WoW.fire("MAIL_INBOX_UPDATE")
 mark()
 table.remove(WoW.inbox, 1)   -- as if the server answered inside the call
-DeleteInboxItem(1)
-check(saw("loaded 4 at the last update, 3 now"), "a shrink before the hook shows in the counts")
+delete(1)
+check(saw("loaded 4 before the call, 3 now"), "a shrink before the hook shows in the counts")
 check(saw("NOT the same"), "  and the mail at the index is another one")
 WoW.fire("MAIL_INBOX_UPDATE")
 check(saw("confirmed"), "  an update with it gone still confirms it, by count")
@@ -157,30 +171,69 @@ check(saw("confirmed"), "  an update with it gone still confirms it, by count")
 -- changed with no mail fewer (money taken).
 WoW.fire("MAIL_INBOX_UPDATE")
 mark()
-DeleteInboxItem(1)
+delete(1)
 table.remove(WoW.inbox, 2)
 WoW.fire("MAIL_INBOX_UPDATE")
 check(saw("its fingerprint 1 %-> 1") and not saw("confirmed"), "another mail going doesn't confirm it")
 WoW.flushTimers()
 mark()
-DeleteInboxItem(1)
+delete(1)
 WoW.inbox[1].money = 5
 WoW.fire("MAIL_INBOX_UPDATE")
 check(saw("loaded (%d+) %-> %1, its fingerprint 1 %-> 0") and not saw("confirmed"), "  nor its mail changing in place")
 WoW.inbox[1].money = 0
 WoW.flushTimers()
 
--- A delete with no update: dropped after 5 s; one replaced by the next.
+-- A take after a removal voids it: a take that empties the mail must not
+-- confirm the delete (PLAN.md, Trash).
+WoW.inbox = { { sender = "Cowruzo Test", subject = "t", items = { { id = 2770, count = 5 } } },
+    { sender = "Cowruzo Test", subject = "u" } }
+WoW.fire("MAIL_INBOX_UPDATE")
+WoW.mailCalls = {}
 mark()
-DeleteInboxItem(1)
-DeleteInboxItem(2)
+delete(1)   -- unanswered
+TakeInboxItem(1, 1)
+check(saw("capture %(DeleteInboxItem of mail 1%) dropped: TakeInboxItem ran"), "a take drops the waiting capture")
+WoW.serve(WoW.mailCalls[2])   -- the take empties the mail: it goes
+check(not saw("confirmed"), "  so the take emptying the mail confirms nothing")
+WoW.flushTimers()
+check(not saw("no update showed"), "  and the dropped capture's timer says nothing")
+
+-- An update inside the call, before the post-hook: the mail at the index is
+-- compared with the inbox before the call, not after it.
+WoW.inbox = { { sender = "Cowruzo Test", subject = "A" }, { sender = "Cowruzo Test", subject = "B" } }
+WoW.now = 300
+WoW.fire("MAIL_INBOX_UPDATE")
+WoW.now = 301
+serveInside = true
+mark()
+delete(1)
+serveInside = false
+check(saw("an inbox update came in this frame, before the post%-hook"), "an update inside the call is said")
+check(saw('before: 1: "Cowruzo Test" "A"'), "  the baseline is the inbox before the call (A)")
+check(saw("NOT the same"), "  so B at index 1 is not taken for A")
+check(saw("loaded 2 before the call, 1 now"), "  the counts are against the inbox before the call")
+check(saw("confirmed"), "  and the removal is confirmed at the hook, as A is gone")
+WoW.now = 302
+WoW.fire("MAIL_INBOX_UPDATE")
+mark()
+delete(1)   -- a later frame: no update in it
+check(not saw("came in this frame"), "a delete in a frame with no update uses the last update")
+WoW.flushTimers()
+
+-- A delete with no update: dropped after 5 s; one replaced by the next.
+WoW.inbox = { { sender = "Cowruzo Test", subject = "v" }, { sender = "Cowruzo Test", subject = "w" } }
+WoW.fire("MAIL_INBOX_UPDATE")
+mark()
+delete(1)
+delete(2)
 check(saw("previous capture %(DeleteInboxItem of mail 1%) dropped"), "a second removal drops the first capture")
 WoW.flushTimers(5)
 check(saw("no update showed mail 2 gone within 5 s"), "an unanswered capture ends after 5 s")
 check(not saw("no update showed mail 1"), "  the dropped one says nothing more")
 mark()
 SlashCmdList.MAILPROBE("capture off")
-DeleteInboxItem(1)
+delete(1)
 check(not saw("MailProbe|r X "), "capture off: a delete logs no X line")
 check(realDelete == rawget(_G, "DeleteInboxItem"), "the delete function was hooked, not replaced")
 

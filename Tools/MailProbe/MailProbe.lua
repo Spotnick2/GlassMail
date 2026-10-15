@@ -309,10 +309,11 @@ local refillAt                          -- GetTime() of our CheckInbox, until th
 local sendwatch = false
 local sendN, lastSend, phase, insideSend = 0, nil, nil, {}
 local draft   -- the send draft, defined with the commands
--- capture: the inbox as of the last update (index -> { fp, line }), and the
--- delete/return waiting for an update that shows its mail gone.
+-- capture: the inbox as of the last update (index -> { fp, line }, with the
+-- GetTime() it was taken), the one before it, and the delete/return waiting
+-- for an update that shows its mail gone.
 local capturing = false
-local before, capture = {}, nil
+local before, prev, capture = {}, nil, nil
 
 -- The mail of each index now ({ fp, line }), the loaded count, and how many
 -- mails share each fingerprint.
@@ -332,6 +333,17 @@ end
 local function fpCount(fp)
     local _, count = scanAll()
     return count[fp] or 0
+end
+
+-- Confirmed: its fingerprint one fewer and one mail fewer than before the call.
+local function checkCapture(label)
+    local loaded, n = counts(), fpCount(capture.fp)
+    say(string.format("X %s +%.2f s after %s of mail %d: loaded %s -> %s, its fingerprint %d -> %d", label,
+        GetTime() - capture.at, capture.kind, capture.index, show(capture.loaded), show(loaded), capture.count, n))
+    if n == capture.count - 1 and loaded == capture.loaded - 1 then
+        say("X " .. capture.kind .. " of mail " .. capture.index .. " confirmed: one fewer of it, one mail fewer")
+        capture = nil
+    end
 end
 
 -- How long after the last send / delete / return a result came. An event
@@ -391,17 +403,11 @@ frame:SetScript("OnEvent", function(_, event, ...)
             refillAt = nil
         end
         if watching then logWatch() end
-        if capture then
-            local n = fpCount(capture.fp)
-            say(string.format("X update +%.2f s after %s of mail %d: loaded %s -> %s, its fingerprint %d -> %d",
-                GetTime() - capture.at, capture.kind, capture.index, show(capture.loaded), show(loaded),
-                capture.count, n))
-            if n == capture.count - 1 and loaded == capture.loaded - 1 then
-                say("X " .. capture.kind .. " of mail " .. capture.index .. " confirmed: one fewer of it, one mail fewer")
-                capture = nil
-            end
+        if capture then checkCapture("update") end
+        if capturing then
+            prev, before = before, snapshot()
+            before.at = GetTime()
         end
-        if capturing then before = snapshot() end
         return
     end
     if event == "UPDATE_PENDING_MAIL" then
@@ -459,7 +465,15 @@ installHooks = function()
     hooksDone = true
     for _, name in ipairs(HOOKED) do
         if global(name) then
-            hooksecurefunc(name, function(...) say("C " .. name .. "(" .. args(...) .. ")") end)
+            hooksecurefunc(name, function(...)
+                say("C " .. name .. "(" .. args(...) .. ")")
+                -- Any later mail action voids a removal still waiting (PLAN.md,
+                -- Trash): a take that empties a mail must not confirm it.
+                if capture and name ~= "DeleteInboxItem" and name ~= "ReturnInboxItem" then
+                    say("X   capture (" .. capture.kind .. " of mail " .. capture.index .. ") dropped: " .. name .. " ran")
+                    capture = nil
+                end
+            end)
         else
             say("C " .. name .. ": MISSING")
         end
@@ -512,12 +526,21 @@ installHooks = function()
         if global(kind) then
             hooksecurefunc(kind, function(i)
                 if not capturing or type(i) ~= "number" then return end
-                local was, loaded = before[i], counts()
+                -- An update in this frame came before the post-hook, from inside
+                -- the call (GetTime() is the frame's time): the inbox before the
+                -- call is the snapshot before that update.
+                local base = before
+                if before.at == GetTime() and prev then
+                    say("X " .. kind .. "(" .. i .. "): an inbox update came in this frame, before the post-hook "
+                        .. "(inside the call?); compared with the inbox before it")
+                    base = prev
+                end
+                local was, loaded = base[i], counts()
                 local h = header(i)
                 local now = h and fingerprint(h, i)
                 local inbox = global("InboxFrame")
                 local open = global("OpenMailFrame")
-                say("X " .. kind .. "(" .. i .. ") post-hook: loaded " .. show(before.loaded) .. " at the last update, "
+                say("X " .. kind .. "(" .. i .. ") post-hook: loaded " .. show(base.loaded) .. " before the call, "
                     .. show(loaded) .. " now; open letter=" .. show(inbox and inbox.openMailID) .. " shown="
                     .. show(open and open:IsShown()))
                 say("X   before: " .. (was and was.line or "(no mail)"))
@@ -526,9 +549,11 @@ installHooks = function()
                 if capture then say("X   previous capture (" .. capture.kind .. " of mail " .. capture.index .. ") dropped") end
                 capture = nil
                 if was then
-                    local c = { kind = kind, index = i, fp = was.fp, at = GetTime(), loaded = before.loaded,
-                        count = before.count[was.fp] or 0 }
+                    local c = { kind = kind, index = i, fp = was.fp, at = GetTime(), loaded = base.loaded,
+                        count = base.count[was.fp] or 0 }
                     capture = c
+                    -- Already gone at the hook (the server answered inside the call).
+                    checkCapture("at the post-hook")
                     C_Timer.After(5, function()
                         if capture == c then say("X no update showed mail " .. i .. " gone within 5 s"); capture = nil end
                     end)
@@ -1051,7 +1076,8 @@ end
 -- every X line is about the last one.
 function C.capture(arg)
     capturing = arg ~= "off"
-    before = capturing and snapshot() or {}
+    before, prev = capturing and snapshot() or {}, nil
+    before.at = GetTime()
     if not capturing then capture = nil end
     say("capture " .. (capturing and "on: delete or return a mail as usual" or "off"))
 end
