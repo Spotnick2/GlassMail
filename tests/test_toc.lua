@@ -47,7 +47,7 @@ for size, S in pairs(GlassMail.Glass.SIZES) do
     end
 end
 -- Glass.MEDIA points into the embedded copy, where the packager puts it.
-eq(GlassMail.Glass.STYLE.thinRim, true, "the clean material (LibGlass r6): thin rims")
+eq(GlassMail.Glass.STYLE.thinRim, true, "the clean material (LibGlass r6+): thin rims")
 eq(GlassMail.Glass.STYLE.grain, 0, "  no grain")
 eq(GlassMail.Glass.MEDIA, "Interface\\AddOns\\GlassMail\\Libs\\LibGlass-1.0\\Media\\", "MEDIA is the embedded copy's")
 for _, k in ipairs({ "Apply", "MEDIA", "SIZES" }) do

@@ -15,8 +15,8 @@
 -- or a repaint would put it back. They differ only in the body (tint, wash) and the pane, never
 -- in the rim: GLASS-MATERIAL.md, a darkened rim reads as smoked plastic.
 -- Unlike AltStable, the switch is live: we own a handful of surfaces and
--- repaint them (LibGlass SetSurfaceTint, the grain's alpha, the wash's
--- gradient), where AltStable has too many to repaint and asks for a /reload.
+-- repaint them (LibGlass SetSurfaceTint, the grain's alpha, SetWash: a
+-- gradient ignores SetAlpha, LibGlass #47), where AltStable has too many to repaint and asks for a /reload.
 --
 -- The letter (the send tab's body and the open letter) goes dark under glass,
 -- as in docs/mockups/inbox-and-send.png (owner, 2026-10-10): the stationery is
@@ -126,7 +126,7 @@ end
 local function paintBody(g, p)
     Glass.SetSurfaceTint(g, p.tint[1], p.tint[2], p.tint[3], p.tint[4])
     g.grain:SetAlpha(p.grain)
-    g.wash:SetGradient("VERTICAL", CreateColor(1, 1, 1, 0), CreateColor(1, 1, 1, p.wash))
+    Glass.SetWash(g, p.wash)
 end
 
 local function add(list, region)
