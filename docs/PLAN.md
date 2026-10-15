@@ -337,8 +337,11 @@ session.
    still at its index; the update order after (Blizzard's letter Delete, an AH mail with items).
 4. `picker NAME`: `SetText` then Send to a stranger, through the confirmation. Watch for `!` lines.
 5. Friend and guild name formats (surname, realm suffix), and secrecy, in and out of an instance.
-6. The two v0.1.0 checks never reported: the gold line at close, and `/mailprobe log` after a
-   session with Open All and the row icons.
+6. The two v0.1.0 checks never reported: the gold line at close, and no blocked action (the
+   ForeverProbe baseline's watcher) after a session with Open All and the row icons.
+
+Session 6 runs as ForeverProbe procedures (`/fp steps mail send|timing|capture|picker|names|release`;
+the runbook is in FOREVER-PROBE.md): MailProbe became a ForeverProbe module before it ran.
 
 ### Delivery: five PRs, each "Part of #17"
 

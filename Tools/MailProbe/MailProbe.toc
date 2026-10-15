@@ -1,8 +1,9 @@
 ## Interface: 16001
 ## Title: MailProbe
-## Notes: Throwaway probe for GlassMail: mailbox lifecycle, inbox identity, looting, batch actions, sending, taint. /mailprobe help
+## Notes: Throwaway probe for GlassMail: mailbox lifecycle, inbox identity, looting, batch actions, sending, names. A ForeverProbe module: /fp mail
 ## Author: Spotnick
 ## Version: dev
+## Dependencies: ForeverProbe
 ## OptionalDeps: GlassMail
 ## SavedVariables: MailProbeDB
 

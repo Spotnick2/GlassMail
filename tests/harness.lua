@@ -105,6 +105,31 @@ function loadAddon(opts)
     return GlassMail
 end
 
+-- ForeverProbe, the probe host (..\ForeverProbe, or $FOREVERPROBE), loaded
+-- into these stubs the way the client does: every TOC file with (name, ns),
+-- then its ADDON_LOADED. GlassChat's loader. It is private and local, so CI
+-- sets FOREVERPROBE_OPTIONAL=1 and a probe test exits as SKIPPED there;
+-- locally a missing checkout is an error, never a silent skip.
+function loadForeverProbe()
+    local root = (os.getenv("FOREVERPROBE") or "../ForeverProbe"):gsub("\\", "/"):gsub("/$", "")
+    local toc = io.open(root .. "/ForeverProbe.toc", "rb")
+    if not toc then
+        if os.getenv("FOREVERPROBE_OPTIONAL") == "1" then
+            io.write("SKIPPED: ForeverProbe isn't here (private, local only); the probe tests run locally\n")
+            os.exit(0)
+        end
+        error("ForeverProbe checkout not found at " .. root .. ": clone it there or set FOREVERPROBE", 0)
+    end
+    local files = {}
+    for line in toc:read("*a"):gmatch("[^\r\n]+") do
+        if line:match("%.lua$") and not line:match("^#") then files[#files + 1] = root .. "/" .. line end
+    end
+    toc:close()
+    for _, file in ipairs(files) do assert(loadfile(file))("ForeverProbe", {}) end
+    WoW.fire("ADDON_LOADED", "ForeverProbe")
+    return ForeverProbe
+end
+
 -- Chat lines printed since the last call.
 local seenChat = 0
 function newChat()

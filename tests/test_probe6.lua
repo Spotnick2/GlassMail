@@ -1,5 +1,6 @@
 -- MailProbe, session 6 (M2): sendwatch, capture and names, against the shared
--- fake inbox. What they measure needs the live client; this keeps the probe's
+-- fake inbox, with the probe loaded as a ForeverProbe module (runs locally
+-- only: ForeverProbe is private, CI skips it). What they measure needs the live client; this keeps the probe's
 -- bookkeeping honest: an event inside SendMail is told from one in the click's
 -- setup, a send without an answer shows as an overlap, a delete is confirmed
 -- only by an update that shows it gone.
@@ -66,9 +67,10 @@ end)
 -- The open letter's Delete / Return button (MailFrame.xml:1316).
 CreateFrame("Button", "OpenMailDeleteButton", OpenMailFrame)
 
--- Only the lines since the last mark() count (chatHas searches the whole chat).
+-- The probe's lines are in its saved log (never chat); only the lines since
+-- the last mark() count.
 local from = 0
-local function mark() from = #WoW.chat end
+local function mark() from = #MailProbeDB.log end
 -- A removal clicked in a later frame than the last update (GetTime() is the
 -- frame's time; an update in the same frame makes the baseline ambiguous).
 local function delete(i)
@@ -76,10 +78,11 @@ local function delete(i)
     DeleteInboxItem(i)
 end
 local function saw(pattern)
-    for i = from + 1, #WoW.chat do if WoW.chat[i]:find(pattern) then return true end end
+    for i = from + 1, #MailProbeDB.log do if MailProbeDB.log[i]:find(pattern) then return true end end
     return false
 end
 
+loadForeverProbe()
 assert(loadfile("Tools/MailProbe/MailProbe.lua"))("MailProbe", {})
 WoW.fire("ADDON_LOADED", "MailProbe")
 WoW.fire("PLAYER_LOGIN")
@@ -87,10 +90,10 @@ WoW.fire("PLAYER_LOGIN")
 -- sendwatch off: nothing extra.
 mark()
 click()
-check(not saw("MailProbe|r S "), "sendwatch off: a send logs no S line")
+check(not saw("#%d+ S "), "sendwatch off: a send logs no S line")
 
 -- sendwatch on: the draft at the click and at the post-hook; nothing inside SendMail.
-SlashCmdList.MAILPROBE("sendwatch on")
+SlashCmdList.FOREVERPROBE("mail sendwatch on")
 draft.items[1] = { name = "Copper Ore", id = 2770, count = 20 }
 mark()
 WoW.now = 100
@@ -138,7 +141,7 @@ check(saw("the Send click never reached SendMail"), "a click without SendMail is
 mark()
 WoW.fire("MAIL_SEND_SUCCESS")
 check(not saw("during the Send click"), "  and its phase ended")
-SlashCmdList.MAILPROBE("sendwatch off")
+SlashCmdList.FOREVERPROBE("mail sendwatch off")
 
 -- capture: a delete whose mail is still at its index, confirmed by the update.
 WoW.inbox = {
@@ -147,7 +150,7 @@ WoW.inbox = {
     { sender = "Cowruzo Test", subject = "c" },
 }
 mark()
-SlashCmdList.MAILPROBE("capture on")
+SlashCmdList.FOREVERPROBE("mail capture on")
 WoW.mailCalls = {}
 mark()
 WoW.now = 199   -- delete() clicks at 200
@@ -284,14 +287,14 @@ WoW.flushTimers(5)
 check(saw("no update showed mail 2 gone within 5 s"), "an unanswered capture ends after 5 s")
 check(not saw("no update showed mail 1"), "  the dropped one says nothing more")
 mark()
-SlashCmdList.MAILPROBE("capture off")
+SlashCmdList.FOREVERPROBE("mail capture off")
 delete(1)
-check(not saw("MailProbe|r X "), "capture off: a delete logs no X line")
+check(not saw("#%d+ X "), "capture off: a delete logs no X line")
 check(realDelete == rawget(_G, "DeleteInboxItem"), "the delete function was hooked, not replaced")
 
 -- names: realm suffixes, secrets, Ambiguate, the roster asked for.
 mark()
-SlashCmdList.MAILPROBE("names")
+SlashCmdList.FOREVERPROBE("mail names")
 check(saw('names: you "Karuzo", "Doomhowl" realm="Doomhowl" normalized="Doomhowl" instance=false, "none"'),
     "names logs your name and realm")
 check(saw('friend 1 "Cowruzo Test" suffix=false Ambiguate%(none%)="Cowruzo Test" connected=true'), "  a friend")
@@ -302,8 +305,31 @@ check(saw("guild 2 \"Anna Smith%-Otherrealm\" suffix=true"), "  each member's na
 check(saw("guild: 1 with a realm suffix, 1 secret, of 3"), "  and the totals")
 inGuild = false
 mark()
-SlashCmdList.MAILPROBE("names")
+SlashCmdList.FOREVERPROBE("mail names")
 check(saw("not in a guild"), "no guild is said")
 eq(rosterAsked, 1, "  and no roster requested")
+
+-- The names procedure waits for the roster: an empty roster at the start is
+-- never taken as the town sample.
+local rosterLoaded = false
+inGuild = true
+rawset(_G, "GetNumGuildMembers", function() return rosterLoaded and #guild or 0 end)
+local asked = rosterAsked
+mark()
+SlashCmdList.FOREVERPROBE("steps mail names")
+eq(rosterAsked, asked + 1, "the names procedure asks for the roster first")
+check(not saw("names: you"), "  and reads nothing before it arrives")
+rosterLoaded = true
+WoW.fire("GUILD_ROSTER_UPDATE", true)
+check(saw("guild: 1 with a realm suffix, 1 secret, of 3"), "  then reads once it arrived")
+check(saw("3/4 CHECK PASS"), "  and its check passes")
+SlashCmdList.FOREVERPROBE("steps stop")
+-- A roster still empty when it is read: the check says so.
+rosterLoaded = false
+mark()
+SlashCmdList.FOREVERPROBE("steps mail names")
+WoW.fire("GUILD_ROSTER_UPDATE", true)
+check(saw("3/4 CHECK FAIL"), "an empty roster in a guild fails the read's check")
+SlashCmdList.FOREVERPROBE("steps stop")
 
 done("test_probe6")

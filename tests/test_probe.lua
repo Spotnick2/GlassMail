@@ -1,6 +1,8 @@
--- MailProbe smoke test: it loads, registers only real events, installs its
--- hooks, and its read-only commands run against a small fake inbox. What it
--- measures needs the live client; this only keeps it from breaking there.
+-- MailProbe smoke test: it loads as a ForeverProbe module, registers only
+-- real events, installs its hooks, and its read-only commands run against a
+-- small fake inbox. What it measures needs the live client; this only keeps it
+-- from breaking there. Its lines go to the console and MailProbeDB.log, never
+-- to chat. Runs locally only (ForeverProbe is private; CI skips it).
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
 
@@ -65,9 +67,25 @@ rawset(_G, "MinimapCluster", { IndicatorFrame = { MailFrame = indicatorFrame } }
 rawset(_G, "Enum", { PlayerInteractionType = { MailInfo = 17 } })
 rawset(_G, "MailProbeDB", nil)
 
-assert(loadfile("Tools/MailProbe/MailProbe.lua"))("MailProbe", {})
+local FP = loadForeverProbe()
+local NS = {}
+assert(loadfile("Tools/MailProbe/MailProbe.lua"))("MailProbe", NS)
 WoW.fire("ADDON_LOADED", "MailProbe")
 WoW.fire("PLAYER_LOGIN")
+check(NS._test.Probe.log == MailProbeDB.log, "its ForeverProbe log is MailProbeDB.log, bound at ADDON_LOADED")
+
+-- The probe's lines are read from its saved log (chat stays empty).
+local seen = 0
+local function newChat()
+    local lines = {}
+    for i = seen + 1, #MailProbeDB.log do lines[#lines + 1] = MailProbeDB.log[i] end
+    seen = #MailProbeDB.log
+    return lines
+end
+local function chatHas(pattern)
+    for _, line in ipairs(MailProbeDB.log) do if line:find(pattern) then return true end end
+    return false
+end
 eq(type(MailProbeDB), "table", "the probe's log table exists")
 eq(MailProbeDB.loads, 1, "it counts sessions")
 check(chatHas("C ReturnInboxItem: MISSING"), "a mail call the client lacks is reported")
@@ -78,22 +96,25 @@ eq(calls[1], "take 3:2", "and still happens")
 table.remove(calls, 1)
 
 newChat()
-SlashCmdList.MAILPROBE("state")
+SlashCmdList.FOREVERPROBE("mail state")
 check(chatHas("money secret=true"), "state reports a secret GetMoney without touching it")
-SlashCmdList.MAILPROBE("inbox")
+SlashCmdList.FOREVERPROBE("mail inbox")
 check(chatHas('sender="Karuzo Morphisto"'), "inbox lists senders as the client gives them")
 check(chatHas("slot 1: \"Copper Ore\" id=2770 count=20"), "inbox lists attachments")
-SlashCmdList.MAILPROBE("dupes")
+SlashCmdList.FOREVERPROBE("mail dupes")
 check(chatHas("mail 2 looks identical to mail 1"), "dupes finds two identical mails")
 check(chatHas("1 identical pair"), "and only those")
-SlashCmdList.MAILPROBE("bags")
+SlashCmdList.FOREVERPROBE("mail bags")
 check(chatHas("total free 12"), "bags reports free space")
-SlashCmdList.MAILPROBE("taketimer 1")
+SlashCmdList.FOREVERPROBE("mail taketimer 1")
 eq(calls[1], "take 1:1", "taketimer takes the first attachment from the key press")
-SlashCmdList.MAILPROBE("")
-check(chatHas("/mailprobe state"), "help lists the commands")
+SlashCmdList.FOREVERPROBE("mail")
+local listed = false
+for _, l in ipairs(FP.lines) do if l.text:find("state", 1, true) and l.text:find("inbox counts", 1, true) then listed = true end end
+check(listed, "/fp mail lists the commands")
 -- Not /mprobe: MagelyProbe owns that one (Magely/Tools/MagelyProbe).
-eq(SLASH_MAILPROBE1, "/mailprobe", "the probe's command is /mailprobe")
+eq(FP.byCmd.mail and FP.byCmd.mail.name, "MailProbe", "the probe answers /fp mail")
+eq(rawget(_G, "SLASH_MAILPROBE1"), nil, "  and has no slash command of its own")
 
 -- The mailbox lifecycle is logged, filtered to the mailbox interaction.
 newChat()
@@ -122,19 +143,19 @@ eq(durations(), 1, "with no MailInfo enum, HIDE 17 still closes the mailbox")
 
 -- Session 5 (M1). The AH subject templates, and which one a subject matches.
 newChat()
-SlashCmdList.MAILPROBE("strings")
+SlashCmdList.FOREVERPROBE("mail strings")
 check(chatHas('AUCTION_SOLD_MAIL_SUBJECT = "Auction successful: %%s"'), "strings lists the client's templates")
 check(chatHas("3 AUCTION_%*_MAIL_SUBJECT"), "  all of them")
-SlashCmdList.MAILPROBE("inbox")
+SlashCmdList.FOREVERPROBE("mail inbox")
 check(chatHas('AH template="AUCTION_SOLD_MAIL_SUBJECT"'), "inbox names the template an AH subject matches")
 check(chatHas('link="|Hitem:2770|h%[Copper Ore%]|h"'), "inbox logs each attachment's link")
 inbox[4] = { sender = "Auction House", subject = "Outbid on Linen Cloth", money = 0, items = {} }
 newChat()
-SlashCmdList.MAILPROBE("inbox")
+SlashCmdList.FOREVERPROBE("mail inbox")
 check(chatHas("AH template=nil"), "a template's punctuation is literal: no final '.', no match")
 inbox[4].subject = "Gewonnen (100%): Linen Cloth"
 newChat()
-SlashCmdList.MAILPROBE("inbox")
+SlashCmdList.FOREVERPROBE("mail inbox")
 check(chatHas('AH template="AUCTION_WON_MAIL_SUBJECT"'), "a positional %1$s and a literal %% match too")
 inbox[4] = nil
 
@@ -146,7 +167,7 @@ check(chatHas("hasNewMail=false .* minimap indicator shown=false"), "UPDATE_PEND
 -- watch: every mail once, then only what an update changed.
 WoW.fire("MAIL_INBOX_UPDATE")   -- settle the I line
 newChat()
-SlashCmdList.MAILPROBE("watch on")
+SlashCmdList.FOREVERPROBE("mail watch on")
 check(chatHas('W 1: "Karuzo Morphisto" "ore" .* %[1:|Hitem:2770'), "watch logs each mail with its slots")
 newChat()
 inbox[3].money = 0
@@ -158,17 +179,17 @@ table.remove(inbox, 3)
 newChat()
 WoW.fire("MAIL_INBOX_UPDATE")
 check(chatHas("W 3: %(none%)"), "a mail that went is logged as gone")
-SlashCmdList.MAILPROBE("watch off")
+SlashCmdList.FOREVERPROBE("mail watch off")
 inbox[3] = { sender = "Auction House", subject = "Auction successful: Linen Cloth", money = 1500, items = {} }
 
 -- fit: what I1's per-item fit rule would see.
 inbox[4] = { sender = "Cowruzo Test", subject = "arrows", money = 0,
     items = { { "Sharp Arrow", 2512, 200, "|Hitem:2512|h[Sharp Arrow]|h" } } }
 newChat()
-SlashCmdList.MAILPROBE("fit 1")
+SlashCmdList.FOREVERPROBE("mail fit 1")
 check(chatHas("fit 1 slot 1: id=2770 x20 maxStack=20 family=0 held=15 cached=true room in partial stacks=5 "
     .. "specialty free=0"), "fit: room in a partial stack, no specialty bag for ore")
-SlashCmdList.MAILPROBE("fit 4")
+SlashCmdList.FOREVERPROBE("mail fit 4")
 check(chatHas("fit 4 slot 1: .* family=1 .* cached=false .* specialty free=5"), "fit: a quiver's free slots for arrows")
 
 -- refill: CheckInbox when allowed, and the time to the next update.
@@ -176,7 +197,7 @@ local checked = 0
 rawset(_G, "CheckInbox", function() checked = checked + 1 end)
 total = 140
 newChat()
-SlashCmdList.MAILPROBE("refill")
+SlashCmdList.FOREVERPROBE("mail refill")
 eq(checked, 1, "refill calls CheckInbox when allowed")
 WoW.fire("MAIL_INBOX_UPDATE")
 check(chatHas("refill: MAIL_INBOX_UPDATE .* after CheckInbox, loaded=4 total=140"), "  and logs the next update")
@@ -185,15 +206,15 @@ WoW.fire("MAIL_INBOX_UPDATE")
 eq(#newChat(), 0, "  once")
 WoW.flushTimers()
 C_Mail.CanCheckInbox = function() return false, 42 end
-SlashCmdList.MAILPROBE("refill")
+SlashCmdList.FOREVERPROBE("mail refill")
 eq(checked, 1, "refill waits while the client says not yet")
 check(chatHas("again in 42 s"), "  and says how long")
 total = nil
 
 -- A second refill while one waits is refused, and its timer can't end the first.
 C_Mail.CanCheckInbox = function() return true, 0 end
-SlashCmdList.MAILPROBE("refill")
-SlashCmdList.MAILPROBE("refill")
+SlashCmdList.FOREVERPROBE("mail refill")
+SlashCmdList.FOREVERPROBE("mail refill")
 eq(checked, 2, "one refill at a time")
 check(chatHas("one is already waiting"), "  the second is refused")
 WoW.fire("MAIL_INBOX_UPDATE")
@@ -208,20 +229,20 @@ end)
 inbox[5] = { sender = "Cowruzo Test", subject = "a", money = 0, items = {} }
 inbox[6] = { sender = "Cowruzo Test", subject = "b", money = 0, items = {} }
 newChat()
-SlashCmdList.MAILPROBE("returnmany 5 99")
+SlashCmdList.FOREVERPROBE("mail returnmany 5 99")
 check(chatHas("no mail 99"), "returnmany: a number past the inbox is no mail")
-SlashCmdList.MAILPROBE("returnmany 3 5")
+SlashCmdList.FOREVERPROBE("mail returnmany 3 5")
 eq(#returned, 0, "returnmany refuses a mail Blizzard would delete")
 check(chatHas("mail 3 can't be returned"), "  and says so")
-SlashCmdList.MAILPROBE("returnmany 1 5")
+SlashCmdList.FOREVERPROBE("mail returnmany 1 5")
 eq(#returned, 0, "returnmany refuses a mail with an identical twin")
 check(chatHas("mail 1 has an identical twin"), "  and says so")
 inbox[6].items = { { "Mystery", 99999, 1, nil } }
-SlashCmdList.MAILPROBE("returnmany 5 6")
+SlashCmdList.FOREVERPROBE("mail returnmany 5 6")
 eq(#returned, 0, "returnmany refuses a mail with an unloaded attachment link")
 inbox[6].items = {}
 newChat()
-SlashCmdList.MAILPROBE("returnmany 5 6")
+SlashCmdList.FOREVERPROBE("mail returnmany 5 6")
 eq(returned[1], "a", "the first return is made from the key press")
 check(chatHas("returning from the key press"), "  and logged as such")
 for _ = 1, 6 do WoW.flushTimers(0.5) end
@@ -239,7 +260,7 @@ end)
 inbox[#inbox + 1] = { sender = "Cowruzo Test", subject = "c", money = 0, items = {} }
 inbox[#inbox + 1] = { sender = "Cowruzo Test", subject = "d", money = 0, items = {} }
 newChat()
-SlashCmdList.MAILPROBE("returnmany " .. (#inbox - 1) .. " " .. #inbox)
+SlashCmdList.FOREVERPROBE("mail returnmany " .. (#inbox - 1) .. " " .. #inbox)
 WoW.flushTimers(0.5)
 eq(#returned, 3, "a changed mail that is still there stops the run")
 check(chatHas("didn't shrink; stop %(uncertain%)"), "  as uncertain")
@@ -252,7 +273,7 @@ inbox = {
     { sender = "Auction House", subject = "Auction successful: Linen Cloth", money = 1500, items = {} },
 }
 newChat()
-SlashCmdList.MAILPROBE("rows on")
+SlashCmdList.FOREVERPROBE("mail rows on")
 local function button(text, row)
     for _, f in ipairs(WoW.frames) do
         if f:GetParent() == InboxFrame and f.GetText and f:GetText() == text then
@@ -301,7 +322,31 @@ inbox[1].items = { ORE }
 inbox[1].cod = 500
 button("T", 1)._scripts.OnClick(button("T", 1))
 eq(#calls, 3, "T never takes from a COD mail (that needs Blizzard's confirmation)")
-SlashCmdList.MAILPROBE("rows off")
+SlashCmdList.FOREVERPROBE("mail rows off")
 check(not button("T", 1):IsShown(), "rows off hides them")
+
+-- clear empties the bound log in place; a line after it lands in both places.
+local bound = MailProbeDB.log
+SlashCmdList.FOREVERPROBE("mail clear")
+check(MailProbeDB.log == bound, "clear empties the bound table in place, never replaces it")
+SlashCmdList.FOREVERPROBE("mail bags")
+check(chatHas("total free"), "a line after clearing lands in MailProbeDB.log")
+local inConsole = false
+for _, l in ipairs(FP.lines) do if l.m == "MailProbe" and l.text:find("total free", 1, true) then inConsole = true end end
+check(inConsole, "  and in the console")
+
+-- Nothing the probe measures goes to chat.
+local leaked = {}
+for _, l in ipairs(WoW.chat) do if l:find("MailProbe", 1, true) then leaked[#leaked + 1] = l end end
+eq(#leaked, 0, "no probe line in chat")
+
+-- The session 6 procedures are defined: /fp steps mail <name> starts each.
+for _, name in ipairs({ "send", "timing", "capture", "picker", "names", "release" }) do
+    SlashCmdList.FOREVERPROBE("steps stop")
+    SlashCmdList.FOREVERPROBE("steps mail " .. name)
+    local rec = ForeverProbeDB.steps.records["MailProbe/" .. name]
+    check(rec and rec.status == "active", "the procedure " .. name .. " starts")
+end
+SlashCmdList.FOREVERPROBE("steps stop")
 
 done("test_probe")

@@ -14,6 +14,9 @@
         pwsh Tools/deploy.ps1               # GlassMail
         pwsh Tools/deploy.ps1 -Probe        # ...and MailProbe
         pwsh Tools/deploy.ps1 -ProbeOnly    # just MailProbe
+
+    MailProbe is a ForeverProbe module, so -Probe and -ProbeOnly deploy the
+    ForeverProbe checkout first ($env:FOREVERPROBE, else ..\ForeverProbe).
         pwsh Tools/deploy.ps1 -AddOnsPath "D:\...\_classic_beta_\Interface\AddOns"
 #>
 
@@ -29,6 +32,7 @@ if (-not (Test-Path $AddOnsPath)) { Write-Error "AddOns path not found: $AddOnsP
 
 . (Join-Path $PSScriptRoot "LibGlassPin.ps1")
 $LibGlass = if ($env:LIBGLASS) { $env:LIBGLASS } else { Join-Path (Split-Path -Parent $RepoRoot) "LibGlass" }
+$ForeverProbe = if ($env:FOREVERPROBE) { $env:FOREVERPROBE } else { Join-Path (Split-Path -Parent $RepoRoot) "ForeverProbe" }
 
 function Deploy-Addon {
     $dest = Join-Path $AddOnsPath "GlassMail"
@@ -75,6 +79,14 @@ function Deploy-Addon {
 }
 
 function Deploy-Probe {
+    # The host first: MailProbe has ## Dependencies: ForeverProbe, so without
+    # it the client loads no MailProbe at all.
+    if (-not (Test-Path -LiteralPath (Join-Path $ForeverProbe "Tools\deploy.ps1"))) {
+        Write-Error "ForeverProbe checkout not found at $ForeverProbe (clone github.com/Spotnick2/ForeverProbe there, or set `$env:FOREVERPROBE)"
+        exit 1
+    }
+    & pwsh -NoProfile -File (Join-Path $ForeverProbe "Tools\deploy.ps1") -AddOnsPath $AddOnsPath
+    if ($LASTEXITCODE -ne 0) { Write-Error "ForeverProbe deploy refused; MailProbe was not touched"; exit 1 }
     $dest = Join-Path $AddOnsPath "MailProbe"
     Write-Host "Deploying MailProbe -> $dest" -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -89,4 +101,4 @@ if ($Probe -or $ProbeOnly) { Deploy-Probe }
 
 Write-Host ""
 Write-Host "/reload is enough, a brand-new addon folder included; restart the client only for new textures." -ForegroundColor Yellow
-Write-Host "In game:  /console scriptErrors 1   then   /gmail help   (probe: /mailprobe help)" -ForegroundColor Green
+Write-Host "In game:  /console scriptErrors 1   then   /gmail help   (probe: /fp mail, /fp steps; its lines in /fp)" -ForegroundColor Green
