@@ -1,5 +1,5 @@
--- MailProbe: the throwaway measurement addon for GlassMail (M0, and M1's
--- session 5). It answers the questions docs/PLAN.md's probe checklist leaves
+-- MailProbe: the throwaway measurement addon for GlassMail (M0, M1's
+-- session 5 and M2's session 6). It answers the questions docs/PLAN.md's probe checklist leaves
 -- open before any feature code is written. Every line it prints also goes to
 -- MailProbeDB.log (SavedVariables), so a full client exit leaves the session
 -- on disk for review. It logs mail headers (senders, subjects, amounts) of
@@ -45,6 +45,13 @@
 --   split BAG SLOT N split N off a stack and attach it to the draft
 --   sendnow          SendMail(draft) from the command (a key press)
 --   sendtimer        SendMail(draft) from a timer, 1 s later
+--   sendwatch on/off (session 6) each send numbered: the draft at the Send click, at SendMail's
+--                    post-hook and at MAIL_SEND_SUCCESS; which events fire inside SendMail;
+--                    every result line timed from the last send; the Send button's state
+--   capture on/off   (session 6) at each DeleteInboxItem / ReturnInboxItem post-hook: is the
+--                    mail still at its index, and do the next updates show it gone (5 s)?
+--   names            (session 6) your own name and realm, friends' and guild members' name
+--                    formats (realm suffix, secrets), in or out of an instance
 --   log [N]          the last N log lines (default 30); clear: empty the log
 --
 -- Every client call that may be missing or throw goes through try(), so one
@@ -295,6 +302,61 @@ local installHooks   -- defined below
 local watching, lastWatch = false, {}   -- watch on: every mail line as last logged
 local refillAt                          -- GetTime() of our CheckInbox, until the next update
 
+-- Session 6. sendwatch: sends numbered; phase "click" from the Send button's
+-- PreClick, nil once SendMail's post-hook ran. Each setup call's post-hook
+-- (SetSendMailCOD / Money, MailFrame.lua:1252-1266) empties insideSend, so what
+-- it holds at SendMail's post-hook fired inside SendMail itself.
+local sendwatch = false
+local sendN, lastSend, phase, insideSend = 0, nil, nil, {}
+local draft   -- the send draft, defined with the commands
+-- capture: the inbox as of the last update (index -> { fp, line }), and the
+-- delete/return waiting for an update that shows its mail gone.
+local capturing = false
+local before, capture = {}, nil
+
+-- The mail of each index now ({ fp, line }), the loaded count, and how many
+-- mails share each fingerprint.
+local function snapshot()
+    local out = { loaded = counts() or 0, count = {} }
+    for i = 1, out.loaded do
+        local h = header(i)
+        if h then
+            local fp = fingerprint(h, i)
+            out[i] = { fp = fp, line = describe(i) }
+            out.count[fp] = (out.count[fp] or 0) + 1
+        end
+    end
+    return out
+end
+
+local function fpCount(fp)
+    local _, count = scanAll()
+    return count[fp] or 0
+end
+
+-- How long after the last send / delete / return a result came. An event
+-- during the click is only collected here: whether it fired inside SendMail
+-- is known at SendMail's post-hook (a later setup call clears the list).
+local function since(event)
+    local parts = {}
+    if phase then
+        insideSend[#insideSend + 1] = event
+        parts[#parts + 1] = "during the Send click"
+    end
+    if sendwatch and lastSend then
+        parts[#parts + 1] = string.format("+%.2f s after send #%d", GetTime() - lastSend.at, lastSend.n)
+    end
+    if capture then
+        parts[#parts + 1] = string.format("+%.2f s after %s of mail %d", GetTime() - capture.at, capture.kind, capture.index)
+    end
+    return #parts > 0 and (" [" .. table.concat(parts, "; ") .. "]") or ""
+end
+
+local function sendButton()
+    local b = global("SendMailMailButton")
+    return b and show(b:IsEnabled()) or "MISSING"
+end
+
 local function logWatch()
     local loaded = counts() or 0
     for i = 1, math.max(loaded, #lastWatch) do
@@ -329,6 +391,17 @@ frame:SetScript("OnEvent", function(_, event, ...)
             refillAt = nil
         end
         if watching then logWatch() end
+        if capture then
+            local n = fpCount(capture.fp)
+            say(string.format("X update +%.2f s after %s of mail %d: loaded %s -> %s, its fingerprint %d -> %d",
+                GetTime() - capture.at, capture.kind, capture.index, show(capture.loaded), show(loaded),
+                capture.count, n))
+            if n == capture.count - 1 and loaded == capture.loaded - 1 then
+                say("X " .. capture.kind .. " of mail " .. capture.index .. " confirmed: one fewer of it, one mail fewer")
+                capture = nil
+            end
+        end
+        if capturing then before = snapshot() end
         return
     end
     if event == "UPDATE_PENDING_MAIL" then
@@ -338,7 +411,7 @@ frame:SetScript("OnEvent", function(_, event, ...)
             .. " minimap indicator shown=" .. indicator())
         return
     end
-    if QUIET[event] and not busy then return end
+    if QUIET[event] and not busy and not (sendwatch and event == "MAIL_SEND_INFO_UPDATE") then return end
     if event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" or event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
         local t = ...
         if t ~= mailInfoType() then return end   -- only the mailbox
@@ -356,7 +429,22 @@ frame:SetScript("OnEvent", function(_, event, ...)
     end
     local tag = (event:find("^MAIL_SHOW") or event:find("^MAIL_CLOSED") or event == "PLAYER_LEAVING_WORLD") and "L"
         or ((event:find("ADDON_ACTION") or event:find("SECURE_TRANSFER")) and "!") or "R"
-    say(tag .. " " .. event .. " (" .. args(...) .. ")")
+    say(tag .. " " .. event .. " (" .. args(...) .. ")" .. since(event))
+    if sendwatch and (event == "MAIL_SEND_SUCCESS" or event == "MAIL_FAILED" or event == "MAIL_SEND_INFO_UPDATE") then
+        say("S   Send button enabled=" .. sendButton())
+    end
+    if sendwatch and event == "MAIL_SEND_SUCCESS" then
+        if lastSend then lastSend.done = true end
+        local d = draft()
+        say("S   draft now: to=" .. show(d.to) .. " money=" .. show(d.money) .. " items=" .. #d.items)
+    end
+    if event == "SECURE_TRANSFER_CONFIRM_SEND_MAIL" then
+        local st = global("C_SecureTransfer")
+        local ok, info = try("C_SecureTransfer.GetMailInfo", st and st.GetMailInfo)
+        if ok and type(info) == "table" then
+            say("!   GetMailInfo: target=" .. show(info.target) .. " sendMoney=" .. show(info.sendMoney))
+        end
+    end
 end)
 
 --------------------------------------------------------------------------------
@@ -374,6 +462,78 @@ installHooks = function()
             hooksecurefunc(name, function(...) say("C " .. name .. "(" .. args(...) .. ")") end)
         else
             say("C " .. name .. ": MISSING")
+        end
+    end
+    -- Session 6: sendwatch and capture (they do nothing while off).
+    local button = global("SendMailMailButton")
+    if button then
+        button:HookScript("PreClick", function()
+            if not sendwatch then return end
+            phase, insideSend = "click", {}
+            local d = draft()
+            say("S Send clicked: to=" .. show(d.to) .. " money=" .. show(d.money) .. " cod=" .. show(d.cod) .. " items="
+                .. (#d.items > 0 and table.concat(d.items, " ") or "none") .. " postage=" .. show(d.price))
+            -- SendMail's post-hook ends the phase in this same frame; this only
+            -- catches a click that never reached SendMail.
+            C_Timer.After(0, function()
+                if phase then say("S the Send click never reached SendMail"); phase = nil end
+            end)
+        end)
+    else
+        say("SendMailMailButton: MISSING")
+    end
+    for _, name in ipairs({ "SetSendMailCOD", "SetSendMailMoney" }) do
+        if global(name) then
+            hooksecurefunc(name, function()
+                -- Events from now until SendMail returns fired inside SendMail.
+                if phase then insideSend = {} end
+            end)
+        end
+    end
+    if global("SendMail") then
+        hooksecurefunc("SendMail", function(to)
+            if not sendwatch then return end
+            local overlap = lastSend and not lastSend.done
+            sendN = sendN + 1
+            lastSend = { n = sendN, at = GetTime() }
+            local d = draft()
+            say("S send #" .. sendN .. " to " .. show(to) .. ": draft at the post-hook money=" .. show(d.money) .. " cod="
+                .. show(d.cod) .. " items=" .. (#d.items > 0 and table.concat(d.items, " ") or "none"))
+            if phase then
+                say("S   inside SendMail: " .. (#insideSend > 0 and table.concat(insideSend, ", ") or "no event"))
+            else
+                say("S   not from the Send button (no click seen)")
+            end
+            if overlap then say("S   OVERLAP: send #" .. (sendN - 1) .. " had no MAIL_SEND_SUCCESS yet") end
+            phase = nil
+        end)
+    end
+    for _, kind in ipairs({ "DeleteInboxItem", "ReturnInboxItem" }) do
+        if global(kind) then
+            hooksecurefunc(kind, function(i)
+                if not capturing or type(i) ~= "number" then return end
+                local was, loaded = before[i], counts()
+                local h = header(i)
+                local now = h and fingerprint(h, i)
+                local inbox = global("InboxFrame")
+                local open = global("OpenMailFrame")
+                say("X " .. kind .. "(" .. i .. ") post-hook: loaded " .. show(before.loaded) .. " at the last update, "
+                    .. show(loaded) .. " now; open letter=" .. show(inbox and inbox.openMailID) .. " shown="
+                    .. show(open and open:IsShown()))
+                say("X   before: " .. (was and was.line or "(no mail)"))
+                say("X   now:    " .. (h and describe(i) or "(no mail)") .. " -> "
+                    .. (was and now == was.fp and "SAME mail at its index" or "NOT the same"))
+                if capture then say("X   previous capture (" .. capture.kind .. " of mail " .. capture.index .. ") dropped") end
+                capture = nil
+                if was then
+                    local c = { kind = kind, index = i, fp = was.fp, at = GetTime(), loaded = before.loaded,
+                        count = before.count[was.fp] or 0 }
+                    capture = c
+                    C_Timer.After(5, function()
+                        if capture == c then say("X no update showed mail " .. i .. " gone within 5 s"); capture = nil end
+                    end)
+                end
+            end)
         end
     end
     local cm = global("C_Mail")
@@ -819,7 +979,7 @@ function C.picker(arg)
     say("picker ready for " .. show(pickerName) .. " (the @ by the recipient box)")
 end
 
-local function draft()
+function draft()
     local box, subj = global("SendMailNameEditBox"), global("SendMailSubjectEditBox")
     local d = { to = box and box:GetText(), subject = subj and subj:GetText(), items = {} }
     local maxSend = global("ATTACHMENTS_MAX_SEND") or 12
@@ -880,6 +1040,73 @@ function C.sendtimer()
     end)
 end
 
+-- Session 6. Send with Blizzard's own button; every S line is about a send.
+function C.sendwatch(arg)
+    sendwatch = arg ~= "off"
+    say("sendwatch " .. (sendwatch and "on: send as usual; each send is numbered, results are timed from it"
+        or "off"))
+end
+
+-- Session 6. Delete or return as usual (the letter's buttons, our row icons):
+-- every X line is about the last one.
+function C.capture(arg)
+    capturing = arg ~= "off"
+    before = capturing and snapshot() or {}
+    if not capturing then capture = nil end
+    say("capture " .. (capturing and "on: delete or return a mail as usual" or "off"))
+end
+
+-- A name as S1 would read it: secret or not, a realm suffix or not.
+local function nameLine(label, name)
+    if issecretvalue and issecretvalue(name) then return label .. " <secret>" end
+    if type(name) ~= "string" then return label .. " " .. show(name) end
+    local amb = global("Ambiguate")
+    local okA, short = try("Ambiguate", amb, name, "none")
+    return string.format("%s %s suffix=%s Ambiguate(none)=%s", label, show(name), show(name:find("-", 1, true) ~= nil),
+        okA and show(short) or "ERROR")
+end
+
+-- Session 6. The guild roster loads on request: run it again a few seconds
+-- later if the count is 0. Names go to the log: blur them in anything shared.
+function C.names()
+    local okU, n, realm = try("UnitFullName", global("UnitFullName"), "player")
+    local okR, rn = try("GetRealmName", global("GetRealmName"))
+    local okN, norm = try("GetNormalizedRealmName", global("GetNormalizedRealmName"))
+    local okI, inInstance, kind = try("IsInInstance", global("IsInInstance"))
+    say("names: you " .. args(n, realm) .. " realm=" .. show(rn) .. " normalized=" .. show(norm) .. " instance="
+        .. args(inInstance, kind))
+    local fl = global("C_FriendList")
+    local okF, nf = try("C_FriendList.GetNumFriends", fl and fl.GetNumFriends)
+    say("names: " .. show(nf) .. " friend(s)")
+    for i = 1, (okF and type(plain(nf)) == "number") and nf or 0 do
+        local ok, info = try("GetFriendInfoByIndex", fl.GetFriendInfoByIndex, i)
+        if ok and type(info) == "table" then
+            say(nameLine("names: friend " .. i, info.name) .. " connected=" .. show(info.connected))
+        end
+    end
+    local okG, inGuild = try("IsInGuild", global("IsInGuild"))
+    if not (okG and inGuild) then say("names: not in a guild"); return end
+    local gi = global("C_GuildInfo")
+    try("C_GuildInfo.GuildRoster", gi and gi.GuildRoster)
+    local okM, members = try("GetNumGuildMembers", global("GetNumGuildMembers"))
+    local count = (okM and type(plain(members)) == "number") and members or 0
+    say("names: " .. show(members) .. " guild member(s); the first 10:")
+    for i = 1, math.min(count, 10) do
+        local ok, name = try("GetGuildRosterInfo", global("GetGuildRosterInfo"), i)
+        if ok then say(nameLine("names: guild " .. i, name)) end
+    end
+    local suffixed, secret = 0, 0
+    for i = 1, count do
+        local ok, name = try("GetGuildRosterInfo", global("GetGuildRosterInfo"), i)
+        if ok and issecretvalue and issecretvalue(name) then
+            secret = secret + 1
+        elseif ok and type(name) == "string" and name:find("-", 1, true) then
+            suffixed = suffixed + 1
+        end
+    end
+    say("names: guild: " .. suffixed .. " with a realm suffix, " .. secret .. " secret, of " .. count)
+end
+
 function C.log(arg)
     if arg == "clear" then MailProbeDB.log = {}; print("MailProbe: log cleared"); return end
     local n = tonumber(arg) or 30
@@ -893,6 +1120,7 @@ local HELP = {
     "returnnow N | returntimer N | returnmany A B ..  (ONLY test mails: they go back to the sender)",
     "hidestock | showstock | rows on/off | picker NAME",
     "draft | split BAG SLOT N | sendnow | sendtimer",
+    "sendwatch on/off | capture on/off | names   (session 6)",
     "log [N] | log clear",
 }
 
