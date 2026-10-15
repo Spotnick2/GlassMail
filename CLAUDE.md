@@ -56,7 +56,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   still false inside the `PLAYER_REGEN_DISABLED` handler), `Fail(key, err)` (the **one** failure recorder,
   read by `/gmail failures`), `PlayerFullName`, `AddOnVersion`, `SafeFrame`, `Button`;
   `MEASURED_ON_BUILD`. A subset of GlassChat's; lift more from there.
-- **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })` (LibGlass r6's
+- **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })` (LibGlass r8's
   clean material: thin rims, no grain), this addon's instance of
   the material. Material changes are LibGlass PRs.
 - **`Skin.lua`**: the look, `GM.db.skin` = `clear` / `smoked` (glass presets, AltStable's
