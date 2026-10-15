@@ -18,6 +18,45 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
 | 7 | Taint: row controls, picker, combat | No block from our row button (take) or our picker followed by Blizzard's Send, on sends that needed no confirmation. Combat: not measured, so our controls disable in combat. The picker with a confirmation: open (see below). |
 | 8 | Sender formats, secrets, read state | `GetMoney` was **not** secret (out of combat, in town). Players "First Surname"; AH "Horde Auction House" (faction-specific); six `AUCTION_*_MAIL_SUBJECT` templates (session 5). Item count nil without items; uncached items named "". |
 
+## Session 6 runbook (M2, to run; findings replace this section)
+
+What M2 needs measured before Sent, Trash and the S1 picker ship (PLAN.md, "Probe session 6").
+`pwsh Tools/deploy.ps1 -Probe`, `/console scriptErrors 1`, then at a mailbox:
+`/mailprobe sendwatch on` and `/mailprobe capture on` (both stay on for the session). Each send
+logs `S` lines, each delete or return `X` lines; every result line is timed from the last one.
+Watch for `!` lines (`ADDON_ACTION_BLOCKED` / `_FORBIDDEN`, `SECURE_TRANSFER_*`).
+
+1. **Sends** (Blizzard's Send button, as usual), one at a time, waiting for the result:
+   - to an alt: plain; with an item; with money; with COD;
+   - to a stranger with an item: confirm once, cancel once;
+   - to a name that doesn't exist; with too little money for postage;
+   - to a character of the other faction, another ruleset, the other account.
+   Each `S send #n` line says what fired **inside** `SendMail` and the draft then;
+   `MAIL_SEND_SUCCESS` shows the draft after.
+2. **Correlation:**
+   - Send, then close the mailbox at once: does the success still come, and when?
+   - Send, then take a mail while it's pending: which results come, in what order?
+   - Click Send twice fast (two drafts): `OVERLAP`, what re-enables Send, the order of the
+     two results.
+3. **Delete and return:** with `capture on`, delete an empty mail from the letter's button,
+   return a test mail with the letter's button and with `/mailprobe rows on`'s **R**, and delete
+   an AH mail with items (its confirmation popup). The `X` lines say whether the mail was still
+   at its index in the post-hook and whether an update confirmed it (a frame later). The
+   baseline is the inbox at the button's PreClick, else the last update if none came this
+   frame; an update in the same frame without a PreClick is logged as **AMBIGUOUS**, both
+   candidates shown, nothing captured. Any take before the confirmation drops the capture, as
+   the Trash rule will.
+4. **Picker with a stranger:** `/mailprobe picker First Surname` (a stranger), attach an item,
+   click `@`, then Send and **confirm** the dialog. Any `!` line?
+5. **Names:** `/mailprobe names` in town and again inside an instance (realm suffixes, secrets).
+   If the guild count is 0, run it again a few seconds later (the roster loads on request).
+   The log holds the names: blur them in anything shared.
+6. **The two v0.1.0 checks:** with Glass Mail on, take gold with Open All and close the mailbox
+   (is the gold line said?); after a visit with Open All and the row icons, `/mailprobe log 200`:
+   any `!` line?
+
+Then exit the client fully and send `WTF\Account\<account>\SavedVariables\MailProbe.lua`.
+
 ## Session 5 findings (2026-10-10, build 70338, M1)
 
 **Answered without the probe** (the sibling addons' probes, the porting guide and the client
