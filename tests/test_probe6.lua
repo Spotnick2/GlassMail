@@ -12,6 +12,7 @@ dofile("tests/harness.lua")
 local draft = { money = 0, cod = 0, items = {} }
 local failInside = false   -- SendMail fires MAIL_FAILED before it returns
 CreateFrame("Button", "SendMailMailButton", SendMailFrame)
+CreateFrame("EditBox", "SendMailNameEditBox", SendMailFrame)
 rawset(_G, "SetSendMailCOD", function(c) draft.cod = c; WoW.fire("SEND_MAIL_COD_CHANGED") end)
 rawset(_G, "SetSendMailMoney", function(c) draft.money = c; WoW.fire("SEND_MAIL_MONEY_CHANGED") end)
 rawset(_G, "GetSendMailMoney", function() return draft.money end)
@@ -330,6 +331,25 @@ mark()
 SlashCmdList.FOREVERPROBE("steps mail names")
 WoW.fire("GUILD_ROSTER_UPDATE", true)
 check(saw("3/4 CHECK FAIL"), "an empty roster in a guild fails the read's check")
+SlashCmdList.FOREVERPROBE("steps stop")
+
+-- The picker procedure takes the stranger's name from the To box (nothing to
+-- type), empties it, and its @ button puts it back with SetText.
+local FPS = ForeverProbe.Steps
+SendMailNameEditBox:SetText("")
+mark()
+SlashCmdList.FOREVERPROBE("steps mail picker")
+FPS.Run()
+check(saw("1/3 .*ERROR.*type a stranger's name in the To box first"), "an empty To box is refused, the step stays")
+SendMailNameEditBox:SetText("Nythril Wolfbrother")
+FPS.Run()
+check(saw('picker ready for "Nythril Wolfbrother"'), "Use name sets the picker to the typed name")
+eq(SendMailNameEditBox:GetText(), "", "  and empties the To box")
+local at
+for _, f in ipairs(WoW.frames) do if f.GetText and f:GetText() == "@" then at = f end end
+at._scripts.OnClick(at)
+eq(SendMailNameEditBox:GetText(), "Nythril Wolfbrother", "the @ button puts the name back")
+check(saw("2/3: Attach an item"), "  and the procedure waits for the send")
 SlashCmdList.FOREVERPROBE("steps stop")
 
 done("test_probe6")

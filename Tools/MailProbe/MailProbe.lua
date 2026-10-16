@@ -1253,11 +1253,22 @@ Probe:Steps("capture", {
     end },
 })
 
+-- The name comes from the To box (nothing to type in a command): the step
+-- takes it, empties the box, and the @ button puts it back with SetText.
 Probe:Steps("picker", {
     title = "Session 6: picker to a stranger",
-    { text = "At a mailbox's Send Mail tab, type /fp mail picker First Surname with a stranger's name. "
-        .. "An @ button appears by the recipient box. Press Next." },
-    { text = "Attach an item, click @, press Send and CONFIRM the dialog.", event = "MAIL_SEND_SUCCESS" },
+    rev = 2,
+    { text = "At a mailbox's Send Mail tab, type a stranger's name in the To box, then press Use name. "
+        .. "The box empties and an @ button appears beside it.", button = "Use name", run = function()
+        local box = global("SendMailNameEditBox")
+        local name = box and box:GetText()
+        if type(name) ~= "string" or name == "" then error("type a stranger's name in the To box first") end
+        C.picker(name)
+        box:SetText("")
+        return "picker set"
+    end },
+    { text = "Attach an item, click @ (it fills the To box), press Send and CONFIRM the dialog.",
+        event = "MAIL_SEND_SUCCESS" },
     { text = "Was anything blocked (a red BLOCKED or FORBIDDEN line in /fp, or an error)?", ask = true },
 })
 

@@ -15,32 +15,98 @@ Build: 1.60.1.70291 (session 1, 2026-10-09, an empty inbox).
 | 3 | Looting limits and failures | Specialty bags take items when general bags are full, and are preferred when both have room; a partial stack is enough; money needs no slot; `MAIL_FAILED(itemID)` + error type 3. Sessions 3 and 5. |
 | 4 | Take / Return from a timer | `TakeInboxItem` from timers works (several in a row). One `ReturnInboxItem` from a timer works; several in a row: not measured, so I2 ships one click per return. Sessions 3-5. |
 | 5 | Open All ownership (gamepad, OnHide) | Hiding calls `SetOpeningAll(false)`; the button comes back on every mailbox open and on /reload. No gamepad available (owner): untestable. Our engine re-checks its own state each step instead of relying on the stock button staying inert. |
-| 6 | Sending, splitting, secure transfer | No confirmation appeared for two item sends (to "Cowruzo Test" and "Cowruzo Kashmere"). Blizzard shows it only for strangers. Success 4.3 s, ~15 s and 99 s after `SendMail`. Strangers, splitting, timer send: open (see below). |
-| 7 | Taint: row controls, picker, combat | No block from our row button (take) or our picker followed by Blizzard's Send, on sends that needed no confirmation. Combat: not measured, so our controls disable in combat. The picker with a confirmation: open (see below). |
+| 6 | Sending, splitting, secure transfer | One `SendMail` per send; the draft is still filled at its post-hook. Success 0.4-0.7 s after it (session 6; 4.3-99 s in sessions 2-3). A stranger's confirmation fires inside `SendMail`; a cancel fires nothing, and `SECURE_TRANSFER_CANCEL` fires on every close and reload. Splitting, timer send: open (see below). |
+| 7 | Taint: row controls, picker, combat | No block from our row button (take), our row icons, or our picker followed by Blizzard's Send, **through the stranger confirmation too** (session 6). Combat: not measured, so our controls disable in combat. |
 | 8 | Sender formats, secrets, read state | `GetMoney` was **not** secret (out of combat, in town). Players "First Surname"; AH "Horde Auction House" (faction-specific); six `AUCTION_*_MAIL_SUBJECT` templates (session 5). Item count nil without items; uncached items named "". |
 
-## Session 6 runbook (M2, to run; findings replace this section)
+## Session 6 findings (2026-10-15, build 70374, M2)
 
-What M2 needs measured before Sent, Trash and the S1 picker ship (PLAN.md, "Probe session 6").
-MailProbe is a ForeverProbe module (`..\ForeverProbe`, its `docs/GUIDE.md`): its lines go to the
-`/fp` console, never to chat, and session 6 is six guided procedures, each a panel of buttons
-that saves every outcome. Nothing is pasted back.
+Run as ForeverProbe procedures (`/fp steps mail send|timing|capture|picker|names|release`), on two
+accounts: the owner's alts "Kaleid Sumner" (account 12) and "Cowruzo Kashmere" (account 1), each
+other's recipients. Strangers' names are left out here. The logs are `MailProbe.lua` and
+`ForeverProbe.lua` (`steps.records`) of both accounts.
 
-`pwsh Tools/deploy.ps1 -Probe` (deploys ForeverProbe too), `/console scriptErrors 1`, `/reload`,
-then at a mailbox, one procedure at a time, in any order:
+**Sends (item 6; `send`, `timing`, `picker`).** Every send went through Blizzard's Send button.
+- **One `SendMail` call per send**, from the button's click. Its arguments are the recipient,
+  subject and body (and `nil`, the reply ID).
+- **The draft is still filled at the `SendMail` post-hook** and cleared when `MAIL_SEND_SUCCESS`
+  arrives (`to=""`, no items): the post-hook is the capture point Sent needs. Money and COD
+  appear only there: the button's `OnClick` sets them (`SetSendMailCOD(0)`, `SetSendMailMoney(0)`,
+  then the amount), so a `PreClick` sees 0 (a 1-copper send and a 1-copper COD read correctly at
+  the post-hook).
+- **Nothing fires inside `SendMail`** for a send that needs no confirmation (10 of 10), and
+  `MAIL_FAILED` never did either. Only the stranger confirmation does (below).
+- **Results come fast:** `MAIL_SEND_SUCCESS` 0.43-0.68 s after `SendMail` (10 sends), then
+  `MAIL_SUCCESS (nil)` in the same frame: `MAIL_SUCCESS` is not inbox-only. (Sessions 2-3 saw
+  4.3 s, 15 s and 99 s; the server was slower then.)
+- **Blizzard's Send button is disabled at the click** (`SendMailButtonMixin:OnClick`) and comes
+  back on `MAIL_FAILED`, on `MAIL_SUCCESS` (which inbox actions fire too) and on any draft change
+  (`MAIL_SEND_INFO_UPDATE` runs `SendMailFrame_Update`), MailFrame.lua:150-162, 1455. So an
+  overlap through the stock UI is possible (a take, or an edit, while a send is pending), just
+  unlikely at these speeds: the timing steps (close right after Send, a take while a send is
+  pending, two sends fast) produced none, as each result came before the next action.
+- **Sends with no result event at all:**
+  - a one-word name: only `UI_ERROR_MESSAGE (457, "Please enter a full character name.")`, in the
+    same frame as `SendMail`, after its post-hook;
+  - a cancelled stranger confirmation: nothing.
+- **The other faction:** `MAIL_FAILED (nil)` plus `UI_ERROR_MESSAGE (321, "Target is
+  unfriendly.")`, 0.3 s after `SendMail`, not inside it; the Send button comes back on.
+- **The other account's character** took mail like an alt: no confirmation, success in 0.6 s.
+- **Another ruleset:** not measured (no character there); that step re-sent to the other faction.
+- **A stranger:**
+  - One stranger got **no** confirmation (sent at once). Blizzard's rule for who is a stranger
+    isn't ours to guess: Sent records what was sent, whoever it went to.
+  - When the dialog appears, `SECURE_TRANSFER_CONFIRM_SEND_MAIL` fires **inside** `SendMail`.
+    `C_SecureTransfer.GetMailInfo` is **missing** to addons: its target and amount can't be read.
+  - **Confirmed** (the `picker` run): no second `SendMail` (it goes through
+    `C_SecureTransfer.SendMail`); `MAIL_SEND_SUCCESS` reached us 11.4 s later, when the owner
+    clicked.
+  - **Cancelled**: no event at all; the send never resolves.
+- **`SECURE_TRANSFER_CANCEL` fires on every mailbox close and every reload/logout** (one to four
+  times), with no dialog open. It never means "cancelled": Sent must not use it.
 
-| Procedure | What it measures |
-|---|---|
-| `/fp steps mail send` | Sends to an alt (plain, item, gold, COD), to a stranger (confirmed, cancelled), to an unknown name, with too little postage, to the other faction, another ruleset, the other account. Each `S send #n` line: what fired **inside** `SendMail`, the draft at the click, at the post-hook and at `MAIL_SEND_SUCCESS`. |
-| `/fp steps mail timing` | A close right after Send; a take while a send is pending; two sends fast (`OVERLAP`, what re-enables Send, the order of the results). |
-| `/fp steps mail capture` | Deletes and returns from the letter's button, a row's **R** and the AH delete popup. The `X` lines: is the mail still at its index in the post-hook, and does an update confirm it (a frame later). The baseline is the inbox at the button's PreClick, else the last update if none came this frame; an update in the same frame without a PreClick is **AMBIGUOUS** (both candidates logged, nothing captured). Any take before the confirmation drops the capture, as the Trash rule will. |
-| `/fp steps mail picker` | `/fp mail picker NAME` (a stranger), then Send through the confirmation: anything blocked? |
-| `/fp steps mail names` | Own, friends' and guild members' name formats (realm suffixes, secrets), in town and in an instance. The log holds the names: blur them in anything shared. |
-| `/fp steps mail release` | The two v0.1.0 checks: the gold line at close after Open All, and nothing blocked after the row icons. Ends with a `/reload`. |
+**Picker (item 7).** Our button's `SetText` into `SendMailNameEditBox`, then Blizzard's Send to a
+stranger **through the confirmation**: sent, nothing blocked (the host's baseline logged no
+`ADDON_ACTION_BLOCKED` / `_FORBIDDEN`). S1's gate is passed.
 
-The host's baseline logs `ADDON_ACTION_BLOCKED` / `_FORBIDDEN` in the same console. Then
-`/reload`; the session reads `SavedVariables\MailProbe.lua` (the log, `STEP` lines included) and
-`ForeverProbe.lua` (`steps.records`, the blocked actions) itself.
+**Deletes and returns (Trash; `capture`).** Every call had a pre-call point (the letter's
+button, the probe's row button):
+- **The mail is still at its index in the post-hook** (5 of 5: two letter Deletes, one letter
+  Return, two row-button Returns, the inbox size unchanged there).
+- **The `MAIL_INBOX_UPDATE` that removes it follows 0.12-0.37 s later**, then `MAIL_SUCCESS`; each
+  was confirmed by the plan's rule (its fingerprint one fewer and one mail fewer).
+- So **Trash's primary capture rule holds**: capture at the post-hook, confirm on the next update.
+- Not measured: an AH mail with items deleted through its confirmation popup (skipped).
+
+**Names (S1; `names`).**
+- **Guild members are "First Surname", no realm suffix**, none secret, in town and inside a
+  party instance (156 members). `Ambiguate(name, "none")` leaves them unchanged.
+- No WoW friends on the character: **friend name formats are not measured.**
+- `UnitFullName("player")` is first name and surname, as the porting guide already says; Glass
+  Mail's `API.PlayerFullName` uses `UnitName` and isn't affected. The realm is
+  `"Classic Beta PvE"` (normalized `"ClassicBetaPvE"`).
+- `C_GuildInfo.GuildRoster()` on a roster that's already loaded fired **no**
+  `GUILD_ROSTER_UPDATE` within 30 s. The picker reads the roster when it opens, and refreshes on
+  the event when it comes.
+
+**The v0.1.0 checks (`release`).** Glass Mail's Open All took a mail's money and an item, and the
+gold line was said when the mailbox closed (owner: yes). A row's Delete icon, then a check of the
+console: nothing blocked.
+
+**What this changes in the M2 plan:**
+- **The overlap rule is too strict for real use.** A send with no result (a mistyped one-word
+  name, a cancelled confirmation, a failure) is followed by the next send, which the plan counts as
+  an overlap, and every later send of the session would stay unconfirmed. Session 6 shows outcomes
+  in under a second, so a send still without a result at the next `SendMail` is almost always one
+  that will never get one. The rule needs
+  narrowing in the core PR's plan (reviewed with Codex): for example, a send with no result by the
+  next `SendMail` is closed as unconfirmed (or dropped, after a same-frame client error) instead of
+  poisoning the session.
+- **`failed`** stays out: `MAIL_FAILED` never fired inside `SendMail`.
+- **`SECURE_TRANSFER_CANCEL`** is dropped from the plan for good.
+- **Trash:** the primary rule ships; the open-letter fallback isn't needed for these paths.
+- **S1** may ship (the stranger confirmation after our `SetText` passed). Names: no suffix in the
+  guild roster; other realms and friends still unmeasured, so the plan's suffix rule stays.
 
 ## Session 5 findings (2026-10-10, build 70338, M1)
 
@@ -196,7 +262,7 @@ Send then sent the mail normally, with nothing blocked.
 
 ## Still open, and when it gets measured
 
-M0 and session 5 measured what M1 depends on. These items stay open; each feature that needs one
+M0 and session 5 measured what M1 depends on, session 6 what M2 does. These items stay open; each feature that needs one
 ships with a safe fallback until it is measured:
 
 | Item | Open question | Measure in | Blocks |
@@ -209,7 +275,9 @@ ships with a safe fallback until it is measured:
 | 4 | Several `ReturnInboxItem` in a row (`returnmany`) | when convenient | I2 batch Return (v0.1.0: one click each) |
 | 7 | Our controls in combat | when convenient | nothing: they disable in combat |
 | 8 | Postmaster mail and other system senders; senders on a localized client | when one arrives | I1 filter (a reasoned rule until then) |
-| 6, 7 | A send that needs the secure-transfer confirmation (a stranger), after our `SetText`; postage failure; bind/refund prompts | M2 | S1 |
+| 6 | Postage failure; bind/refund prompts; a send to another ruleset | when convenient | nothing: Sent records what `SendMail` was called with, and its result if one comes |
+| 8 | Friends' name formats; names from another realm | when a friend or another realm is at hand | S1 keeps a realm suffix in its keys and offers no other-realm character |
+| Trash | An AH mail with items deleted through its confirmation popup (no pre-call point) | when convenient | nothing: the post-hook still sees the mail when no update came that frame |
 | 6 | Splitting a stack into an attachment; `SendMail` from a timer (measured only, never used) | M4 | N1 |
 | 5 | Open All from a gamepad | never (no gamepad) | none: our engine checks its own state at every step |
 
