@@ -340,8 +340,14 @@ session.
 6. The two v0.1.0 checks never reported: the gold line at close, and no blocked action (the
    ForeverProbe baseline's watcher) after a session with Open All and the row icons.
 
-Session 6 runs as ForeverProbe procedures (`/fp steps mail send|timing|capture|picker|names|release`;
-the runbook is in FOREVER-PROBE.md): MailProbe became a ForeverProbe module before it ran.
+Session 6 runs as ForeverProbe procedures (`/fp steps mail send|timing|capture|picker|names|release`):
+MailProbe became a ForeverProbe module before it ran.
+
+**Measured 2026-10-15** (FOREVER-PROBE.md, "Session 6 findings"): the post-hook capture works for
+sends and removals; S1's stranger confirmation passed; `SECURE_TRANSFER_CANCEL` and `failed` are
+out. **Sent's overlap rule is too strict** (a typo'd name or a cancelled confirmation leaves a send
+with no result, and the rest of the session would be unconfirmed): the core PR's plan narrows it,
+reviewed with Codex before code.
 
 ### Delivery: five PRs, each "Part of #17"
 
