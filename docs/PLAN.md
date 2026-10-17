@@ -173,8 +173,9 @@ needs no cleanup pass:
 ### `Core/Names.lua`
 
 - `Names.Key(name)`: the comparison key. Trimmed, inner spaces collapsed, lower-cased. A `-Realm`
-  suffix is **kept** (part of the key) until session 6 shows what the server accepts; candidates
-  with a suffix other than the current realm's are left out of the picker meanwhile.
+  suffix is **kept** (part of the key): session 6 found none in the guild roster, and other realms
+  are unmeasured, so a candidate with a suffix other than the current realm's is left out of the
+  picker.
 - `Names.Display(name)`: trimmed, as the player would type it.
 - A secret name (`issecretvalue`) is never keyed or stored; it is skipped.
 
@@ -186,8 +187,10 @@ needs no cleanup pass:
 - **AltStable**, when loaded (`## OptionalDeps: AltStable`, `PUBLIC_API_VERSION == 1`):
   `GetCharacters()` (copies; GUID, name, realm, faction, class, account, hidden, current) and the
   `CharactersChanged` callback, only to refresh what is shown. Nothing from it is saved.
-- **Reachability**, until session 6 measures it: an own character is offered as a recipient when
-  its faction tag and realm name match the current character's.
+- **Reachability:** an own character is offered as a recipient when its faction tag and realm name
+  match the current character's. Session 6: the other faction fails ("Target is unfriendly");
+  the other account's character on the same realm takes mail like an alt; other realms and
+  rulesets are unmeasured, so they stay out.
 
 ### Sent (X2, `Core/Sent.lua`)
 
@@ -198,30 +201,44 @@ A send is captured as it is made and kept, in the state its outcome justifies:
   subject from the arguments, `GetSendMailMoney()`, `GetSendMailCOD()`, slots
   1..`ATTACHMENTS_MAX_SEND` by `GetSendMailItem` (itemID, count; no links). Record `{ day, at, char,
   to, subject, money, cod, items, state = "pending" }`.
-- **States:** `pending` while in memory only; saved as `sent` or `unconfirmed`. `failed` becomes a
-  third saved state only if session 6 proves the case below. An unconfirmed send still shows in Sent, marked,
-  because "where did I send that?" needs it too. There is no inferred `failed`: `MAIL_FAILED`
-  carries no action identity (MailInfoDocumentation.lua:90-97) and an inbox action started before
-  the `SendMail` can report late. A failure leaves the record unconfirmed. Only a failure session 6
-  proves is tied to the call itself (for example one delivered inside `SendMail`) may mark it
-  failed.
-- **Attribution, conservative:**
-  - `sent` only on a `MAIL_SEND_SUCCESS` (a send-only event) while exactly one send is pending and
-    no overlap happened this session.
-  - **Overlap:** a second `SendMail` while one is pending makes both unconfirmed, and **every later
-    send of the session stays unconfirmed**: a late success (99 s measured) from an earlier one
-    could otherwise confirm the wrong record. A `/reload` or a new login starts clean. Session 6
-    measures whether outcomes keep order; only then could this be narrowed.
-  - **A mailbox close does not end a pending send** (a success came 99 s after `SendMail`): a later
-    `MAIL_SEND_SUCCESS` in the same session still confirms it. At logout, a pending send is saved as
-    unconfirmed.
-  - **The stranger confirmation:** accepting sends through `C_SecureTransfer.SendMail()` in the
-    secure environment, unseen by our hook, but the outcome still arrives as `MAIL_SEND_SUCCESS` /
-    `MAIL_FAILED`. A cancelled confirmation leaves the send pending, then unconfirmed; session 6
-    shows whether `SECURE_TRANSFER_CANCEL` reaches an addon and belongs to this dialog before it is
-    used.
-- `SendMail` joins Ops' foreign-call hooks: a send stops any Ops run (session 6 checks whether a
-  failure can fire inside `SendMail`, before the post-hook).
+- **States:** `pending` while in memory only; saved as `sent` or `unconfirmed`. No `failed`:
+  `MAIL_FAILED` never fired inside `SendMail` (session 6) and carries no action identity
+  (MailInfoDocumentation.lua:90-97). An unconfirmed send still shows in Sent, marked, because
+  "where did I send that?" needs it too.
+- **Attribution: a 120 s window** (session 6 replaced the session-long overlap rule, which a
+  mistyped name or a cancelled confirmation would have turned on for the rest of the session):
+  - Each `SendMail` opens a **window** of 120 s for its record: the longest a result has ever taken
+    is 99 s (sessions 2-3); session 6 measured 0.4-0.7 s, and 11 s for a stranger confirmed by hand.
+  - **`MAIL_SEND_SUCCESS` confirms a record only when it is the one record with an open window**
+    (and not yet confirmed); it is then `sent` and its window closes. With two or more open, the
+    success confirms none of them.
+  - A record whose window ends unconfirmed (120 s) is saved `unconfirmed`. The window rests on one
+    assumption: no result comes more than 120 s after its window starts (its `SendMail`, or the
+    confirmation dialog's close for a stranger). If one ever did, it could
+    confirm a later send that is alone in its window; the 99 s worst case measured is the margin.
+  - **A client refusal is dropped:** `UI_ERROR_MESSAGE` with **message type 457** (session 6: a
+    one-word name, no other event), in the same frame as the record's `SendMail`, with exactly one
+    record opened in that frame, closes its window and the record is never saved: the mail never
+    left the client. The type is read only after `issecretvalue`; any other error, or 457 in
+    another frame, is left alone (the record ends with its window).
+  - **No inference from `MAIL_FAILED`**: it doesn't close a window (it may be an inbox action's);
+    the record ends `unconfirmed` when its window does.
+  - **The stranger confirmation:** `SECURE_TRANSFER_CONFIRM_SEND_MAIL` fires inside `SendMail`;
+    confirming sends through `C_SecureTransfer.SendMail` (no second call) and `MAIL_SEND_SUCCESS`
+    follows; cancelling fires nothing. The dialog has no timeout, so the player can accept minutes
+    later (Blizzard_SecureTransferUI.lua:101-132). A record whose `SendMail` raised it is
+    **awaiting confirmation**: an open candidate with **no time limit**, until the dialog closes.
+    Its close (accept or cancel) calls the global `SendMailFrame_EnableSendMailButton` through
+    `securecall` (`SecureTransferDialog_OnHide`, Blizzard_SecureTransferUI.lua:414-417, and its
+    outbound bridge, Blizzard_SecureTransferUIOutbound.lua:8-10); our post-hook on it starts the
+    record's 120 s window then. If that hook never fires (unmeasured), the record stays in the
+    candidate count until it is confirmed or the player logs out: a success with another
+    candidate open is then ambiguous, and nothing is misattributed.
+    The core PR's in-game check measures it. `SECURE_TRANSFER_CANCEL` is never used: it fires on
+    every mailbox close and reload.
+  - **A mailbox close doesn't end a window.** At logout every open record is saved
+    `unconfirmed`. A `/reload` starts with no open window.
+- `SendMail` joins Ops' foreign-call hooks: a send stops any Ops run.
 - **Returns go to Sent too**, as "returned to <sender>": a return is mail travelling back. Captured
   like a delete (below).
 - A `sent` record updates the recent recipients (`Names.Key` → `{ name, day }`).
@@ -229,25 +246,28 @@ A send is captured as it is made and kept, in the state its outcome justifies:
 
 ### Trash (`Core/Trash.lua`)
 
-- **Capture depends on session 6** (session 4 saw the inbox shrink before `MAIL_SUCCESS` after a
-  return, but not what a post-hook sees):
-  - **If** the `DeleteInboxItem` / `ReturnInboxItem` post-hook still finds the mail at its index and
-    a later `MAIL_INBOX_UPDATE` follows: every call, ours or Blizzard's (the letter's Delete button),
-    is captured from a fresh `Scan` at the hook, with its contents and `expires`, and **confirmed**
-    when that update shows its fingerprint's count and the loaded count each fell by one, within
-    5 s; otherwise dropped.
-  - **Otherwise:** only removals whose mail we knew before the call are captured: Ops' own Return
-    and Delete (the mail is scanned before dispatch), and Blizzard's letter buttons through the open
-    letter: a scan of the mail at `InboxFrame.openMailID` (read, never written) taken when the letter
-    opens, and **re-checked on every `MAIL_INBOX_UPDATE`**: it stays valid only while the mail at
-    that index has the same fingerprint **and that fingerprint is unique in the inbox** (M1's rule:
-    twins aren't interchangeable). A shift, or a twin anywhere in the inbox, voids the letter's
-    capture, and that removal is left out.
-    Removals that can't be attributed are left out, and the UI says Trash holds what Glass Mail saw.
-  - Either way: one capture at a time; **any later inbox-changing call (Take, money, AutoLoot,
-    Return, Delete; Ops' hooks see them all) drops a capture still outstanding**, so a take that
-    empties a mail can't confirm a return; an unresolved mail (missing link, secret) is not
-    captured.
+- **Capture at the post-hook** (session 6: the `DeleteInboxItem` / `ReturnInboxItem` post-hook
+  still finds the mail at its index, 5 of 5; the update that removes it follows 0.12-0.37 s
+  later). Every call, ours or Blizzard's (the letter's buttons, the delete popup), is captured from
+  a fresh `Scan` of that index, with its contents and `expires` (`time() + daysLeft * 86400`).
+  - **Not when an inbox update came in the same frame** (`GetTime()` equal to the last
+    `MAIL_INBOX_UPDATE`'s): it may have come inside the call, so the index may already hold the
+    next mail. That removal is left out (none did in session 6).
+  - **Confirmed** when an update within 5 s shows its fingerprint's count and the loaded count each
+    one fewer than at the hook; committed a frame later, so a later call's post-hook can still void
+    it. Otherwise dropped.
+  - **Not while an earlier inbox call is unsettled:** every inbox-changing call (Take, money,
+    AutoLoot, Return, Delete, ours or anyone's: the post-hooks Ops uses) marks the inbox
+    unsettled. Only a `MAIL_INBOX_UPDATE` that arrives with `C_Mail.IsCommandPending()` false
+    settles it (an update says nothing about which call finished; Blizzard's own Open All waits for
+    the same flag, MailFrame.lua:1683). A removal made while it is unsettled is left out: a take
+    already in flight could otherwise remove the mail and pass for the return. No timeout settles
+    it: a call that never produces an update (a take on an empty slot, session 5) leaves the next
+    removal out, and that removal's own update settles it again.
+  - One capture at a time; **any later inbox-changing call drops a capture still outstanding**, so
+    a take that empties a mail can't confirm a return. An unresolved mail (missing link, secret) is
+    not captured.
+  - Removals left out are said nowhere but in the window's note: Trash holds what Glass Mail saw.
 - A confirmed delete goes to Trash; a confirmed return to Sent ("returned to").
 - Trash shows only in its folder, never in Inbox. Each entry goes when the mail would have expired.
 - Takes by hand (shift-click, the letter's buttons) are not recorded: frequent, paced by the
@@ -361,6 +381,145 @@ reviewed with Codex before code.
 
 Settings added: `expiryDays`, `recentMax` (options page radios, `/gmail`). New saved data in
 `GlassMailDB`: `playDay`, `lastDate`, `version`, `chars`, `recents`, `snapshots`, `sent`, `trash`.
+
+### The core PR in detail (PR 2 of M2; reviewed before code)
+
+What it ships: the memory, with no window yet. The owner checks it in game with `/gmail sent` and
+`/gmail trash` (the last 10 of each, one chat line apiece) until the window PR replaces them.
+
+**Files** (TOC: after `Core\Ops.lua`, before `OpenAll.lua`):
+- `Core\Names.lua`: `Names.Key`, `Names.Display` (above).
+- `Core\Store.lua`: the saved data's shape, the play-day clock and expiry. Owns
+  `GlassMailDB.version`, `playDay`, `lastDate` and the subtrees `chars`, `recents`, `sent`, `trash`
+  (`snapshots` arrive with the window PR, under the same version rules).
+- `Core\Registry.lua`: own characters, AltStable when loaded.
+- `Core\Sent.lua`: send capture and attribution, returns, recent recipients.
+- `Core\Trash.lua`: delete capture (and the return capture Sent records).
+
+**Saved data** (`GlassMailDB`, account-wide; plain values only, every field checked with
+`issecretvalue` before it is kept; a secret field drops that field, a secret name or GUID drops the
+record):
+- `version = 1`; `playDay` (a counter from 1); `lastDate` (`date("%Y-%m-%d")`, the local date).
+- `chars[guid] = { name, realm, faction, lastPlayDay }`; the current character's `lastPlayDay` is
+  refreshed at login and on every tick, before pruning (a session over midnight counts).
+- `recents[key] = { name, day }`, `key = Names.Key(name)`, `day` the play day of the last `sent`.
+- `sent = { record, ... }`, oldest first, at most 1000:
+  `{ kind = "send" | "return", day, at, from (GUID), to (name), subject, money, cod,
+  items = { { id, count }, ... }, state = "sent" | "unconfirmed" }`. A return is
+  `{ kind = "return", to = <its sender>, ... }`, `state = "sent"` once confirmed.
+- `trash = { entry, ... }`, oldest first, at most 500:
+  `{ at, from (GUID: whose mailbox), sender, subject, money, cod, items, expires }`.
+- **Required fields** (a record without one is invalid): `sent`: `kind`, `day`, `at`, `from`, `to`,
+  `state`; `trash`: `at`, `from`, `expires`. Everything else may be absent (a secret field is left
+  out, not the record). The caps apply on insertion (the oldest goes) and again on prune.
+- **Loading:** at `ADDON_LOADED`, `Store.Load()` reads each subtree with a shape check (a table, of
+  tables, with the required fields and types); a subtree that fails is dropped whole, and so is
+  everything when `version` is missing or isn't 1. The clock header is checked too: `playDay` a
+  whole number of at least 1 and `lastDate` a `YYYY-MM-DD` string, else both restart (1, today)
+  **and the subtrees stamped in play days go with them** (`chars`, `recents`, `sent`: their days
+  belong to the lost counter and would never age); `trash` ages in real time and stays.
+  The settings are untouched by this. `DEFAULTS` gets `expiryDays = 30` and `recentMax = 20`, and
+  `ensureDefaults` validates both like `keepFree` (one of the offered choices, else removed so the
+  default applies); the setters use the same validators. The subtrees and clock fields are not
+  settings and never fall through to `DEFAULTS`.
+
+**The play-day clock** (`Store.Tick()`): at `PLAYER_LOGIN`, before any write or prune, and every 10
+minutes (`C_Timer.NewTicker`). `lastDate` is a **high-water mark**: if `date("%Y-%m-%d")` is later
+than `lastDate` (string order is date order in this form), `playDay` + 1 and `lastDate` = today; an
+earlier date changes nothing, so a clock set back and forward again never counts a date twice
+(counting waits until the calendar passes `lastDate` again). Then the current character's
+`lastPlayDay` = `playDay`, then `Store.Prune()`:
+- `chars`: `lastPlayDay` older than `expiryDays` play days goes; the current character never does.
+- `recents`: older than `expiryDays` goes; then the oldest past `recentMax`.
+- `sent`: `day` older than `expiryDays` goes; then the oldest past 1000.
+- `trash`: `expires < time()` goes (real time); then the oldest past 500.
+
+**Sent's window, in code:** `Sent.open = { record, ... }` in memory (the candidates).
+- `SendMail` post-hook: capture (above); `record.opened = GetTime()`; append to `open`.
+- `SECURE_TRANSFER_CONFIRM_SEND_MAIL` fires inside `SendMail`, before the post-hook: the handler
+  notes the frame (`GetTime()`), and the post-hook marks its record `awaiting` (no window yet) when
+  the note is from this frame.
+- `SendMailFrame_EnableSendMailButton` post-hook (the dialog's close): every `awaiting` record gets
+  `opened = GetTime()`, `awaiting = nil`: its window starts.
+- `MAIL_SEND_SUCCESS`: the candidates are the records in `open` that are `awaiting` or whose window
+  hasn't ended (`GetTime() - opened <= 120`); exactly one → `sent`, saved, removed from `open`, its
+  recipient into `recents`. Otherwise nothing is attributed.
+- `UI_ERROR_MESSAGE` type 457, as above: removed, unsaved.
+- A 1 s ticker while `open` isn't empty: a record not `awaiting` and past 120 s is saved
+  `unconfirmed` and removed.
+- `PLAYER_LOGOUT`: every record in `open` is saved `unconfirmed`.
+
+**Trash, in code:** `unsettled` is set by every inbox-changing post-hook (Ops' list) and cleared
+only by a `MAIL_INBOX_UPDATE` that finds `C_Mail.IsCommandPending()` false (one still pending
+leaves it set for a later update); `lastUpdate` is the last update's `GetTime()`. A removal's
+post-hook reads both **before** it marks the inbox unsettled itself: captured only when the inbox
+was settled and `lastUpdate ~= GetTime()`.
+
+**Ops** gets `SendMail` in its foreign calls, and each take attempt carries the scan's stack
+count (`attempt.count`) for I4.
+
+**Settings:** `Settings.SetExpiryDays(n)` (7 / 14 / 30 / 60 / 90) and `Settings.SetRecentMax(n)`
+(10 / 20 / 50), each pruning at once; the options page gets two radio groups under a new
+"Memory" heading; `/gmail expiry N`, `/gmail recents N`, `/gmail sent`, `/gmail trash`. Each
+`/gmail sent` line: when, from which character, kind and state (`sent`, `unconfirmed`,
+`returned to`), to whom, subject, money and COD, and items as `itemID x count`; `/gmail trash`
+the same with the sender and "gone in N days".
+
+**Tests** (each mutation-tested):
+- Names: trim, collapse, case, a kept suffix, a secret name.
+- Store: a fresh DB; v0.1.0's settings-only DB keeps every setting; an unknown version drops the
+  subtrees; one malformed subtree is dropped alone; a record missing a required field is
+  invalid, one missing an optional field is kept; a secret field never saved; the caps on insertion.
+- Clock: advances once per date, twice over midnight within one session (the ticker); the
+  sequence forward → backward → the original date → the next date counts each date once; an
+  invalid header restarts and drops `chars`, `recents` and `sent` (records stamped day 200 with
+  the header broken), keeping `trash`; prune by play days, by count, trash by `time()`.
+- Settings: an invalid saved `expiryDays` / `recentMax` (a string, an unoffered number) is
+  removed at load; a valid non-default choice is kept.
+- Registry: the current character written at login, and refreshed by a tick over midnight (then a
+  character switch: it ages from the later day); aged out by play days, never the current one;
+  AltStable absent, wrong `PUBLIC_API_VERSION`, present (nothing saved from it).
+- Sent, as timelines: the draft captured at the post-hook (money, COD, items, no links); one open
+  window and a success → `sent` and a recent; two open → neither; the 120 s end → `unconfirmed`;
+  error 457 in the same frame → dropped; another error in that frame, or 457 a frame later → kept;
+  logout → `unconfirmed`; a stranger: confirmation at t=0, accepted at t=130 (the dialog closes,
+  its window starts), B sent at t=130.3, a success at t=130.6 → neither (both candidates); a
+  stranger accepted at 11 s with nothing else open → `sent`; a cancelled stranger → its window
+  starts at the close and ends `unconfirmed`; the close hook never firing → the record stays a
+  candidate until logout.
+- Trash: a delete captured at the hook and confirmed by the next update (deferred a frame);
+  an update in the same frame → not captured; a take before the confirmation drops it; **take →
+  return before the take's update → the return isn't captured**; removal A → removal B before A's
+  update → neither (A dropped by B, B unsettled), with twins and with a rejected second call; a
+  take, then an unrelated update **while a command is still pending**, then a Return → not
+  captured (still unsettled); a take that produces no update → the next removal is left out and
+  its own update settles the inbox again; a
+  twin's fingerprint count; a return goes to Sent as `return`; an unresolved mail isn't captured;
+  the 5 s end drops it; the deferred commit checks the capture is still the same one.
+- Ops: a foreign `SendMail` stops a run; a take attempt carries the count.
+
+**In game** (the owner, after deploy; a temporary debug line shows the dialog-close hook):
+- Send to an alt; to a stranger confirmed at once, held over 2 minutes then confirmed, and
+  cancelled; to a one-word name. `/gmail sent` shows `sent`, `sent`, `sent`, then `unconfirmed`
+  2 minutes after the cancel, and nothing for the typo. The debug line shows the close hook firing
+  on accept and on cancel.
+- Delete an empty mail, return a test mail, delete an AH mail with items through its popup:
+  `/gmail trash` shows both deletes, `/gmail sent` the return. Take an item then Return the same
+  mail at once: no record for it.
+- The debug line also logs `C_Mail.IsCommandPending()` at each inbox update around a take and a
+  return, to confirm it is false once a call's update has come.
+- `/reload` while a send is still open: it isn't saved as `sent` later. Then a full exit: the
+  saved records survive (persistence needs the exit).
+
+**Review outcome for the core PR** (Codex gpt-6-astra, high, 3 rounds, consensus, 2026-10-17):
+- **A stranger's send waits for the dialog:** no time limit while awaiting confirmation; its
+  window starts at the dialog's close (a post-hook on `SendMailFrame_EnableSendMailButton`, no
+  taint: the outbound bridge calls it by name in the global environment). Measured in game.
+- **Trash needs a settled inbox:** an earlier call in flight voids a capture; only an update
+  with no command pending settles it; no timeout does.
+- **Smaller:** only error 457 drops a send; `lastDate` is a high-water mark; the current
+  character's play day refreshes on every tick; the new settings are validated at load; a
+  restarted clock drops the play-day-stamped subtrees.
 
 ### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
 
