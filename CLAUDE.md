@@ -230,3 +230,27 @@ Same as GlassChat's CLAUDE.md, "Workflow and releasing":
   abstraction. No library until a second addon needs the code (M3).
 - **Measured beats reasoned.** If a claim about the client can be checked in game, check it.
 - Match the surrounding code's idiom. Keep pure refactors in their own commit.
+
+## Consulting Codex
+
+The shared `codex-consult` skill (user level) has the invocation and the gotchas. For this repo:
+
+For GlassMail, good things to hand Codex:
+- anything that takes, returns, deletes or sends mail: index revalidation after inbox updates,
+  pacing, what counts as success, what happens when the mailbox closes mid-run;
+- anything that touches a Blizzard mail frame or the send path (`SendMail`, secure transfer),
+  where taint can get the action blocked;
+- anything that writes to SavedVariables (mail snapshots, history), or reads `GetMoney`;
+- any plan that grows scope back toward full Postal or Kerzo, or replaces a stock mail function
+  instead of extending it.
+
+**Always hand it `CLAUDE.md`, `docs/PLAN.md` and `docs/FEATURES.md` alongside the diff or plan**,
+plus `C:/Projects/WoW/References/Docs/PORTING-TBC-TO-FOREVER.md` and `docs/FOREVER-PROBE.md`. Those findings
+were measured on the live client. Without them, a cold reviewer argues from Classic-era or Retail
+behaviour that doesn't hold here (that names carry a realm, that the old global mail functions
+exist).
+`C:/Projects/WoW/References/Forever/api/forever-api-<version>.<build>.md` (take the highest build) is the full API surface when a question
+turns on whether something exists, and `C:/Projects/WoW/wow-ui-source` (branch `forever`) is the
+client's own FrameXML (`Blizzard_MailFrame`). The design references are in
+`C:/Projects/WoW/References/Addons/Mail/` (Postal, PostalReborn, Kerzo); they are behaviour references only,
+their code is never copied, and their RawHooks are the part we deliberately don't use.
