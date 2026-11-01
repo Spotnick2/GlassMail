@@ -13,6 +13,9 @@
 -- The row tooltip gets one line per attachment and the full subject, added
 -- after Blizzard's own lines (it rebuilds them every frame while the tooltip
 -- is up, MailFrame.xml:160, so the hook runs every frame too).
+--
+-- GlassMail.Selection is the selection's public read API (issue #26, for
+-- Shatter's Mail Mode): Get() and OnChange(fn), at the end of this file.
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
@@ -21,6 +24,8 @@ local Scan, Ops = GM.Scan, GM.Ops
 local say = API.Print
 local Inbox = {}
 GM.Inbox = Inbox
+local Selection = {}
+GM.Selection = Selection
 
 local ROWS = 7               -- INBOXITEMS_TO_DISPLAY
 local MAILBOX = 17           -- Enum.PlayerInteractionType.MailInfo
@@ -38,6 +43,8 @@ local anchor                 -- the last plainly clicked fingerprint, for shift 
 local bar                    -- { frame, open, ret, clear }
 local itemLines = {}         -- [inbox index] = the tooltip's attachment lines, until the next update
 local snap, counts = { mails = {} }, {}
+local listeners = {}         -- Selection.OnChange callbacks
+local reported = ""          -- the selection's indices as listeners last saw them
 
 local function busy() return API.InCombat() or Ops.Running() end
 
@@ -56,6 +63,31 @@ local function size(set)
 end
 
 local function unique(m) return m ~= nil and m.fp ~= nil and counts[m.fp] == 1 end
+
+-- The mails of snapshot s (with its counts c) that are in set and have no
+-- twin, as { [inbox index] = true }, and their indices as a key ("2,5").
+local function picked(s, c, set)
+    local out, keys = {}, {}
+    for _, m in ipairs(s.mails) do
+        if m.fp and c[m.fp] == 1 and set[m.fp] then
+            out[m.index] = true
+            keys[#keys + 1] = m.index
+        end
+    end
+    return out, table.concat(keys, ",")
+end
+
+-- Tell the OnChange listeners, once, when what Selection.Get returns changed.
+local function report()
+    if #listeners == 0 then return end
+    local _, key = picked(snap, counts, live())
+    if key == reported then return end
+    reported = key
+    for _, fn in ipairs(listeners) do
+        local ok, err = pcall(fn)
+        if not ok then API.Fail("selection listener", err) end
+    end
+end
 
 -- The selected mails Blizzard would return, in inbox order.
 local function returnable()
@@ -122,6 +154,7 @@ local function refresh()
     bar.ret:SetText("Return next (" .. n .. " left)")
     bar.ret:SetEnabled(ready and n > 0)
     bar.clear:SetEnabled(idle)
+    report()
 end
 
 local function mailOf(fp)
@@ -172,9 +205,13 @@ local function onOpen()
     if Ops.Kind() == "selected" then return Ops.Stop("stopped") end
     if busy() or Ops.LetterOpen() or not snap.resolved or next(selected) == nil then return end
     Ops.OpenSelected(selected, { keepFree = GM.db.keepFree }, function(r)
-        -- What is left of the run's targets, moved to their residuals, is the selection again.
+        -- What is left of the run's targets, moved to their residuals, is the
+        -- selection again; not once the mailbox closed (its close may have
+        -- cleared the selection before this run heard of it).
         selected = {}
-        for fp in pairs(r.opts.only) do selected[fp] = true end
+        if r.stopReason ~= "mailbox closed" then
+            for fp in pairs(r.opts.only) do selected[fp] = true end
+        end
         GM.OpenAll.Summary(r)
     end, refresh)
 end
@@ -332,6 +369,32 @@ function Inbox.Start()
     API.RegisterEvents(events, { "MAIL_INBOX_UPDATE", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
         "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" })
     refresh()
+end
+
+--------------------------------------------------------------------------------
+-- The public read API (issue #26). Other addons read the selection; nothing
+-- here changes it, and nothing runs until they call.
+--------------------------------------------------------------------------------
+
+-- The selected mails that have no twin (resolved, one mail per fingerprint:
+-- what the bar acts on), as { [inbox index] = true }, from a fresh scan. A
+-- new table on every call, empty (never nil) when nothing is selected or the
+-- mailbox is closed. The indices hold until the next MAIL_INBOX_UPDATE.
+function Selection.Get()
+    local set = bar and live() or {}
+    if next(set) == nil then return {} end
+    local s = Scan.Inbox()
+    return (picked(s, Scan.Count(s), set))
+end
+
+-- fn() is called, with no arguments, after anything changes what Get
+-- returns: a click, a shift range, a ctrl sender, Clear, a selected mail gone
+-- or now with a twin, the mailbox closing, an index shift. Not on a refresh
+-- that changes nothing. An error in fn is recorded (/gmail failures).
+function Selection.OnChange(fn)
+    if type(fn) ~= "function" then return end
+    if #listeners == 0 then reported = select(2, picked(snap, counts, live())) end
+    listeners[#listeners + 1] = fn
 end
 
 GM._test = GM._test or {}
