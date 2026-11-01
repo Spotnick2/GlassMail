@@ -1,7 +1,7 @@
 # GlassMail features
 
 The agreed feature list (2026-10-09), chosen by the owner from Postal 4.3.5, PostalReborn 1.0.04 and
-Kerzo Postal Suite 3.2 (`C:\Projects\WoW\References\Mail\`), then reviewed adversarially (Codex,
+Kerzo Postal Suite 3.2 (`C:\Projects\WoW\References\Addons\Mail\`), then reviewed adversarially (Codex,
 3 rounds, consensus). The milestones that deliver them are in [PLAN.md](PLAN.md).
 
 **Those three addons are behaviour references only.** Postal is "All Rights Reserved";
