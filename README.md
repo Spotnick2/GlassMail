@@ -8,9 +8,13 @@ checkboxes to select mail, and tooltips that list every attachment.
 
 ## Install
 
-Install **Glass Mail** from [CurseForge](https://www.curseforge.com/wow/addons/glass-mail), either
-with the CurseForge app or by unzipping it into the `Interface\AddOns` folder inside your Forever
-game folder. Then `/reload`, or start the game. Visit a mailbox: there is nothing else to open.
+Install **Glass Mail** from [CurseForge](https://www.curseforge.com/wow/addons/glass-mail) with
+the CurseForge app, or from [Wago Addons](https://addons.wago.io/addons/glassmail) with the Wago
+app. Both keep it up to date. (Wago has only an alpha until the next release: set the Wago app
+to its Alpha channel to get it.) Or download the zip from
+[GitHub Releases](https://github.com/Spotnick2/GlassMail/releases) and unzip it into the
+`Interface\AddOns` folder inside your Forever game folder. Then `/reload`, or start the game.
+Visit a mailbox: there is nothing else to open.
 
 ## What it does
 
