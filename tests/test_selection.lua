@@ -133,12 +133,26 @@ click(rows[1].check)
 click(bar.open)
 eq(GM.Ops.Kind(), "selected", "Open (n) runs")
 step()
+-- Another addon's handler, called between the inbox's and Ops': it reads
+-- Get() while the run is still live.
+local between, runThen
+local reader = CreateFrame("Frame")
+reader:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
+reader:SetScript("OnEvent", function() between, runThen = Sel.Get(), GM.Ops.Kind() end)
 local frames = WoW.frames
 local reversed = {}
-for k = #frames, 1, -1 do reversed[#reversed + 1] = frames[k] end
+for k = #frames, 1, -1 do
+    local w = frames[k]
+    if w ~= reader then
+        if w._events.MAIL_FAILED then reversed[#reversed + 1] = reader end   -- just before Ops' frame
+        reversed[#reversed + 1] = w
+    end
+end
 WoW.frames = reversed   -- the inbox clears its selection before Ops stops the run
 WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 17)
 WoW.frames = frames
+eq(runThen, "selected", "  (the reader ran while the run was still live)")
+eq(between and keys(between), "", "  Get() is empty from the close on, even before Ops has heard it")
 eq(GM.Ops.Kind(), nil, "  the close stops it")
 eq(keys(Sel.Get()), "", "  the run's leftovers don't come back as a selection")
 eq(next(GM._test.inbox.selected()), nil, "  nor in the inbox")

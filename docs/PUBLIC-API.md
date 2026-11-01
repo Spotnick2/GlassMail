@@ -25,7 +25,8 @@ Returns the inbox mails that are ticked in Glass Mail's checkboxes, as `{ [inbox
 - **Indices:** they come from a fresh inbox read on every call, and stay good until the next
   `MAIL_INBOX_UPDATE`. Turn them into your own references straight away.
 - **The table:** a new one on every call, so changing it changes nothing in Glass Mail. It is
-  empty, never nil, when nothing is selected, when the mailbox is closed, or before login.
+  empty, never nil, when nothing is selected, when the mailbox is closed (from the moment it
+  closes, even inside another handler of the same close event), or before login.
 - **Cost:** while nothing is selected, a call returns at once without reading the inbox.
 
 ## `GlassMail.Selection.OnChange(fn)`

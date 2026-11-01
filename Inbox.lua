@@ -56,6 +56,15 @@ local function live()
     return selected
 end
 
+-- What the public API sees: nothing while the mailbox is closed, even in the
+-- moment between our close handler and Ops' (a selected run's targets are
+-- still live until Ops stops it).
+local mailboxOpen = false
+local function public()
+    if not mailboxOpen then return {} end
+    return live()
+end
+
 local function size(set)
     local n = 0
     for _ in pairs(set) do n = n + 1 end
@@ -80,7 +89,7 @@ end
 -- Tell the OnChange listeners, once, when what Selection.Get returns changed.
 local function report()
     if #listeners == 0 then return end
-    local _, key = picked(snap, counts, live())
+    local _, key = picked(snap, counts, public())
     if key == reported then return end
     reported = key
     for _, fn in ipairs(listeners) do
@@ -358,15 +367,17 @@ function Inbox.Start()
     local events = CreateFrame("Frame")
     events:SetScript("OnEvent", function(_, event, arg1)
         API.NoteCombat(event)
-        if event == "MAIL_INBOX_UPDATE" then
+        if event == "MAIL_SHOW" then
+            mailboxOpen = true
+        elseif event == "MAIL_INBOX_UPDATE" then
             itemLines = {}
         elseif event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then
             if arg1 ~= MAILBOX then return end
-            selected, anchor, itemLines = {}, nil, {}
+            selected, anchor, itemLines, mailboxOpen = {}, nil, {}, false
         end
         refresh()
     end)
-    API.RegisterEvents(events, { "MAIL_INBOX_UPDATE", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
+    API.RegisterEvents(events, { "MAIL_SHOW", "MAIL_INBOX_UPDATE", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
         "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" })
     refresh()
 end
@@ -381,7 +392,7 @@ end
 -- new table on every call, empty (never nil) when nothing is selected or the
 -- mailbox is closed. The indices hold until the next MAIL_INBOX_UPDATE.
 function Selection.Get()
-    local set = bar and live() or {}
+    local set = bar and public() or {}
     if next(set) == nil then return {} end
     local s = Scan.Inbox()
     return (picked(s, Scan.Count(s), set))
@@ -393,7 +404,7 @@ end
 -- that changes nothing. An error in fn is recorded (/gmail failures).
 function Selection.OnChange(fn)
     if type(fn) ~= "function" then return end
-    if #listeners == 0 then reported = select(2, picked(snap, counts, live())) end
+    if #listeners == 0 then reported = select(2, picked(snap, counts, public())) end
     listeners[#listeners + 1] = fn
 end
 
