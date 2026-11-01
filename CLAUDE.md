@@ -41,7 +41,7 @@ milestone measures each one, before the feature that depends on it ships.
 
 ## Licensing of the references
 
-`C:\Projects\WoW\References\Mail\` holds Postal 4.3.5 ("All Rights Reserved"), PostalReborn 1.0.04 and
+`C:\Projects\WoW\References\Addons\Mail\` holds Postal 4.3.5 ("All Rights Reserved"), PostalReborn 1.0.04 and
 Kerzo Postal Suite 3.2 (no license). **They are behaviour references only: never copy their code.**
 Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This repo is MIT.
 
@@ -174,12 +174,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 
 ## References: read these before touching an unfamiliar API
 
-- `C:\Projects\WoW\References\PORTING-TBC-TO-FOREVER.md`: measured, addon-agnostic field notes. Treat
+- `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`: measured, addon-agnostic field notes. Treat
   them as fact. New addon-agnostic findings go there, not into a copy here.
-- `C:\Projects\WoW\References\forever-api-1.60.1.70291.md`: the API dump (functions, events, widget
+- `C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70291.md`: the API dump (functions, events, widget
   methods, `_G`). **Presence is not a contract.** Mail: `MailInfoDocumentation.lua` in
   wow-ui-source's `Blizzard_APIDocumentationGenerated`.
-- `C:\Projects\WoW\References\EMBEDDED-LIBRARIES.md`, `LIBGLASS-MIGRATION.md`: library rules.
+- `C:\Projects\WoW\References\Docs\EMBEDDED-LIBRARIES.md`, `LIBGLASS-MIGRATION.md`: library rules.
 - `C:\Projects\WoW\wow-ui-source` (branch `forever`): the client's own FrameXML; line numbers match
   in-game error traces.
 - `C:\Projects\WoW\AltStable\PublicAPI.lua` and `docs\PUBLIC-API.md`: the character list we read.
