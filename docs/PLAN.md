@@ -500,7 +500,8 @@ the same with the sender and "gone in N days".
   the 5 s end drops it; the deferred commit checks the capture is still the same one.
 - Ops: a foreign `SendMail` stops a run; a take attempt carries the count.
 
-**In game** (the owner, after deploy; a temporary debug line shows the dialog-close hook):
+**In game** (the owner, after deploy; a temporary debug line shows the dialog-close hook; the
+steps are #27, run after launch):
 - Send to an alt; to a stranger confirmed at once, held over 2 minutes then confirmed, and
   cancelled; to a one-word name. `/gmail sent` shows `sent`, `sent`, `sent`, then `unconfirmed`
   2 minutes after the cancel, and nothing for the typo. The debug line shows the close hook firing
@@ -519,8 +520,10 @@ the same with the sender and "gone in N days".
   taint: the outbound bridge calls it by name in the global environment). Read from Blizzard's
   source (Blizzard_SecureTransferUIOutbound.lua:8-10), not measured: the core PR's in-game check
   confirms it fires on both accept and cancel.
-- **Pending, before the core PR merges:** both client checks in "In game" above, the dialog-close
-  hook and `C_Mail.IsCommandPending()` after an update, recorded in FOREVER-PROBE.md with the build.
+- **Pending, after launch (#27):** both client checks in "In game" above, the dialog-close hook and
+  `C_Mail.IsCommandPending()` after an update, recorded in FOREVER-PROBE.md with the build. The
+  game is unavailable until Nov 4, so they don't block merging: a failure only makes Glass Mail
+  record less.
 - **Trash needs a settled inbox:** an earlier call in flight voids a capture; only an update
   with no command pending settles it; no timeout does.
 - **Smaller:** only error 457 drops a send; `lastDate` is a high-water mark; the current
