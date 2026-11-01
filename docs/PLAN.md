@@ -260,7 +260,9 @@ A send is captured as it is made and kept, in the state its outcome justifies:
     AutoLoot, Return, Delete, ours or anyone's: the post-hooks Ops uses) marks the inbox
     unsettled. Only a `MAIL_INBOX_UPDATE` that arrives with `C_Mail.IsCommandPending()` false
     settles it (an update says nothing about which call finished; Blizzard's own Open All waits for
-    the same flag, MailFrame.lua:1683). A removal made while it is unsettled is left out: a take
+    the same flag, MailFrame.lua:1683). That the flag is false once a call's update has come is
+    unmeasured: the core PR's in-game check logs it, and if it stays true the inbox never settles,
+    so Trash records nothing rather than something wrong. A removal made while it is unsettled is left out: a take
     already in flight could otherwise remove the mail and pass for the return. No timeout settles
     it: a call that never produces an update (a take on an empty slot, session 5) leaves the next
     removal out, and that removal's own update settles it again.
@@ -514,7 +516,11 @@ the same with the sender and "gone in N days".
 **Review outcome for the core PR** (Codex gpt-6-astra, high, 3 rounds, consensus, 2026-10-17):
 - **A stranger's send waits for the dialog:** no time limit while awaiting confirmation; its
   window starts at the dialog's close (a post-hook on `SendMailFrame_EnableSendMailButton`, no
-  taint: the outbound bridge calls it by name in the global environment). Measured in game.
+  taint: the outbound bridge calls it by name in the global environment). Read from Blizzard's
+  source (Blizzard_SecureTransferUIOutbound.lua:8-10), not measured: the core PR's in-game check
+  confirms it fires on both accept and cancel.
+- **Pending, before the core PR merges:** both client checks in "In game" above, the dialog-close
+  hook and `C_Mail.IsCommandPending()` after an update, recorded in FOREVER-PROBE.md with the build.
 - **Trash needs a settled inbox:** an earlier call in flight voids a capture; only an update
   with no command pending settles it; no timeout does.
 - **Smaller:** only error 457 drops a send; `lastDate` is a high-water mark; the current
