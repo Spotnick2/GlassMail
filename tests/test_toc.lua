@@ -7,6 +7,10 @@ check(toc:find("## Interface: 16001", 1, true), "interface 16001 (1.60.1; 11601 
 check(toc:find("## Version: @project-version@", 1, true), "packager version token kept")
 check(toc:find("## SavedVariables: GlassMailDB", 1, true), "saved variables declared")
 check(toc:find("## SavedVariablesPerCharacter: GlassMailCharDB", 1, true), "per-character saved variables declared")
+-- The publishers read these from the packaged TOC: CurseForge's webhook, and
+-- the `wago` job (RELEASING.md section 1). A wrong ID uploads to another project.
+check(toc:find("\n## X%-Curse%-Project%-ID: 1743548\r?\n"), "the CurseForge project ID")
+check(toc:find("\n## X%-Wago%-ID: b6XybbKp\r?\n"), "the Wago project ID")
 for _, f in ipairs(tocFiles()) do
     check(io.open(f, "r") ~= nil, "TOC file exists: " .. f)
 end
