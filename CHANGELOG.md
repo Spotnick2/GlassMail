@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Other addons can read the mails you selected: `GlassMail.Selection.Get()` and
+  `GlassMail.Selection.OnChange(fn)` (docs/PUBLIC-API.md). Shatter's Mail Mode reads them for
+  its "Selected mails" option.
+- Closing the mailbox during Open (n) no longer risks leaving the unopened mails selected.
 - An open letter's portrait is the glass scroll under glass, to match the mail window's envelope.
 - LibGlass r8. Switching between clear and smoked repaints the wash through `SetWash`, the
   library's supported way to change it (a gradient ignores `SetAlpha` on Forever).

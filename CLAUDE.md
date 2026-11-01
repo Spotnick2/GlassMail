@@ -99,7 +99,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   mail with no twin. The selection is a set of fingerprints for this visit (shift: range, ctrl:
   sender); the bar has Open (n), Return next (n left) (one click per mail) and Clear. The row
   tooltip gets each attachment and the full subject. Everything disables in combat and while
-  another run or a letter is open.
+  another run or a letter is open. `GlassMail.Selection` (`Get`, `OnChange`) is the selection's
+  public read API, for Shatter (`docs/PUBLIC-API.md`): keep its contract when changing the selection.
 - **`Comforts.lua`**: X3. The gold Ops confirmed this visit (`Ops.TakeVisitMoney`), said at close;
   the trade block (the `blockTrades` CVar while the mailbox is open; only our own block is undone,
   nothing written in combat, a per-character claim for crash recovery; never silent: a failed
