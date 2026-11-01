@@ -5,6 +5,7 @@
 ## Version: @project-version@
 ## X-License: MIT
 ## X-Curse-Project-ID: 1743548
+## X-Wago-ID: b6XybbKp
 ## SavedVariables: GlassMailDB
 ## SavedVariablesPerCharacter: GlassMailCharDB
 

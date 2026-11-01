@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Glass Mail is now also on Wago Addons (the Wago app installs and updates it) and on GitHub
+  Releases, with a `release.json` for addon managers such as WowUp.
 - Other addons can read the mails you selected: `GlassMail.Selection.Get()` and
   `GlassMail.Selection.OnChange(fn)` (docs/PUBLIC-API.md). Shatter's Mail Mode reads them for
   its "Selected mails" option.

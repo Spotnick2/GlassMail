@@ -222,8 +222,15 @@ Same as GlassChat's CLAUDE.md, "Workflow and releasing":
   `gpt-6-astra` at high effort, looping until consensus. Hand it this file, `docs/PLAN.md`,
   `docs/FEATURES.md` and the porting guide. Verify its claims; push back on complexity.
 - **Code reviews are manual** (by the owner) unless the owner asks for one.
-- CurseForge builds releases from the tag webhook through `.pkgmeta`; the `release` job publishes
-  a GitHub Release from the tag's `## vX.Y.Z` section of `CHANGELOG.md`.
+- **A tag publishes three times** (`C:\Projects\WoW\References\Docs\RELEASING.md`):
+  - CurseForge (project `1743548`) builds its own file from the tag webhook through `.pkgmeta`;
+  - CI's `release` job makes a GitHub Release with the zip `check` built and `release.json`;
+  - CI's `wago` job uploads the same zip to Wago Addons (project `b6XybbKp`, the TOC's `X-Wago-ID`;
+    the `WAGO_API_TOKEN` secret, only that job sees it).
+  The notes are the tag's `## vX.Y.Z` section of `CHANGELOG.md` (`tests/release_files.sh`, the
+  template's copy, unchanged; an alpha falls back to `## vX.Y.Z`, then `## Unreleased`). The packager
+  never uploads from CI (`-d`). Publish a failed tag again from Actions: Run workflow from `main`,
+  `tag` + `publish`.
 
 ## Conventions
 
