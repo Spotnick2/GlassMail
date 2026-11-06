@@ -196,8 +196,13 @@ local function dispatch(t)
     local action = Loot.Next(snap, bags, run.opts)
     if not action then return finish("done") end
     local m, counts = action.mail, Scan.Count(snap)
+    local count
+    for _, it in ipairs(m.items) do
+        if action.kind == "item" and it.slot == action.slot then count = it.count end
+    end
     local residual, mayVanish = Scan.Residual(m, action.kind, action.slot)
-    run.attempt = { fp = m.fp, kind = action.kind, itemID = action.itemID, money = m.money, residual = residual,
+    run.attempt = { fp = m.fp, kind = action.kind, itemID = action.itemID, count = count, money = m.money,
+        residual = residual,
         mayVanish = mayVanish,
         before = counts[m.fp] or 0, residualBefore = counts[residual] or 0, loaded = snap.loaded,
         deadline = t + Ops.TIMEOUT }
@@ -288,8 +293,10 @@ API.RegisterEvents(events, { "MAIL_INBOX_UPDATE", "MAIL_FAILED", "BAG_UPDATE_DEL
     "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", "PLAYER_REGEN_DISABLED", "INPUT_DEVICE_INTERFACE_TRANSITION" })
 
 -- Any mail action that isn't ours, while a run is active, ends the run: the
--- player, Blizzard's own Open All, or another addon now owns the inbox.
-for _, fn in ipairs({ "TakeInboxItem", "TakeInboxMoney", "AutoLootMailItem", "ReturnInboxItem", "DeleteInboxItem" }) do
+-- player, Blizzard's own Open All, or another addon now owns the inbox. A
+-- send too (M2): one mail action at a time.
+for _, fn in ipairs({ "TakeInboxItem", "TakeInboxMoney", "AutoLootMailItem", "ReturnInboxItem", "DeleteInboxItem",
+    "SendMail" }) do
     if type(rawget(_G, fn)) == "function" then
         hooksecurefunc(fn, function()
             if run and not ours then finish("another mail action ran") end

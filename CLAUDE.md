@@ -17,8 +17,9 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed plan is in
-docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. Next is
-M2. Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
+docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
+(#17) is under way: its core (the memory, Sent and Trash capture, no window yet) is PR 2 of 5.
+Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
 ## The UI contract (non-negotiable)
@@ -48,14 +49,16 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 ## Layout
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
-`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `OpenAll.lua` → `Inbox.lua` → `Comforts.lua` → `Options.lua` →
+`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Names.lua` → `Core\Store.lua` → `Core\Registry.lua` →
+`Core\Sent.lua` → `Core\Trash.lua` → `OpenAll.lua` → `Inbox.lua` → `Comforts.lua` → `Options.lua` →
 `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
   still false inside the `PLAYER_REGEN_DISABLED` handler), `Fail(key, err)` (the **one** failure recorder,
   read by `/gmail failures`), `PlayerFullName`, `AddOnVersion`, `SafeFrame`, `Button`;
-  `MEASURED_ON_BUILD`. A subset of GlassChat's; lift more from there.
+  `MEASURED_ON_BUILD`; `Debug` (the in-game checks' line, `/gmail debug on`, this session only). A
+  subset of GlassChat's; lift more from there.
 - **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })` (LibGlass r8's
   clean material: thin rims, no grain), this addon's instance of
   the material. Material changes are LibGlass PRs.
@@ -90,7 +93,26 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   a remembered target (the selection, a Return / Delete) needs one match, and waits for every mail
   to load (5 s at most; our controls stay disabled meanwhile). Run kinds: `openall`,
   `selected` (its targets move to their residuals), `return`, `delete`; `Ops.Watch` repaints
-  every control when a run starts or stops.
+  every control when a run starts or stops. A `SendMail` is a foreign call too.
+- **`Core\Names.lua`**: `Names.Key` (trimmed, spaces collapsed, lower-cased; a `-Realm` suffix kept)
+  and `Names.Display` (trimmed). A secret name has neither.
+- **`Core\Store.lua`**: M2's saved memory in `GlassMailDB`: `version`, the play-day clock
+  (`playDay`, `lastDate`, a high-water mark; `Store.Tick` at login and every 10 minutes), and the
+  subtrees `chars`, `recents`, `sent`, `trash`. Each subtree is read with a shape check and dropped
+  whole if it fails; a secret field is never saved. Expiry: `expiryDays` play days (Trash: when its
+  mail would have expired), then the caps (`recentMax`, 1000 Sent, 500 Trash). The settings in the
+  same table aren't its business.
+- **`Core\Registry.lua`**: own characters by GUID (`chars`, refreshed on every tick), or
+  AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1; nothing from it saved);
+  `Registry.Reachable` (same realm and faction tag, not the current character).
+- **`Core\Sent.lua`**: every send, captured at the `SendMail` post-hook and attributed by a 120 s
+  window (`sent` only when it is the one candidate at `MAIL_SEND_SUCCESS`, else `unconfirmed` at its
+  end; a stranger's send waits for the dialog's close; error 457 drops it), plus the returns Trash
+  confirms. A `sent` send makes a recent recipient. `/gmail sent`.
+- **`Core\Trash.lua`**: every Delete / Return, ours or Blizzard's, captured at its post-hook and kept
+  only when the next update proves it (its fingerprint and the loaded count each one fewer, within
+  5 s, on a settled inbox, with no other call in between). Deletes go to Trash, returns to Sent.
+  `/gmail trash`.
 - **`OpenAll.lua`**: I1. Our button in the stock one's place (hidden in mouse mode on every show;
   left alone in gamepad UI mode), right-click filters (`MenuUtil`), the message count, a chat
   summary at the end.

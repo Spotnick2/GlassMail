@@ -4,8 +4,8 @@
 -- controls built on the first OnShow, every value re-read on every OnShow,
 -- registered once at PLAYER_LOGIN from GlassMail.lua.
 --
--- The look (clear / smoked / stock) and the version; each feature adds its own
--- controls here as it lands. Choices are radio groups, not dropdowns (the
+-- The look (clear / smoked / stock), the comforts, the memory's limits and the
+-- version; each feature adds its own controls here as it lands. Choices are radio groups, not dropdowns (the
 -- porting guide's measured recipe).
 
 GlassMail = GlassMail or {}
@@ -108,8 +108,24 @@ local function build()
     local alert = checkbox(panel, trade, "Say in chat who sent new mail",
         function() return GM.db.newMailAlert end, GM.Settings.SetNewMailAlert)
     Options._test.trade, Options._test.alert = trade, alert
+    -- M2's memory: two columns, so the page stays short.
+    local memory = label(panel, "Memory", "GameFontNormal")
+    memory:SetPoint("TOPLEFT", alert, "BOTTOMLEFT", 0, -16)
+    local forget = label(panel, "Forget an unused name or record after", "GameFontHighlightSmall")
+    forget:SetPoint("TOPLEFT", memory, "BOTTOMLEFT", 0, -8)
+    local days = {}
+    for _, n in ipairs(GM.Store.EXPIRY_CHOICES) do days[#days + 1] = { n, n .. " play days" } end
+    local lastDays, dayGroup = radios(panel, forget, days, function() return GM.db.expiryDays end,
+        GM.Settings.SetExpiryDays)
+    local keep = label(panel, "Recent recipients kept", "GameFontHighlightSmall")
+    keep:SetPoint("TOPLEFT", forget, "TOPLEFT", 260, 0)
+    local counts = {}
+    for _, n in ipairs(GM.Store.RECENT_CHOICES) do counts[#counts + 1] = { n, tostring(n) } end
+    local _, recentGroup = radios(panel, keep, counts, function() return GM.db.recentMax end,
+        GM.Settings.SetRecentMax)
+    Options._test.expiryRadios, Options._test.recentRadios = dayGroup, recentGroup
     local hint = label(panel, "Type /gmail help for every command.", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", alert, "BOTTOMLEFT", 0, -16)
+    hint:SetPoint("TOPLEFT", lastDays, "BOTTOMLEFT", 0, -16)
 end
 
 panel:SetScript("OnShow", function()

@@ -499,8 +499,9 @@ earlier date changes nothing, so a clock set back and forward again never counts
   hasn't ended (`GetTime() - opened <= 120`); exactly one → `sent`, saved, removed from `open`, its
   recipient into `recents`. Otherwise nothing is attributed.
 - `UI_ERROR_MESSAGE` type 457, as above: removed, unsaved.
-- A 1 s ticker while `open` isn't empty: a record not `awaiting` and past 120 s is saved
-  `unconfirmed` and removed.
+- Each window ends by its own `C_Timer.After(120)`, set when it opens (at `SendMail`, or at the
+  dialog's close): a record still open then is saved `unconfirmed` and removed. (The code uses
+  that in place of the 1 s ticker first planned: one timer per window, nothing to stop.)
 - `PLAYER_LOGOUT`: every record in `open` is saved `unconfirmed`.
 
 **Trash, in code:** `unsettled` is set by every inbox-changing post-hook (Ops' list) and cleared
