@@ -17,7 +17,7 @@ review's main corrections are listed at the end.
   `Core/Loot.lua`), the skin finished in clear and smoked glass, I1, I2, I3, X3, with the operation
   records that confirm each action succeeded. Five PRs: look → probe session 5 → core + I1 →
   I2 + I3 → X3 + v0.1.0. See "M1" below.
-- **M2** *(planned, #17; reviewed, see "M2" below)*: S1 (picker; registry from local characters and AltStable), local X1, I4, the X2 history UI,
+- **M2** *(planned, #17; reviewed, see "M2" below)*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
   and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here.
 - **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
@@ -130,7 +130,7 @@ review's main corrections are listed at the end.
   - row controls parented to InboxFrame, in combat;
   - `HasNewMail` and the minimap icon.
 
-## M2 (reviewed with Codex, 5 rounds, consensus; #17)
+## M2 (reviewed with Codex, 5 rounds, consensus; #17. The last-recipient fill: 2 more rounds, 2026-11-06)
 
 The memory milestone: S1, X2, X1, I4, and `Core/Names` / `Core/Summary`. Research behind it
 (2026-10-13): Blizzard's send path (MailFrame.lua:1251-1278, 145-183), the secure-transfer UI
@@ -295,6 +295,57 @@ A send is captured as it is made and kept, in the state its outcome justifies:
 - **Contacts** (a saved list the player curates) are **cut**: recents, friends and guild cover
   them, and a hand-kept list is the upkeep the owner wants gone. FEATURES.md is updated.
 
+### S1: the last recipient (owner, 2026-11-06)
+
+Postal's "Autofill last person mailed", as a behaviour reference: the To box starts with the last
+name this character mailed. In `Address.lua`, beside the picker.
+- **What "last" is:** `chars[guid].lastTo`, the `Names.Key` of the newest send from that character
+  that Sent attributed as `sent`. Set where the record goes into `recents`. A `return` never sets
+  it, and a send that ends `unconfirmed` without a success (a cancel, a typo) leaves it as it was.
+  **A `MAIL_SEND_SUCCESS` that Sent can't attribute clears it** (`lastTo = nil`): a newer send went
+  somewhere unknown, so the older name is no longer the last one (Codex review: mail A, cancel a
+  stranger, mail B inside that window; B's success is ambiguous, and reopening the tab must not
+  offer A). The next attributed success sets it again. Per character, so it is never the current
+  character itself and always of its faction. An optional field: no version change; one that
+  isn't a string is dropped at load.
+- **It ages out:** it is filled only while `recents[lastTo]` exists (the name shown is that
+  entry's `name`). `recents` is account-wide, so another character mailing the same name keeps it
+  alive; that's fine (it is still someone you mail), and with no sends to it the entry expires
+  (`expiryDays`, `recentMax`) and the fill stops. This is aging, not detection of a deleted
+  character.
+- **When it fills**, each time only if `autofill` is on, `SendMailFrame:IsVisible()` (not
+  `IsShown()`, which stays true under a hidden mailbox) and `SendMailNameEditBox:GetText() == ""`,
+  all checked at the moment of filling:
+  1. **The send tab opens**: a `hooksecurefunc("MailFrameTab_OnClick", ...)` post-hook, for tab 2
+     (`tabID` or the button's `GetID()`, as Blizzard reads it, MailFrame.lua:189-192). Blizzard's
+     Reply calls `MailFrameTab_OnClick(nil, 2)` and then sets the sender (MailFrame.lua:1092-1093),
+     so a reply overwrites our fill; the mailbox's close empties the box (MailFrame.lua:53).
+  2. **After a send**: Blizzard's `MAIL_SEND_SUCCESS` handler calls `SendMailFrame_Reset()`, which
+     empties and focuses the box (MailFrame.lua:144-150, 1422-1424). When Sent attributes a success,
+     it schedules the fill with `C_Timer.After(0)` from that branch: by then Blizzard's handler has
+     reset the box (and, after a reply, gone back to the inbox), whichever handler ran first. The
+     callback also checks that `lastTo` still names that record's recipient (an unattributed success
+     in between has cleared it). No reset hook. An unattributed success schedules nothing, so the
+     box stays empty. A reply's success shows the inbox (MailFrame.lua:148-150): not visible,
+     nothing filled.
+- **How:** `SetText(name)` then `HighlightText()`, so typing replaces it. Nothing else: no focus
+  change, no autocomplete (`SetText` isn't user input), no send. The player still clicks Send and
+  any confirmation.
+- **Setting `autofill`** (default on): a checkbox under "Memory", `/gmail autofill on|off`,
+  validated in `ensureDefaults` like the other booleans.
+- **Tests** (mutation-tested): fills on tab 2 when empty; not over typed text, not on tab 1, not
+  when off; Reply's sender wins; `lastTo` without its recent → nothing; a `return` and a cancelled
+  send don't move `lastTo`; another character's `lastTo` is never used; after an attributed success
+  the box refills with that recipient a frame later, with Sent's handler before Blizzard's and
+  after; after an unattributed one it stays empty, **and reopening the send tab fills nothing**
+  (A sent, a stranger cancelled, B's success ambiguous); a reply's success fills nothing; the
+  mailbox closed or a name typed before the deferred fill → nothing; a non-string `lastTo` is
+  dropped at load.
+- **In game, before it ships** (with the picker's check): the send tab opens with the name
+  highlighted; typing replaces it; Reply puts the sender in; two sends in a row to an alt need no
+  typing; a stranger's send with an autofilled name goes through the confirmation with no
+  `ADDON_ACTION_BLOCKED` / `_FORBIDDEN`.
+
 ### Inbox (X1): alt mailbox memory (`Core/Summary.lua`, `Core/Memory.lua`)
 
 - **Snapshot** per character (account-wide, keyed by GUID), from `Scan.Inbox()` on each
@@ -378,10 +429,11 @@ reviewed with Codex before code.
    the two settings, `SendMail` in Ops' foreign calls, the item count on attempts. No window yet.
 3. **The window:** `Summary`, snapshots, and the Sent, Inbox and Trash folders with search. Sent
    first: it answers the owner's question.
-4. **S1** picker.
+4. **S1** picker and the last-recipient fill.
 5. **I4** grid; v0.2.0; closes #17.
 
-Settings added: `expiryDays`, `recentMax` (options page radios, `/gmail`). New saved data in
+Settings added: `expiryDays`, `recentMax` (options page radios, `/gmail`); `autofill` (a
+checkbox, with the picker PR). New saved data in
 `GlassMailDB`: `playDay`, `lastDate`, `version`, `chars`, `recents`, `snapshots`, `sent`, `trash`.
 
 ### The core PR in detail (PR 2 of M2; reviewed before code)
