@@ -2,24 +2,11 @@
 --
 -- The stub answers any method call (a no-op for ones it does not implement),
 -- so a call to a method Forever lacks would otherwise pass silently. This
--- checks each recorded "Type:Method" against the API dump's widget-method
--- walk, falling back to the documented functions.
+-- exercises the addon, then Kit.checkMethods checks each recorded
+-- "Type:Method" pair against the pinned build's widget methods. It fails,
+-- never skips, when the data is missing or nothing was recorded.
 dofile("tests/wow_stubs.lua")
 dofile("tests/harness.lua")
-
-local f = io.open(WoW.DUMP, "r")
-if not f then
-    io.write("test_methods: SKIPPED (no API dump at " .. WoW.DUMP .. ")\n")
-    os.exit(0)
-end
-local widget, documented = {}, {}
-for line in f:lines() do
-    local wm = line:match("^(%a+:%a+)%s*$")
-    if wm then widget[wm] = true end
-    local fn = line:match("^([%a_]+)%(")
-    if fn then documented[fn] = true end
-end
-f:close()
 
 -- Exercise everything so every method is recorded.
 local GM = loadAddon()
@@ -30,11 +17,8 @@ for _, cmd in ipairs({ "", "failures", "version", "glass off", "glass on", "opti
     SlashCmdList.GLASSMAIL(cmd)
 end
 
-local n = 0
-for name in pairs(WoW.methodsCalled) do
-    n = n + 1
-    local method = name:match(":(%a+)$")
-    check(widget[name] or documented[method], "method exists on Forever: " .. name)
-end
-check(n >= 1, "recorded the addon's method calls (" .. n .. ")")
+local recorded = Kit.checkMethods()
+-- What loading plus the exercise records today, rounded down: the exercise
+-- can't quietly shrink.
+check(recorded >= 75, "the exercise reached the windows (" .. recorded .. " recorded)")
 done("test_methods")
