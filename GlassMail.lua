@@ -17,6 +17,9 @@ local DEFAULTS = {
     keepFree = 0,     -- one of GM.Loot.KEEP_FREE
     -- X3: trades blocked while the mailbox is open, a chat line when new mail comes.
     tradeBlock = true, newMailAlert = true,
+    -- M2's memory (Core/Store.lua): play days before a recent recipient, an own
+    -- character or a Sent record is forgotten, and the recent recipients kept.
+    expiryDays = 30, recentMax = 20,
 }
 GM.DEFAULTS = DEFAULTS
 
@@ -38,6 +41,8 @@ local function ensureDefaults()
     -- A skin this version doesn't know falls back to the default.
     if db.skin ~= nil and not GM.Skin.IsValid(db.skin) then db.skin = nil end
     if db.keepFree ~= nil and not validKeepFree(db.keepFree) then db.keepFree = nil end
+    if db.expiryDays ~= nil and not GM.Store.ValidExpiry(db.expiryDays) then db.expiryDays = nil end
+    if db.recentMax ~= nil and not GM.Store.ValidRecentMax(db.recentMax) then db.recentMax = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     setmetatable(db, { __index = DEFAULTS })
     if type(GlassMailCharDB) ~= "table" then GlassMailCharDB = {} end
@@ -82,6 +87,21 @@ function Settings.SetNewMailAlert(on)
     return true
 end
 
+-- The memory's two limits; each prunes at once. False for an unoffered value.
+function Settings.SetExpiryDays(n)
+    if not GM.Store.ValidExpiry(n) then return false end
+    GM.db.expiryDays = n
+    GM.Store.Prune()
+    return true
+end
+
+function Settings.SetRecentMax(n)
+    if not GM.Store.ValidRecentMax(n) then return false end
+    GM.db.recentMax = n
+    GM.Store.Prune()
+    return true
+end
+
 -- A dev build, by its version: "dev" from the deploy script, or the
 -- packager's token left unreplaced (matched as a pattern, never written whole:
 -- the packager would replace it here too). Unreadable is NOT dev.
@@ -109,12 +129,25 @@ local function failures()
     if not any then say("no failures recorded") end
 end
 
+local LIST_LINES = 10   -- /gmail sent and /gmail trash
+
+local function list(lines, empty)
+    if #lines == 0 then return say(empty) end
+    for _, line in ipairs(lines) do say(line) end
+end
+
 -- The command list: /gmail help prints it, the options page can show it.
 local function helpLines()
     return {
         "/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")",
         "/gmail tradeblock on/off - block trades while the mailbox is open (" .. (GM.db.tradeBlock and "on" or "off") .. ")",
         "/gmail alert on/off - a chat line when new mail comes (" .. (GM.db.newMailAlert and "on" or "off") .. ")",
+        "/gmail sent - the last " .. LIST_LINES .. " mails sent or returned",
+        "/gmail trash - the last " .. LIST_LINES .. " mails deleted",
+        "/gmail expiry " .. table.concat(GM.Store.EXPIRY_CHOICES, "/")
+            .. " - play days before an unused name or record is forgotten (" .. GM.db.expiryDays .. ")",
+        "/gmail recents " .. table.concat(GM.Store.RECENT_CHOICES, "/") .. " - recent recipients kept ("
+            .. GM.db.recentMax .. ")",
         "/gmail options - open the options page",
         "/gmail failures - what failed to build or register",
         "/gmail version - client build vs the measured one",
@@ -152,6 +185,25 @@ local function slash(msg)
         if ONOFF[arg] == nil then return say("/gmail alert on/off") end
         Settings.SetNewMailAlert(ONOFF[arg])
         say("new-mail alert " .. arg)
+    elseif cmd == "sent" then
+        list(GM.Sent.Lines(LIST_LINES), "nothing sent or returned yet")
+    elseif cmd == "trash" then
+        list(GM.Trash.Lines(LIST_LINES), "nothing deleted yet")
+    elseif cmd == "expiry" then
+        if not Settings.SetExpiryDays(tonumber(arg)) then
+            return say("/gmail expiry " .. table.concat(GM.Store.EXPIRY_CHOICES, "/"))
+        end
+        say("forget after " .. arg .. " play days")
+    elseif cmd == "recents" then
+        if not Settings.SetRecentMax(tonumber(arg)) then
+            return say("/gmail recents " .. table.concat(GM.Store.RECENT_CHOICES, "/"))
+        end
+        say("keep " .. arg .. " recent recipients")
+    elseif cmd == "debug" then
+        -- Not in the help list: the in-game checks' debug line (#27).
+        if ONOFF[arg] == nil then return say("/gmail debug on/off") end
+        API.debug = ONOFF[arg]
+        say("debug " .. arg)
     elseif cmd == "options" then
         if not GM.Options.Open() then say("Esc > Options > AddOns > Glass Mail") end
     elseif cmd == "failures" then
@@ -178,12 +230,18 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 == ADDON then
             GM.db, GM.charDB = ensureDefaults()
+            start("store", GM.Store.Load)
         elseif arg1 == "Blizzard_MailFrame" and GM.db then
             start("skin", GM.Skin.Start)
         end
     elseif event == "PLAYER_LOGIN" then
         -- SavedVariables are read here at the latest (porting guide: not at file scope).
         if not GM.db then GM.db, GM.charDB = ensureDefaults() end
+        if not GM.Store.Ready() then start("store", GM.Store.Load) end
+        -- The clock first: before any record is written or pruned.
+        start("clock", GM.Store.Tick)
+        start("clock ticker", function() C_Timer.NewTicker(600, GM.Store.Tick) end)
+        start("sent", GM.Sent.Start)
         start("options", GM.Options.Register)
         start("skin", GM.Skin.Start)
         start("ops", GM.Ops.Start)

@@ -8,6 +8,7 @@
 ## X-Wago-ID: b6XybbKp
 ## SavedVariables: GlassMailDB
 ## SavedVariablesPerCharacter: GlassMailCharDB
+## OptionalDeps: AltStable
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
 Compat.lua
@@ -16,6 +17,11 @@ Skin.lua
 Core\Scan.lua
 Core\Loot.lua
 Core\Ops.lua
+Core\Names.lua
+Core\Store.lua
+Core\Registry.lua
+Core\Sent.lua
+Core\Trash.lua
 OpenAll.lua
 Inbox.lua
 Comforts.lua

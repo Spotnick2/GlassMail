@@ -18,6 +18,13 @@ function API.Print(msg)
     print("|cff7fd4ffGlassMail|r " .. msg)
 end
 
+-- A temporary debug line for the M2 core's in-game checks (#27): off unless
+-- /gmail debug on, this session only.
+API.debug = false
+function API.Debug(msg)
+    if API.debug then API.Print("|cff999999debug|r " .. msg) end
+end
+
 -- True for a Retail secret value. Such a value may be handed back to the
 -- client (SetText) but never compared, concatenated, tostring'd,
 -- pattern-matched or truth-tested in Lua. GetMoney() can return one.

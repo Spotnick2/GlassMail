@@ -184,9 +184,12 @@ needs no cleanup pass:
 - **Own characters**, account-wide, keyed by GUID: `{ name, realm, faction, lastPlayDay }`,
   written at `PLAYER_LOGIN` (`UnitGUID`, `API.PlayerFullName`, `GetRealmName`, the
   `UnitFactionGroup` tag). Aged by `expiryDays`.
-- **AltStable**, when loaded (`## OptionalDeps: AltStable`, `PUBLIC_API_VERSION == 1`):
-  `GetCharacters()` (copies; GUID, name, realm, faction, class, account, hidden, current) and the
-  `CharactersChanged` callback, only to refresh what is shown. Nothing from it is saved.
+- **AltStable**, when loaded (`## OptionalDeps: AltStable`, `PUBLIC_API_VERSION == 1`, and
+  `PUBLIC_API_FEATURES.provenance`): `GetCharacters()` (copies; GUID, name, realm, faction, class,
+  account, hidden, current, provenance) and the `CharactersChanged` callback, only to refresh what
+  is shown. Its sheet holds other players' characters too: only `provenance` `self` and
+  `own-account` are taken. An AltStable without the provenance feature can't say whose a
+  character is, so it isn't used (our own record is). Nothing from it is saved.
 - **Reachability:** an own character is offered as a recipient when its faction tag and realm name
   match the current character's. Session 6: the other faction fails ("Target is unfriendly");
   the other account's character on the same realm takes mail like an alt; other realms and
@@ -499,8 +502,9 @@ earlier date changes nothing, so a clock set back and forward again never counts
   hasn't ended (`GetTime() - opened <= 120`); exactly one → `sent`, saved, removed from `open`, its
   recipient into `recents`. Otherwise nothing is attributed.
 - `UI_ERROR_MESSAGE` type 457, as above: removed, unsaved.
-- A 1 s ticker while `open` isn't empty: a record not `awaiting` and past 120 s is saved
-  `unconfirmed` and removed.
+- Each window ends by its own `C_Timer.After(120)`, set when it opens (at `SendMail`, or at the
+  dialog's close): a record still open then is saved `unconfirmed` and removed. (The code uses
+  that in place of the 1 s ticker first planned: one timer per window, nothing to stop.)
 - `PLAYER_LOGOUT`: every record in `open` is saved `unconfirmed`.
 
 **Trash, in code:** `unsettled` is set by every inbox-changing post-hook (Ops' list) and cleared
@@ -532,7 +536,8 @@ the same with the sender and "gone in N days".
   removed at load; a valid non-default choice is kept.
 - Registry: the current character written at login, and refreshed by a tick over midnight (then a
   character switch: it ages from the later day); aged out by play days, never the current one;
-  AltStable absent, wrong `PUBLIC_API_VERSION`, present (nothing saved from it).
+  AltStable absent, wrong `PUBLIC_API_VERSION`, without the provenance feature, present (nothing
+  saved from it; a third-party character left out).
 - Sent, as timelines: the draft captured at the post-hook (money, COD, items, no links); one open
   window and a success → `sent` and a recent; two open → neither; the 120 s end → `unconfirmed`;
   error 457 in the same frame → dropped; another error in that frame, or 457 a frame later → kept;

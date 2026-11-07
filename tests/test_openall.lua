@@ -64,6 +64,8 @@ eq(#WoW.mailCalls, 1, "a pending mail command holds the next one")
 WoW.commandPending = false
 step(0.05)
 eq(callText(last()), "TakeInboxItem(1, 1)", "then slot 1")
+eq(GM._test.ops.run().attempt.count, 2, "  the attempt carries the slot's stack count (for I4)")
+eq(GM._test.ops.run().attempt.itemID, FOOD, "  and its item")
 
 -- Slot 1 taken: slots keep their numbers. The next item waits for the bags.
 WoW.serve(last())

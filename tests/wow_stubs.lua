@@ -59,8 +59,18 @@ function Methods.GetFontString(b) return b._fontString end
 SlashCmdList = {}
 Enum = { UITextureSliceMode = { Stretched = 0, Tiled = 1 } }
 function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
-date = os.date
-time = os.time
+-- The local date and the epoch clock, scriptable: WoW.today ("YYYY-MM-DD")
+-- answers date("%Y-%m-%d"), WoW.clock answers time() (the play-day clock and
+-- Trash's expiry, Core/Store.lua). Anything else is the real os.date / os.time.
+function date(fmt, t)
+    if fmt == "%Y-%m-%d" and t == nil and WoW.today then return WoW.today end
+    return os.date(fmt, t)
+end
+WoW.clock = 1793000000
+function time(t)
+    if t == nil then return WoW.clock end
+    return os.time(t)
+end
 function GetServerTime() return time() end
 function GetBuildInfo() return "1.60.1", "70291", "Oct 8 2026", 16001 end
 -- CVars; SetCVar fires CVAR_UPDATE synchronously, as the client documents it.
@@ -83,7 +93,9 @@ function GetLatestThreeSenders() return WoW.senders[1], WoW.senders[2], WoW.send
 WoW.playerGUID = "Player-1-AAA"
 function UnitGUID(unit) if unit == "player" then return WoW.playerGUID end end
 function UnitName(unit) if unit == "player" then return WoW.playerName or "Karuzo", "Morphisto" end end
-function GetRealmName() return "Doomhowl" end
+WoW.realm, WoW.faction = "Doomhowl", "Horde"
+function GetRealmName() return WoW.realm end
+function UnitFactionGroup(unit) if unit == "player" then return WoW.faction, WoW.faction end end
 
 WoW.addonVersion = "dev"
 C_AddOns = {
@@ -330,6 +342,30 @@ function WoW.serve(call)
     WoW.fire("MAIL_INBOX_UPDATE")
 end
 
+-- Sending. WoW.draft = { money, cod, items = { [slot] = { id, count } } } is
+-- the send tab's draft; SendMail only records the call (WoW.sends). With
+-- WoW.confirmNext set, the stranger confirmation fires INSIDE the call, as
+-- session 6 saw it; the dialog's close is SendMailFrame_EnableSendMailButton,
+-- which the test calls. Results (MAIL_SEND_SUCCESS, UI_ERROR_MESSAGE) are
+-- fired by the test.
+ATTACHMENTS_MAX_SEND = 12   -- MailFrame.lua:4
+WoW.draft, WoW.sends = {}, {}
+function GetSendMailMoney() return WoW.draft.money or 0 end
+function GetSendMailCOD() return WoW.draft.cod or 0 end
+-- name, itemID, texture, count, quality (MailFrame.lua:1297)
+function GetSendMailItem(i)
+    local it = WoW.draft.items and WoW.draft.items[i]
+    if it then return "item " .. tostring(it.id), it.id, 134, it.count or 1, 1 end
+end
+function SendMail(to, subject, body)
+    table.insert(WoW.sends, { to = to, subject = subject, body = body })
+    if WoW.confirmNext then
+        WoW.confirmNext = nil
+        WoW.fire("SECURE_TRANSFER_CONFIRM_SEND_MAIL")
+    end
+end
+function SendMailFrame_EnableSendMailButton() end
+
 -- Bags 0-4: WoW.bags[b] = { size, family, items = { [slot] = { id, count, locked } } }.
 -- Item facts: WoW.itemInfo[id] = { maxStack, family } (nil = not cached).
 WoW.bags, WoW.itemInfo = {}, {}
@@ -381,5 +417,6 @@ InputUtil = { IsGamepadUIEnabled = function() return WoW.gamepad end }
 -- Strict globals: any read of an undefined global is an error, except the
 -- addon's own globals that are legitimately nil before first assignment.
 -- LibStub: the embedded library's own loader reads _G.LibStub before creating it.
+-- AltStable: an optional dependency, absent unless a test sets it.
 Kit.strict({ GlassMail = true, GlassMailDB = true, GlassMailCharDB = true, MailProbeDB = true,
-    LibStub = true })
+    LibStub = true, AltStable = true })
