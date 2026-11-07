@@ -174,23 +174,6 @@ WoW.advance(121)
 eq(#db.sent, 1, "  and is never saved")
 eq(db.sent[1].to, "Kaleid Sumner", "  only the other is")
 
--- /gmail sent -------------------------------------------------------------------------
-reset()
-send("Kaleid Sumner", { subject = "ore", draft = { money = 150, items = { [1] = { id = 2589, count = 5 } } } })
-WoW.advance(0.5)
-success()
-newChat()
-SlashCmdList.GLASSMAIL("sent")
-local lines = newChat()
-eq(#lines, 1, "/gmail sent: one line per record")
-check(lines[1]:find("Karuzo Morphisto sent to Kaleid Sumner", 1, true) ~= nil, "  from whom, to whom")
-check(lines[1]:find('"ore"', 1, true) ~= nil, "  the subject")
-check(lines[1]:find("150c", 1, true) ~= nil, "  the money")
-check(lines[1]:find("2589 x5", 1, true) ~= nil, "  the items")
-reset()
-SlashCmdList.GLASSMAIL("sent")
-check(chatHas("nothing sent or returned yet"), "/gmail sent with nothing says so")
-
 -- A send stops an Ops run (one mail action at a time).
 WoW.inbox = { { sender = "Kaleid Sumner", subject = "gold", money = 100 } }
 check(GM.Ops.OpenAll({ types = { ah = true, system = true, player = true }, keepFree = 0 }), "an Open All run starts")

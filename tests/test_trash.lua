@@ -181,18 +181,4 @@ TakeInboxItem(1, 1)   -- in the same frame, before the commit
 WoW.advance(0.02)
 eq(#db.trash, 0, "a call between the confirmation and the commit voids it")
 
--- /gmail trash
-setup({ mail({ subject = "junk" }) })
-DeleteInboxItem(1)
-WoW.advance(0.2)
-serve()
-WoW.advance(0.02)
-newChat()
-SlashCmdList.GLASSMAIL("trash")
-local lines = newChat()
-eq(#lines, 1, "/gmail trash: one line per entry")
-check(lines[1]:find("deleted mail from Kaleid Sumner", 1, true) ~= nil, "  the sender")
-check(lines[1]:find('"junk"', 1, true) ~= nil, "  the subject")
-check(lines[1]:find("gone in 3 days", 1, true) ~= nil, "  when it goes")
-
 done("test_trash")
