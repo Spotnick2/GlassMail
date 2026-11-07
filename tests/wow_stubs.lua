@@ -173,6 +173,7 @@ GameTooltip._lines = {}
 function Methods.SetOwner(t, owner) t._owner, t._lines = owner, {} end
 function Methods.IsOwned(t, f) return t._owner == f end
 function Methods.AddLine(t, text) table.insert(t._lines, text) end
+function Methods.SetItemByID(t, id) t._lines, t._itemID = {}, id end
 -- A tooltip's SetText starts it over with one line; any other widget's is the core's.
 local coreSetText = Methods.SetText
 function Methods.SetText(t, text, ...)
@@ -288,18 +289,23 @@ function InboxItemCanDelete(i)
     return m.canReply == false or m.wasReturned == true
 end
 function GetInboxNumItems() return #WoW.inbox, WoW.inboxTotal or #WoW.inbox end
+-- m.missing: the header isn't there yet (nothing returned); m.daysLeft =
+-- false: no days left given; m.itemCount: a header count other than the slots.
 function GetInboxHeaderInfo(i)
     local m = WoW.inbox[i]
-    if not m then return end
+    if not m or m.missing then return end
     local n = 0
     for _ in pairs(m.items or {}) do n = n + 1 end
+    if m.itemCount ~= nil then n = m.itemCount end
+    local daysLeft = m.daysLeft
+    if daysLeft == nil then daysLeft = 29.5 elseif daysLeft == false then daysLeft = nil end
     -- A secret flag comes back as is; a plain one as the client's boolean.
     local function flag(v, default)
         if issecretvalue(v) then return v end
         if v == nil then return default end
         return v == true
     end
-    return 134937, nil, m.sender, m.subject, m.money or 0, m.cod or 0, m.daysLeft or 29.5, n > 0 and n or nil,
+    return 134937, nil, m.sender, m.subject, m.money or 0, m.cod or 0, daysLeft, n > 0 and n or nil,
         flag(m.wasRead, false), flag(m.wasReturned, false), false, flag(m.canReply, true), flag(m.isGM, false)
 end
 -- name, itemID, texture, count, quality, canUse, isCurrency; an uncached
@@ -385,10 +391,19 @@ C_Container = {
     end,
     CalculateTotalNumberOfFreeBagSlots = function() return 0 end,
 }
+-- Item names: WoW.itemNames[id] is the cached name (nil: a cache miss);
+-- RequestLoadItemDataByID is recorded in WoW.itemRequests, and a test fires
+-- ITEM_DATA_LOAD_RESULT itself.
+WoW.itemNames, WoW.itemRequests = {}, {}
 C_Item = {
     GetItemMaxStackSizeByID = function(id) return WoW.itemInfo[id] and WoW.itemInfo[id].maxStack end,
     GetItemFamily = function(id) return WoW.itemInfo[id] and WoW.itemInfo[id].family end,
+    GetItemNameByID = function(id) return WoW.itemNames[id] end,
+    GetItemIconByID = function(id) return 1000 + id end,
+    RequestLoadItemDataByID = function(id) table.insert(WoW.itemRequests, id) end,
 }
+-- The Escape list (UIParent.lua): CloseSpecialWindows hides each named frame.
+UISpecialFrames = {}
 C_CurrencyInfo = { GetCoinTextureString = function(c) return tostring(c) .. "c" end }
 -- The client's bit library (Lua 5.1 has none): band over non-negative ints.
 bit = { band = function(a, b)

@@ -160,45 +160,5 @@ function Sent.Start()
     end)
 end
 
--- Lines for /gmail sent and /gmail trash ------------------------------------
-
-local function charName(guid)
-    local c = Store.Chars()[guid]
-    return c and c.name or "another character"
-end
-
-local function money(copper, prefix)
-    if not copper or copper <= 0 then return "" end
-    return ", " .. prefix .. C_CurrencyInfo.GetCoinTextureString(copper)
-end
-
-local function itemList(items)
-    if not items or #items == 0 then return "" end
-    local parts = {}
-    for _, it in ipairs(items) do parts[#parts + 1] = it.id .. " x" .. it.count end
-    return ", items " .. table.concat(parts, ", ")
-end
-
--- What a record holds, after the who and when.
-function Sent.Contents(r)
-    return (r.subject and r.subject ~= "" and (' "' .. r.subject .. '"') or "") .. money(r.money, "")
-        .. money(r.cod, "COD ") .. itemList(r.items)
-end
-
-local WHAT = { sent = "sent to ", unconfirmed = "sent (unconfirmed) to " }
-
--- The last n Sent records, oldest first, one line each.
-function Sent.Lines(n)
-    local sent, lines = Store.Sent(), {}
-    for i = math.max(1, #sent - n + 1), #sent do
-        local r = sent[i]
-        local what = r.kind == "return" and "returned to " or WHAT[r.state]
-        lines[#lines + 1] = date("%m-%d %H:%M", r.at) .. " " .. charName(r.from) .. " " .. what .. r.to
-            .. Sent.Contents(r)
-    end
-    return lines
-end
-Sent.CharName = charName
-
 GM._test = GM._test or {}
 GM._test.sent = { open = function() return open end }

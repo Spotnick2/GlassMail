@@ -189,6 +189,95 @@ db = reload(with({ playDay = 20, sent = { sentRec({ day = 10 }) } }))
 check(GM.Settings.SetExpiryDays(7), "the setter takes an offered value")
 eq(#db.sent, 0, "  and prunes at once")
 
+-- Snapshots (the window PR) ---------------------------------------------------------
+local function snapMail(over)
+    local m = { expires = WoW.clock + 86400, type = "player", sender = "Kaleid Sumner", subject = "ore",
+        money = 0, cod = 0, wasReturned = false, items = { { id = 2589, count = 5 } } }
+    for k, v in pairs(over or {}) do m[k] = v end
+    return m
+end
+local function snapRec(over)
+    local s = { at = 1000, loaded = 1, total = 1, complete = true, mails = { snapMail() } }
+    for k, v in pairs(over or {}) do s[k] = v end
+    return s
+end
+local ALT = "Player-1-BBB"
+local alive = { [ALT] = { name = "Kaleid Sumner", lastPlayDay = 5 } }
+
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ complete = false, total = 140 }) } }))
+local s = db.snapshots[ALT]
+check(s ~= nil, "a valid snapshot loads")
+eq(s.complete, false, "  complete = false is kept, not taken for missing")
+eq(s.mails[1].wasReturned, false, "  and a mail's wasReturned = false")
+eq(s.mails[1].items[1].id, 2589, "  its items")
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ mails = { snapMail(), snapMail({ type = "letter" }) } }) } }))
+eq(next(db.snapshots), nil, "a mail of an unknown type drops the subtree")
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ mails = { snapMail({ expires = "soon" }) } }) } }))
+eq(next(db.snapshots), nil, "  and one without a numeric expiry")
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ complete = "yes" }) } }))
+eq(next(db.snapshots), nil, "a complete that isn't a boolean drops it")
+local many = {}
+for i = 1, Store.MAILS_MAX + 1 do many[i] = snapMail() end
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ mails = many }) } }))
+eq(next(db.snapshots), nil, "over 100 mails is invalid")
+many[Store.MAILS_MAX + 1] = nil
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ mails = many }) } }))
+eq(#db.snapshots[ALT].mails, 100, "  100 is fine")
+db = reload(with({ chars = alive, snapshots = { [ALT] = snapRec({ mails = { snapMail({ wasReturned = 1 }) } }) } }))
+eq(db.snapshots[ALT].mails[1].wasReturned, nil, "a bad optional field is left out of a mail")
+db = reload(with({ chars = alive, sent = { sentRec() } }))
+eq(type(db.snapshots), "table", "an older save with no snapshots loads an empty table")
+eq(#db.sent, 1, "  and keeps its other subtrees")
+
+-- A restarted clock drops snapshots with their characters, through a login.
+db = reload(with({ playDay = "x", chars = alive, snapshots = { [ALT] = snapRec() } }))
+eq(next(db.snapshots), nil, "a restarted clock drops snapshots at load")
+Store.Tick()
+eq(next(db.snapshots), nil, "a restarted clock drops snapshots (Load, Tick, Prune)")
+
+-- Prune: a snapshot goes with its character; expired mails go; an emptied one stays.
+db = reload(with({ playDay = 40, chars = { [ALT] = { name = "Kaleid Sumner", lastPlayDay = 39 },
+    ["Player-1-CCC"] = { name = "Old Alt", lastPlayDay = 1 } },
+    snapshots = { [ALT] = snapRec({ loaded = 2, total = 2,
+        mails = { snapMail({ expires = WoW.clock - 1 }), snapMail({ expires = WoW.clock + 60 }) } }),
+        ["Player-1-CCC"] = snapRec(), ["Player-1-DDD"] = snapRec() } }))
+Store.Prune()
+eq(db.snapshots["Player-1-CCC"], nil, "a snapshot goes when its character ages out")
+eq(db.snapshots["Player-1-DDD"], nil, "  and one whose character isn't known")
+eq(#db.snapshots[ALT].mails, 1, "an expired mail goes from its snapshot")
+eq(db.snapshots[ALT].loaded, 2, "  the visit's coverage is kept")
+WoW.clock = WoW.clock + 120
+Store.Prune()
+check(db.snapshots[ALT] ~= nil, "a snapshot whose mails all expired stays")
+eq(#db.snapshots[ALT].mails, 0, "  empty")
+WoW.clock = WoW.clock - 120
+
+-- Writes and forgets, and the change notice.
+db = reload(with({ chars = alive }))
+local notices = 0
+Store.OnChange(function() notices = notices + 1 end)
+check(Store.SetSnapshot(ALT, snapRec()), "SetSnapshot takes a valid snapshot")
+eq(notices, 1, "  and says so")
+check(not Store.SetSnapshot(WoW.Secret("guid"), snapRec()), "a secret GUID isn't kept")
+check(not Store.SetSnapshot(ALT, snapRec({ mails = "x" })), "nor an invalid snapshot")
+local m = db.snapshots[ALT].mails[1]
+check(Store.ForgetMail(ALT, m), "a mail can be forgotten")
+eq(#db.snapshots[ALT].mails, 0, "  it's gone from the snapshot")
+check(Store.ForgetSnapshot(ALT), "a snapshot can be forgotten")
+eq(db.snapshots[ALT], nil, "  it's gone")
+check(not Store.ForgetSnapshot(ALT), "  forgetting it again does nothing")
+Store.AddSent(sentRec())
+Store.AddTrash(trashRec())
+local before = notices
+check(Store.ForgetSent(db.sent[1]), "a Sent record can be forgotten")
+check(Store.ForgetTrash(db.trash[1]), "a Trash entry can be forgotten")
+eq(#db.sent + #db.trash, 0, "  both gone")
+eq(notices, before + 2, "  each says so")
+check(not Store.ForgetSent(sentRec()), "a record that isn't in the list isn't forgotten")
+before = notices
+Store.Prune()
+eq(notices, before, "a prune that removes nothing says nothing")
+
 -- /gmail expiry, /gmail recents
 newChat()
 SlashCmdList.GLASSMAIL("expiry 14")

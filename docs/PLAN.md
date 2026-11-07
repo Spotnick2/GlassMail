@@ -158,9 +158,9 @@ needs no cleanup pass:
   recipient not sent to, an own character not played, and a Sent record, that many play days old,
   are dropped (at login and on the date change).
 - **Setting `recentMax`** (default 20; choices 10 / 20 / 50): the oldest recent recipient goes.
-- **Real-time ends for real-time things:** mail expires whether you play or not. A snapshot whose
-  last mail has expired (`expires < time()`) is dropped, and its expired mails are left out when
-  shown; a Trash entry goes when the mail it held would have expired.
+- **Real-time ends for real-time things:** mail expires whether you play or not. A snapshot's
+  expired mails (`expires < time()`) are dropped from it; the snapshot itself ends with its
+  character (the window PR, below). A Trash entry goes when the mail it held would have expired.
 - **A snapshot goes with its character** (aged out of the registry). AltStable's "forget" is not
   mirrored: absence from `GetCharacters()` can't be told from "never known" (a fresh AltStable),
   and a lost snapshot costs a mailbox visit, a wrong one costs trust.
@@ -586,6 +586,161 @@ steps are #27, run after launch):
 - **Smaller:** only error 457 drops a send; `lastDate` is a high-water mark; the current
   character's play day refreshes on every tick; the new settings are validated at load; a
   restarted clock drops the play-day-stamped subtrees.
+
+### The window PR in detail (PR 3 of M2; Codex gpt-6-astra, high, 3 rounds, consensus, 2026-11-06)
+
+What it ships: the Inbox snapshots and the window with its three folders. `/gmail sent` and
+`/gmail trash` go (the window replaces them, with `Sent.Lines` and `Trash.Lines`).
+
+**Files** (TOC: `Core\Summary.lua` and `Core\Memory.lua` after `Core\Trash.lua`; `Window.lua`
+after `Comforts.lua`, before `Options.lua`):
+- `Core\Summary.lua`: `Summary.Of(snapshot, now)`.
+- `Core\Memory.lua`: taking the snapshots.
+- `Window.lua`: the window, its folders, rows, search and forget actions.
+
+**Saved data:** a fifth subtree, `snapshots[guid]`, under `version = 1` (a new subtree is an
+addition: an older save has none and loads as empty; no version change). A restarted clock drops
+it with `chars`, `recents` and `sent`: its characters' registry goes then, and a snapshot without
+its character could never age out.
+- `{ at, loaded, total, complete, mails = { mail, ... } }`; required `at`, `loaded`, `total`
+  (numbers), `complete` (a boolean), `mails` (a list).
+- Each mail: required `expires` (a number) and `type` (`ah` / `system` / `player`); optional
+  `sender`, `subject`, `money`, `cod`, `wasReturned` (a boolean), `items` (`{ id, count }`). A
+  mail that fails makes its snapshot invalid, and an invalid snapshot drops the subtree, as for
+  the others. At most 100 mails (the loaded window); a longer list is invalid.
+- Store gets a `boolean` field kind and a `mails` kind (a list of records cleaned by the mail
+  spec), `Store.Snapshots()`, `Store.SetSnapshot(guid, snap)` and the forget calls below.
+- **Prune:** a snapshot whose GUID isn't in `chars` goes (its character aged out). Then each
+  snapshot loses its mails with `expires < time()` (an expired mail has left the mailbox: returned
+  or deleted by the server). A snapshot left with no mails stays until its character goes. (The
+  first rule dropped a snapshot once its last mail expired. That loses "last seen"; the
+  character's own expiry still ends it, one record per character.)
+
+**Taking a snapshot** (`Core\Memory.lua`):
+- A visit starts at `MAIL_SHOW` and ends at `PLAYER_INTERACTION_MANAGER_FRAME_HIDE` (type 17).
+  Each visit gets a new number; the close clears it. Updates outside a visit are ignored.
+- Each `MAIL_INBOX_UPDATE` in a visit, the first one included, schedules one scan a frame later
+  (`C_Timer.After(0)`, coalesced per visit: several updates in one frame scan once). The callback
+  carries its visit's number and scans only if that visit is still the open one (update, close,
+  reopen: the old callback does nothing).
+- **Assumed, checked in game before v0.2.0:** the first update after `MAIL_SHOW` carries this
+  visit's inbox, never a previous character's or visit's (Blizzard's `RefreshInbox` may defer
+  `CheckInbox`, MailFrame.lua:237-246; the measured updates came 0.15-0.3 s after opening, contents
+  unchecked). The debug line logs, at each scan: the visit, `loaded`, `total` and the first
+  sender. If it fails, the acceptance rule is revised from what was measured, not padded with a
+  delay or a second `CheckInbox`.
+- **What a scan must show to replace the snapshot** (else nothing is saved and the previous one
+  stays): `Scan.Inbox()` `resolved` (no secret, every attachment linked); a mail at every index up
+  to `loaded` (`#mails == loaded`: a header not yet there is skipped by Scan); every mail's
+  `daysLeft` a number; and each mail's attachments as many as its header's `itemCount` (Scan keeps
+  `itemCount` on the mail; a nil `itemCount` is 0: this client gives nil for a mail without items,
+  FOREVER-PROBE session 2). A readable loaded subset (`loaded < total`) is accepted, as before.
+  Then the current character's snapshot is replaced: `at = time()`,
+  `loaded`, `total`, `complete = loaded == total`, and each mail as `{ sender, subject, money, cod,
+  expires = floor((time() + daysLeft * 86400) / 60) * 60, type, wasReturned, items }`. Currency
+  attachments (`isCurrency`) are left out of `items`: their ID isn't an itemID.
+- No current GUID (secret, nil) → nothing saved. No letter text, ever.
+- `complete`, `loaded` and `total` are the visit's coverage, never updated by a prune or a
+  forget: "100 of 140 loaded at the last visit".
+
+**`Summary.Of(snapshot, now)`**: AltStable's rule (Core.lua:2927-2950): over the mails with items
+or money and `expires > now`: their count, their money, the soonest `expires`. nil when none.
+
+**The window** (`Window.lua`, a frame named `GlassMailWindow`, child of `UIParent`):
+- **Look:** one glass surface (`Glass.Apply(frame, "large")`) in the current preset, the `stock`
+  skin using `smoked` (the window has no Blizzard art to fall back on); `Skin.Refresh` repaints it
+  (Skin keeps a list of extra surfaces). Every open repaints the list from the Store. Section panes as on the mail windows: the folder column
+  and the list on a `section` pane, rows on `pane`.
+- **Frame:** about 640 x 440, `HIGH` strata, `SetToplevel`, clamped, movable by its title bar
+  (the position isn't saved: it opens centred each session), a close button
+  (`UIPanelCloseButton`). **Escape closes it:** its name is in `UISpecialFrames`, taken out at
+  `PLAYER_REGEN_DISABLED` and put back at `PLAYER_REGEN_ENABLED` (GlassGear's rule: an addon entry
+  taints the Escape pass, which would then fail to hide a protected frame in combat). Put in at
+  creation only when `API.InCombat()` is false (a window built in combat, by `/gmail mail` or after
+  a reload, waits for `PLAYER_REGEN_ENABLED`). Only `table.insert` / `table.remove` on the table,
+  never an assignment. So Escape closes it out of combat; in combat the close button and the
+  toggle do.
+- **Opened by** `/gmail mail` (a toggle) and our small button on `MailFrame`'s title bar, left of
+  its close button (a child of `MailFrame`, like the row controls). Works away from the mailbox,
+  in combat too (nothing protected).
+- **Folders** down the left: **Inbox** (characters with a snapshot), **Sent** (n), **Trash** (n).
+  The first open in a session shows Sent; after that, the folder last shown.
+- **Search box** above the list (a plain `EditBox` on a pane, "Search" as a grey hint while empty):
+  filters the open folder as you type; Escape clears its focus. Matching: the query and each field
+  lower-cased, a plain `find` (no patterns), every space-separated word must match some field.
+- **The list:** a pool of row frames (as many as fit, about 10), an offset, the mouse wheel and a
+  thin scroll bar of ours (a `Slider`): 1000 Sent records never build 1000 frames. Rows are two
+  lines; up to 6 item icons (`C_Item.GetItemIconByID`), each with its count and a tooltip
+  (`GameTooltip:SetItemByID`), "+N" past 6.
+- **Sent rows**, newest first: "to *name*" (or "returned to *name*"), from which character
+  (`chars[from].name`, else "another character"), when (`date` of `at`: "14:02" today, else
+  "Nov 3"), state (an amber "unconfirmed" when so), then subject, money, COD and the items.
+- **Trash rows**, newest first: "from *sender*", in whose mailbox, "gone in N days" (from
+  `expires`), then the contents. A note under the list says what Trash holds: deletes Glass Mail
+  confirmed; one made while another mail action was in flight isn't there.
+- **Inbox:** one row per snapshot, sorted by character name: the name, "last seen N days ago"
+  (from `at`, real time; "today"), and the summary ("3 mails with items or gold, 120g, the first
+  expires in 2 days"). With no summary, what is known and no more: "empty when last seen" only
+  for a complete snapshot whose `total` was 0; "letters only" when unexpired mails remain; "no
+  unexpired mail recorded" otherwise. "100 of 140 loaded at the last visit" when not `complete`. A click opens that
+  character's mails (not expired, soonest expiry first): sender, subject, money, COD, items,
+  "expires in N days", "returned" when so; a back button returns to the characters. **A search in
+  Inbox** lists the matching mails of every character, each with its character's name.
+- **Empty states:** "Nothing sent yet", "Trash is empty", "No mailbox seen yet: open one on each
+  character". When `Store.Ready()` is false: "Glass Mail's memory couldn't load" (and nothing
+  else).
+- **Forget, on every row:** a small × on the row's right, dim until hovered: a Sent record or a Trash
+  entry is removed from its list (by identity: the row holds the record table), a character's row
+  drops its snapshot, a mail row drops that mail from its snapshot. One click, no confirmation
+  (only Glass Mail's memory changes; the mailbox doesn't).
+- **Item names** for search: `C_Item.GetItemNameByID(id)`. On a miss, the window asks
+  `C_Item.RequestLoadItemDataByID(id)` once per itemID per session (only for the records being
+  searched, distinct IDs; the ID is marked asked before the request, and the event is registered
+  first), and on `ITEM_DATA_LOAD_RESULT(id, true)` for an ID it asked, refreshes
+  the search (coalesced to one refresh a frame). `success = false`: that ID isn't asked again
+  this session and is left out of name search.
+- **Live:** Store gets `Store.OnChange(fn)`, called after every write (a Sent record, a Trash
+  entry, a snapshot, a forget, a prune that removed something). The window refreshes a frame later,
+  only while shown.
+
+**Tests** (each mutation-tested):
+- Store: a snapshot's shape at load (a bad mail drops the subtree; over 100 mails invalid; a
+  boolean field; `complete = false` and `wasReturned = false` kept, not taken for missing); an
+  older save with no `snapshots` keeps its other subtrees; a restarted clock drops snapshots
+  (through `Load`, `Tick` and `Prune`); prune: the character gone → its snapshot goes, expired
+  mails go, an emptied snapshot stays.
+- Memory: no snapshot before the visit's first update, or after its close; update → close →
+  reopen → the old callback saves nothing; several updates in one frame scan once; the old snapshot
+  stays on an unresolved scan, a missing header, a missing `daysLeft`, or fewer attachments than
+  `itemCount`; an inbox of a money-only mail, a plain letter and a mail with items is taken; `expires` rounded to the minute; currency left out; partial `complete = false`; a
+  secret GUID saves nothing.
+- Summary: AltStable's rule (an empty mail, an expired one, money only, the soonest).
+- Window: opens on Sent, then on the last folder; Sent newest first with state, return and the
+  other character's name; Trash's "gone in N days" and its note; Inbox rows, a character's mails,
+  back, search across characters; search by name, subject, item name, two words; an item-name miss
+  asks once, a success refreshes, a failure isn't asked again; forget on each row kind; a new
+  Sent record while open shows a frame later, and one added while hidden shows on the next open;
+  the pool never grows past its rows (1000 records); the scroll clamps; Escape's entry leaves in
+  combat and comes back after, and a window built in combat gets it only after; the Inbox row's
+  wording (summary, letters only, nothing recorded, empty when last seen, partial); the store not
+  ready.
+
+**In game** (the owner, after deploy):
+- Open the window from the mailbox button and with `/gmail mail`; drag it; Escape closes it, and
+  after a fight too.
+- Send to an alt: the row appears while the window is open. Visit two characters' mailboxes: both
+  show in Inbox with their summaries; open one.
+- After a full client exit, search for an item by name in Sent: the names load and the row shows.
+- Forget a row of each kind.
+- **The freshness check, before v0.2.0** (`/gmail debug on`): two characters with visibly
+  different inboxes, one empty; switch between them; reopen a mailbox quickly; open one right
+  after login (a deferred `CheckInbox`). Each scan's debug line must show that visit's own inbox.
+
+**Review outcome:** a snapshot needs every loaded mail read whole (a header at each index, days
+left, attachments matching `itemCount`, nil being 0); the deferred scan belongs to its visit;
+first-update freshness is an in-game gate, not a padded delay; a restarted clock drops snapshots
+with their characters; "empty" is said only when seen empty; Escape's entry waits out combat at
+creation too.
 
 ### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
 

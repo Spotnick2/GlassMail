@@ -356,6 +356,17 @@ local function applyOne(window, p)
     for _, region in ipairs(s.art) do region:SetAlpha(p and 0 or 1) end
 end
 
+-- Glass Mail's own window (Window.lua): always glass, with no Blizzard art to
+-- fall back on, so `stock` shows it smoked. Its body and panes repaint here.
+local own = {}   -- { g = surface } or { tex = texture, key = "pane" | "section" }
+local function ownPreset() return preset() or Skin.PRESETS.smoked end
+local function paintOwn(o, p)
+    if o.g then paintBody(o.g, p) else
+        local c = p[o.key]
+        o.tex:SetColorTexture(c[1], c[2], c[3], c[4])
+    end
+end
+
 -- Skin the windows that exist now. MailFrame and OpenMailFrame come from
 -- Blizzard_MailFrame, which is not load-on-demand, so they exist by
 -- PLAYER_LOGIN; ADDON_LOADED covers a client where that changes.
@@ -420,6 +431,26 @@ function Skin.Refresh()
         for _, paper in ipairs(letter.paper) do paper:SetAlpha(p and 0 or 1) end
         paintLetterText(name, letter, p)
     end
+    for _, o in ipairs(own) do paintOwn(o, ownPreset()) end
+end
+
+-- The glass body on frame (its content goes at Glass.ContentLevel(frame)).
+function Skin.AddWindow(frame)
+    local p = ownPreset()
+    pushStyle(p)
+    local o = { g = Glass.Apply(frame, "large") }
+    own[#own + 1] = o
+    paintOwn(o, p)
+    return o.g
+end
+
+-- A pane filling frame, in the preset's `key` colour ("pane" or "section").
+function Skin.AddPane(frame, key)
+    local o = { tex = frame:CreateTexture(nil, "BACKGROUND"), key = key }
+    o.tex:SetAllPoints(frame)
+    own[#own + 1] = o
+    paintOwn(o, ownPreset())
+    return o.tex
 end
 
 function Skin.IsSkinned(window) return skinned[window] ~= nil end
@@ -428,4 +459,4 @@ function Skin.IsValid(name) return name == "stock" or Skin.PRESETS[name] ~= nil 
 
 GM._test = GM._test or {}
 GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end, letters = letters,
-    sections = sections, portraits = portraits }
+    sections = sections, portraits = portraits, own = own }

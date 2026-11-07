@@ -22,8 +22,11 @@ Core\Store.lua
 Core\Registry.lua
 Core\Sent.lua
 Core\Trash.lua
+Core\Summary.lua
+Core\Memory.lua
 OpenAll.lua
 Inbox.lua
 Comforts.lua
+Window.lua
 Options.lua
 GlassMail.lua
