@@ -189,8 +189,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 Lua 5.1 at `C:\Program Files (x86)\Lua\5.1\` (`lua.exe`, `luac.exe`). No build step.
 
 ```powershell
-pwsh tests\run.ps1                                                   # luac -p on the TOC files + probe, then every tests\test_*.lua (needs ..\LibGlass or $env:LIBGLASS)
-& 'C:\Program Files (x86)\Lua\5.1\lua.exe' tests\test_boot.lua      # one test, from the repo root
+pwsh tests\run.ps1                                                   # luac -p on the TOC files + probe, then every tests\test_*.lua, through WowTestKit at its pin (needs ..\LibGlass or $env:LIBGLASS)
+pwsh tests\run.ps1 -KitDev                                           # the same against the ..\WowTestKit working copy
+& 'C:\Program Files (x86)\Lua\5.1\lua.exe' tests\test_boot.lua      # one test, from the repo root (once run.ps1 has fetched the kit)
 pwsh Tools\deploy.ps1 -Probe                                         # copy the addon (+ MailProbe) into AddOns
 ```
 
@@ -203,11 +204,21 @@ pwsh Tools\deploy.ps1 -Probe                                         # copy the 
 
 ## Testing
 
-GlassChat's harness, trimmed: `tests\wow_stubs.lua` (strict globals as an allowlist of APIs
-verified in the dump, secrets as throwing `newproxy` values, event names validated against the
-dump or `tests\events-70291.txt`, every widget method recorded), `tests\harness.lua` (`check`,
-`eq`, `loadAddon`, `newChat`, `chatHas`), `test_methods.lua` (every method called exists on this
-client). **Mutation-test every new test**: break the behaviour, confirm it goes red. Offline tests
+The test scaffolding is WowTestKit (`C:\Projects\WoW\WowTestKit`; its README is the reference)
+at the commit and client build `tests\kit.pin` names. `tests\run.ps1` puts that commit in
+`%LOCALAPPDATA%\WowTestKit\<sha>` and hands off to the kit's runner; CI fetches it with
+`tests\fetch_kit.sh`. `tests\kit.lua`, `kit.ps1` and `fetch_kit.sh` are the kit's bootstrap
+copies: never edit them here. A kit need is an issue on the kit, worked around in
+`tests\wow_stubs.lua` with a `-- WowTestKit #N:` comment meanwhile. `tests\run.ps1 -KitDev`
+runs against the `..\WowTestKit` working copy instead of the pin.
+
+The kit's core has the mechanics (strict globals, secrets as throwing `newproxy` values, event
+names checked against the pinned build, every widget method recorded, `print` with the
+stray-`|` check, timers, `check` / `eq` / `done`). `tests\wow_stubs.lua` adds the mailbox's
+client APIs, the mail windows' frames and the widget methods the core lacks;
+`tests\harness.lua` has `loadAddon`, `newChat`, `chatHas`; `test_methods.lua` checks every
+`Type:Method` called exists on that widget type in the pinned build (`Kit.checkMethods`).
+**Mutation-test every new test**: break the behaviour, confirm it goes red. Offline tests
 can't cover taint, real secrets or rendering; that's the probe and an in-game checklist.
 
 ## Workflow and releasing
