@@ -58,18 +58,37 @@ local _, src = Registry.Characters()
 eq(src, "own", "an AltStable of another API version is ignored")
 eq(calls, 0, "  and never called")
 
--- AltStable v1: its list, live, nothing saved.
+-- AltStable v1 without the provenance feature: it can't say whose a
+-- character is, so it isn't used.
+calls = 0
 rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, GetCharacters = function()
+    calls = calls + 1
+    return { { guid = "Player-9-FRI", name = "A Friend", realm = "Doomhowl", faction = "Horde" } }
+end })
+_, src = Registry.Characters()
+eq(src, "own", "an AltStable v1 without provenance is ignored")
+eq(calls, 0, "  and never called")
+
+-- AltStable v1 with provenance: its own characters, live, nothing saved.
+rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
+    GetCharacters = function()
     return {
         { guid = "Player-2-ZZZ", name = "Bank Alt", realm = "Doomhowl", faction = "Horde", hidden = true,
             current = false, provenance = "own-account" },
-        { guid = ME, name = "Karuzo Morphisto", realm = "Doomhowl", faction = "Horde", hidden = false, current = true },
-        { guid = WoW.Secret("guid"), name = "Secret Guid" },
+        { guid = "Player-9-FRI", name = "A Friend", realm = "Doomhowl", faction = "Horde", hidden = false,
+            current = false, provenance = "third-party" },
+        { guid = "Player-9-NOP", name = "No Provenance", realm = "Doomhowl", faction = "Horde" },
+        { guid = ME, name = "Karuzo Morphisto", realm = "Doomhowl", faction = "Horde", hidden = false, current = true,
+            provenance = "self" },
+        { guid = WoW.Secret("guid"), name = "Secret Guid", provenance = "self" },
     }
 end })
 list, src = Registry.Characters()
 eq(src, "altstable", "with AltStable v1 loaded, its list")
-eq(#list, 2, "  an entry with a secret GUID is skipped")
+eq(#list, 2, "  a third-party character, one with no provenance and a secret GUID are skipped")
+for _, c in ipairs(list) do
+    check(c.name ~= "A Friend", "  a friend's same-realm character is never one of ours")
+end
 eq(list[1].name, "Bank Alt", "  in its order")
 check(list[1].hidden, "  hidden is passed on")
 eq(list[1].provenance, "own-account", "  and provenance")
@@ -77,7 +96,8 @@ check(list[2].current, "  the current character is flagged")
 eq(db.chars["Player-2-ZZZ"], nil, "nothing from AltStable is saved")
 
 -- An AltStable that throws: our list, and the failure recorded.
-rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, GetCharacters = function() error("boom") end })
+rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
+    GetCharacters = function() error("boom") end })
 _, src = Registry.Characters()
 eq(src, "own", "an AltStable that throws falls back to our record")
 check(GM.failures.altstable ~= nil, "  and the failure is recorded")

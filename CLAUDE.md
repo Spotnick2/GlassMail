@@ -103,7 +103,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   mail would have expired), then the caps (`recentMax`, 1000 Sent, 500 Trash). The settings in the
   same table aren't its business.
 - **`Core\Registry.lua`**: own characters by GUID (`chars`, refreshed on every tick), or
-  AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1; nothing from it saved);
+  AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1 with the `provenance` feature;
+  only its `self` and `own-account` characters, never a third party's; nothing from it saved);
   `Registry.Reachable` (same realm and faction tag, not the current character).
 - **`Core\Sent.lua`**: every send, captured at the `SendMail` post-hook and attributed by a 120 s
   window (`sent` only when it is the one candidate at `MAIL_SEND_SUCCESS`, else `unconfirmed` at its
