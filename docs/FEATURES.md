@@ -24,7 +24,10 @@ Two glass presets, **clear** and **smoked**, plus Blizzard's own art (owner, 202
 presets are AltStable's (`AltStable/Skin.lua`), so the addons look alike; they change the body and
 the reading pane, never the rim. The choice switches live. Under glass the letters are dark with
 light text (owner, 2026-10-10); the target for the rest of the look is
-[mockups/inbox-and-send.png](mockups/inbox-and-send.png).
+[mockups/inbox-and-send.png](mockups/inbox-and-send.png). The faded stock rows are replaced by
+guides on the reading pane (owner, 2026-11-12: an empty inbox read as one bare pane): a slot behind
+each row's icon, a line between rows, and an empty inbox's envelope with "No mail"; a setting
+(`inboxGuides`, `/gmail guides`) turns them off.
 
 ## Features
 

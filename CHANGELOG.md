@@ -6,6 +6,9 @@
   AltStable knows), which the game's own suggestions can't see. It works like the game's: the rest
   of the name appears highlighted, keep typing to change it, Enter or Tab to keep it. Names the
   game already suggests are left to it.
+- Under glass, the inbox keeps its shape when it is empty: a faint slot where each row's icon
+  goes, a line between rows, and the envelope with "No mail" (without the lines) when there is none. Off on the
+  options page or with `/gmail guides off`.
 
 ## v0.2.0
 

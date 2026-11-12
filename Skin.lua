@@ -95,6 +95,10 @@ Skin.LETTER_TEXT = { 0.92, 0.90, 0.86 }
 -- The send body's selection under glass. Blizzard's is a pale grey
 -- (MailFrame.xml:581), made for dark text: light text on it can't be read.
 Skin.LETTER_HIGHLIGHT = { 0.30, 0.36, 0.48 }
+-- The inbox's guides (addGuides): white, faint enough to sit under a mail's
+-- icon and text, the same in both presets; the empty inbox's envelope and line.
+Skin.GUIDES = { slot = { 1, 1, 1, 0.07 }, line = { 1, 1, 1, 0.09 }, envelope = 0.35, text = { 0.6, 0.6, 0.6 } }
+Skin.EMPTY_TEXT = "No mail"
 
 local function rowCount()
     local n = rawget(_G, "INBOXITEMS_TO_DISPLAY")   -- MailFrame.lua:1
@@ -249,6 +253,82 @@ local function addPane()
     pane = newPane(inbox, first, last, inbox:GetFrameLevel(), 4)
 end
 
+-- The inbox's guides on the reading pane, in place of the faded stock row art
+-- (owner, 2026-11-12: an empty inbox under glass read as one bare pane, where
+-- Blizzard's shows seven slots on ruled paper). Per row a rounded slot behind
+-- the item button (where its icon goes, MailFrame.xml:69: 37 x 37 at 4, -3) and
+-- a line under every row but the last; and, when the inbox holds no mail, our
+-- envelope faded in the middle with "No mail", the lines then hidden. All of it on the pane's own
+-- frame, under the rows (children of InboxFrame, a level up): a mail's icon
+-- and text draw over its slot. Shown under glass while `inboxGuides` is on.
+local guides   -- { slots = { texture, ... }, lines = { texture, ... }, empty = { icon, text } }
+local function addGuides()
+    if not pane then return end
+    local host = pane.frame
+    local g = { slots = {}, lines = {} }
+    local n = rowCount()
+    -- Every row first: a missing one builds nothing (an unpainted texture
+    -- draws nothing, but none is left behind either).
+    for i = 1, n do
+        if not (rawget(_G, "MailItem" .. i) and rawget(_G, "MailItem" .. i .. "Button")) then
+            error("MailItem" .. i .. " or its button missing", 0)
+        end
+    end
+    for i = 1, n do
+        local row, button = rawget(_G, "MailItem" .. i), rawget(_G, "MailItem" .. i .. "Button")
+        local slot = host:CreateTexture(nil, "BORDER")
+        slot:SetPoint("TOPLEFT", button, "TOPLEFT", -1, 1)
+        slot:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 1, -1)
+        slot:AddMaskTexture(Glass.Mask(host, "body_mask_small", 8, -1, button))
+        g.slots[i] = slot
+        if i < n then
+            local line = host:CreateTexture(nil, "BORDER")
+            line:SetHeight(1)
+            line:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 4, 0)
+            line:SetPoint("TOPRIGHT", row, "BOTTOMRIGHT", -4, 0)
+            g.lines[#g.lines + 1] = line
+        end
+    end
+    local icon = host:CreateTexture(nil, "ARTWORK")
+    icon:SetTexture(Skin.PORTRAITS.MailFrame)
+    icon:SetSize(72, 72)
+    icon:SetPoint("CENTER", host, "CENTER", 0, 16)
+    local text = Glass.Font(host, 14, "CENTER")
+    text:SetPoint("TOP", icon, "BOTTOM", 0, -10)
+    text:SetText(Skin.EMPTY_TEXT)
+    g.empty = { icon = icon, text = text }
+    guides = g
+end
+
+-- No mail loaded: nothing to show, and nothing on its way (a secret count
+-- isn't read as empty).
+local function inboxEmpty()
+    local loaded, total = GetInboxNumItems()
+    if API.IsSecret(loaded) or API.IsSecret(total) then return false end
+    return loaded == 0 and total == 0
+end
+
+local function paintGuides(p)
+    if not guides then return end
+    local on = p ~= nil and GM.db.inboxGuides == true
+    local c = Skin.GUIDES
+    for _, t in ipairs(guides.slots) do
+        t:SetShown(on)
+        t:SetColorTexture(c.slot[1], c.slot[2], c.slot[3], c.slot[4])
+    end
+    -- An empty inbox's envelope and "No mail" sit across the rows: no lines
+    -- through them (owner, 2026-11-12, from a screenshot).
+    local empty = on and inboxEmpty()
+    for _, t in ipairs(guides.lines) do
+        t:SetShown(on and not empty)
+        t:SetColorTexture(c.line[1], c.line[2], c.line[3], c.line[4])
+    end
+    guides.empty.icon:SetShown(empty)
+    guides.empty.icon:SetAlpha(c.envelope)
+    guides.empty.text:SetShown(empty)
+    guides.empty.text:SetTextColor(c.text[1], c.text[2], c.text[3])
+end
+
 -- The letter's text, with the colours Blizzard gave it: the send tab's edit
 -- box, the open letter's body (SimpleHTML, coloured per text type: "P"), and
 -- every font string under the open letter that uses the mail or invoice font
@@ -388,6 +468,22 @@ function Skin.Start()
         local ok, err = pcall(addPane)
         if not ok then API.Fail("skin pane", err) end
     end
+    if pane and not tried.guides then
+        tried.guides = true
+        local ok, err = pcall(addGuides)
+        if not ok then
+            API.Fail("skin guides", err)
+        else
+            -- Blizzard's own refresh of the rows, after every inbox change (MailFrame.lua:325).
+            local inbox = rawget(_G, "InboxFrame")
+            if guides and inbox and inbox.Update then
+                hooksecurefunc(inbox, "Update", function()
+                    local okPaint, errPaint = pcall(paintGuides, preset())
+                    if not okPaint then API.Fail("skin guides", errPaint) end
+                end)
+            end
+        end
+    end
     for name in pairs(LETTERS) do
         local window = rawget(_G, name)
         if window and skinned[window] and not tried[name] then
@@ -427,6 +523,7 @@ function Skin.Refresh()
     local p = preset()
     for window in pairs(skinned) do applyOne(window, p) end
     paintPane(pane, p)
+    paintGuides(p)
     for _, pn in pairs(sections) do paintPane(pn, p, "section") end
     for _, portrait in pairs(portraits) do
         portrait.frame:SetShown(p ~= nil)
@@ -474,4 +571,4 @@ function Skin.IsValid(name) return name == "stock" or Skin.PRESETS[name] ~= nil 
 
 GM._test = GM._test or {}
 GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end, letters = letters,
-    sections = sections, portraits = portraits, own = own }
+    sections = sections, portraits = portraits, own = own, guides = function() return guides end }

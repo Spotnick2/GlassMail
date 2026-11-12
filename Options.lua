@@ -101,8 +101,11 @@ local function build()
     for _, name in ipairs(GM.Skin.NAMES) do options[#options + 1] = { name, GM.Skin.LABELS[name] } end
     local last, group = radios(panel, look, options, function() return GM.db.skin end, GM.Settings.SetSkin)
     Options._test.skinRadios = group
+    local guides = checkbox(panel, last, "Under glass, show the inbox's empty slots and lines, and \"No mail\"",
+        function() return GM.db.inboxGuides end, GM.Settings.SetInboxGuides)
+    Options._test.guides = guides
     local comforts = label(panel, "At the mailbox", "GameFontNormal")
-    comforts:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -16)
+    comforts:SetPoint("TOPLEFT", guides, "BOTTOMLEFT", 0, -16)
     local trade = checkbox(panel, comforts, "Block trades while the mailbox is open",
         function() return GM.db.tradeBlock end, GM.Settings.SetTradeBlock)
     local alert = checkbox(panel, trade, "Say in chat who sent new mail",
