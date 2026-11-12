@@ -20,7 +20,8 @@ results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed p
 docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
 (#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); v0.2.0 is released (2026-11-12),
 and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as they play. After it:
-the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (Skin.lua).
+the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (#43),
+released as v0.2.1.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
