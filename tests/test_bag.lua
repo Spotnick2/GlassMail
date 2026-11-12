@@ -168,18 +168,27 @@ T.setOffset(0)
 eq(#T.entries(), 200, "200 distinct items")
 eq(#WoW.frames, frames, "  build no new frames")
 eq(#buttons(), Bag.COLS * Bag.ROWS, "  the pool stays its buttons")
+-- Hovered, then scrolled: the tooltip follows the button's new item.
+buttons()[1]:GetScript("OnEnter")(buttons()[1])
+eq(GameTooltip._itemID, 7001, "hovering the first button: its item's tooltip")
+T.setOffset(1)
+eq(buttons()[1].entry.id, 7001 + Bag.COLS, "  scrolled a row: the button holds the next row's item")
+eq(GameTooltip._itemID, 7001 + Bag.COLS, "  and the tooltip shows that item, what a click takes")
+T.setOffset(0)
 T.ui().content:GetScript("OnMouseWheel")(T.ui().content, -1)
 eq(T.offset(), 1, "the wheel scrolls a row")
 T.setOffset(1000)
 local maxRows = math.ceil(200 / Bag.COLS) - Bag.ROWS
 eq(T.offset(), maxRows, "  never past the end")
 -- Entries going: the offset is clamped, and reused buttons keep nothing.
+buttons()[2]:GetScript("OnEnter")(buttons()[2])
 WoW.inbox = { { sender = "S", subject = "one", items = { [1] = { id = ORE, count = 1 } } } }
 WoW.fire("MAIL_INBOX_UPDATE")
 eq(T.offset(), 0, "entries gone: the offset is clamped")
 eq(buttons()[1].entry.id, ORE, "  the first button shows what is left")
 check(not buttons()[2]:IsShown() and buttons()[2].entry == nil, "  a reused button keeps no item")
 check(not buttons()[2].glow:IsShown(), "  nor a glow")
+check(not GameTooltip:IsShown(), "  nor the tooltip it had while hovered")
 
 -- Disabled: combat, a letter, another run, gamepad mode -----------------------------
 local function enabled() return buttons()[1]:IsEnabled() end

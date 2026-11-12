@@ -64,7 +64,19 @@ local function itemName(id)
     return name
 end
 
--- Every pooled button repainted whole: nothing of its last item stays.
+-- The tooltip of a button's item: what a click on it takes.
+local function showTip(b)
+    local e = b.entry
+    if not e then return end
+    GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+    GameTooltip:SetItemByID(e.id)
+    GameTooltip:AddLine("in " .. e.mails .. (e.mails == 1 and " mail" or " mails"), 1, 1, 1)
+    if e.cod > 0 then GameTooltip:AddLine(e.cod .. " COD, left to you", 1, 0.7, 0.3) end
+    GameTooltip:Show()
+end
+
+-- Every pooled button repainted whole: nothing of its last item stays, its
+-- tooltip included (a scroll or an inbox update rebinds a hovered button).
 local function paint()
     local active = Ops.Items()
     local free = idle()
@@ -83,6 +95,9 @@ local function paint()
             b.icon:SetTexture(nil)
             b.count:SetText("")
             b:Hide()
+        end
+        if GameTooltip:IsOwned(b) then
+            if e then showTip(b) else GameTooltip:Hide() end
         end
     end
     if active then
@@ -139,15 +154,7 @@ local function newButton(parent, i)
     b.glow:Hide()
     b:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     b:SetScript("OnClick", click)
-    b:SetScript("OnEnter", function(self)
-        local e = self.entry
-        if not e then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetItemByID(e.id)
-        GameTooltip:AddLine("in " .. e.mails .. (e.mails == 1 and " mail" or " mails"), 1, 1, 1)
-        if e.cod > 0 then GameTooltip:AddLine(e.cod .. " COD, left to you", 1, 0.7, 0.3) end
-        GameTooltip:Show()
-    end)
+    b:SetScript("OnEnter", showTip)
     b:SetScript("OnLeave", function() GameTooltip:Hide() end)
     return b
 end
