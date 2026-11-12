@@ -12,6 +12,8 @@ local say = API.Print
 -- holds the CVar (Comforts.lua).
 local DEFAULTS = {
     skin = "clear",   -- the mail windows' look: "clear" or "smoked" glass, or "stock" (Blizzard's own art)
+    -- Under glass: the inbox's empty slots, row lines and "No mail" (Skin.lua's guides).
+    inboxGuides = true,
     -- Open All (I1): which mail it takes, and the general bag slots it keeps free.
     openAH = true, openSystem = true, openPlayer = true,
     keepFree = 0,     -- one of GM.Loot.KEEP_FREE
@@ -46,6 +48,7 @@ local function ensureDefaults()
     if db.expiryDays ~= nil and not GM.Store.ValidExpiry(db.expiryDays) then db.expiryDays = nil end
     if db.recentMax ~= nil and not GM.Store.ValidRecentMax(db.recentMax) then db.recentMax = nil end
     if db.autofill ~= nil and type(db.autofill) ~= "boolean" then db.autofill = nil end
+    if db.inboxGuides ~= nil and type(db.inboxGuides) ~= "boolean" then db.inboxGuides = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     setmetatable(db, { __index = DEFAULTS })
     if type(GlassMailCharDB) ~= "table" then GlassMailCharDB = {} end
@@ -98,6 +101,12 @@ function Settings.SetExpiryDays(n)
     return true
 end
 
+function Settings.SetInboxGuides(on)
+    GM.db.inboxGuides = on == true
+    GM.Skin.Refresh()
+    return true
+end
+
 function Settings.SetAutofill(on)
     GM.db.autofill = on == true
     return true
@@ -141,6 +150,8 @@ end
 local function helpLines()
     return {
         "/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")",
+        "/gmail guides on/off - the inbox's empty slots, lines and \"No mail\" under glass ("
+            .. (GM.db.inboxGuides and "on" or "off") .. ")",
         "/gmail tradeblock on/off - block trades while the mailbox is open (" .. (GM.db.tradeBlock and "on" or "off") .. ")",
         "/gmail alert on/off - a chat line when new mail comes (" .. (GM.db.newMailAlert and "on" or "off") .. ")",
         "/gmail mail - the Glass Mail window: Sent, Trash and every character's mailbox",
@@ -176,6 +187,10 @@ local function slash(msg)
         setSkin(arg)
     elseif cmd == "glass" then
         if GLASS_ALIAS[arg] then setSkin(GLASS_ALIAS[arg]) else say("/gmail glass on/off") end
+    elseif cmd == "guides" then
+        if ONOFF[arg] == nil then return say("/gmail guides on/off") end
+        Settings.SetInboxGuides(ONOFF[arg])
+        say("inbox guides " .. arg)
     elseif cmd == "tradeblock" then
         if ONOFF[arg] == nil then
             return say("trade block " .. (GM.db.tradeBlock and "on" or "off") .. ": " .. GM.Comforts.TradeStatus()

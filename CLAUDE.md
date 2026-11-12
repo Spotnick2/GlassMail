@@ -20,7 +20,7 @@ results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed p
 docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
 (#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); v0.2.0 is released (2026-11-12),
 and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as they play. After it:
-the To box's completion ("S1: completing a name as you type").
+the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (Skin.lua).
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -78,7 +78,10 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   on each window's content box (its `Inset`, which Blizzard moves per tab) and on the send tab's
   footer; the letter and row panes stack on them, darker. The mail window's portrait becomes the
   Glass Mail envelope (`Media\Envelope.tga`) and an open letter's the glass scroll
-  (`Media\Scroll.tga`), our textures over Blizzard's faded ones.
+  (`Media\Scroll.tga`), our textures over Blizzard's faded ones. The inbox's guides, on the
+  reading pane's frame under the rows: a slot behind each row's item button, a line under every
+  row but the last, and the envelope with "No mail" when nothing is loaded or on the server (an
+  `InboxFrame:Update` post-hook); shown under glass while `inboxGuides` is on.
 - **`Core\Scan.lua`**: the inbox as plain values (`Scan.Inbox()`), never `GetInboxText`. Each mail
   has a type (`ah` by the six `AUCTION_*_MAIL_SUBJECT` templates, `system` when it can't be
   replied to, else `player`) and a fingerprint (length-prefixed sender, subject, money, COD,
