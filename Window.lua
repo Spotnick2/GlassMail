@@ -182,11 +182,12 @@ local function build()
         end
     else
         local snaps = Store.Snapshots()
-        if character and snaps[character] then
-            mailEntries(character, snaps[character], now, ws, out, false)
-        elseif #ws > 0 then
+        if #ws > 0 then
+            -- A search in Inbox is over every character, even from one's mailbox.
             for guid, snap in pairs(snaps) do mailEntries(guid, snap, now, ws, out, true) end
             table.sort(out, function(a, b) return a.rec.expires < b.rec.expires end)
+        elseif character and snaps[character] then
+            mailEntries(character, snaps[character], now, ws, out, false)
         else
             for guid, snap in pairs(snaps) do out[#out + 1] = { kind = "char", guid = guid, rec = snap } end
             table.sort(out, function(a, b)
@@ -259,6 +260,12 @@ local function emptyText()
     if query ~= "" then return "Nothing matches." end
     if folder == "sent" then return "Nothing sent yet." end
     if folder == "trash" then return "Trash is empty." end
+    local snap = character and Store.Snapshots()[character]
+    if snap then
+        -- One character's mailbox with nothing left to list: say what is known of it.
+        local line = Window.CharacterLine(snap, time())
+        return line:sub(1, 1):upper() .. line:sub(2)
+    end
     return "No mailbox seen yet: open one on each character."
 end
 
@@ -282,6 +289,8 @@ end
 
 function Window.Refresh()
     if not ui then return end
+    -- A character whose snapshot went (pruned with its character) is no longer open.
+    if character and Store.Ready() and not Store.Snapshots()[character] then character = nil end
     entries = Store.Ready() and build() or {}
     offset = math.max(0, math.min(offset, #entries - ROWS))
     local sent, trash = Store.Ready() and #Store.Sent() or 0, Store.Ready() and #Store.Trash() or 0
@@ -300,7 +309,7 @@ function Window.Refresh()
         heading = LABELS[folder] .. (query ~= "" and (": " .. #entries .. " found") or "")
     end
     ui.heading:SetText(heading)
-    ui.back:SetShown(folder == "inbox" and character ~= nil)
+    ui.back:SetShown(folder == "inbox" and character ~= nil and query == "")
     paint()
 end
 

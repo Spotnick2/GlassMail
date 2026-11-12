@@ -685,7 +685,9 @@ or money and `expires > now`: their count, their money, the soonest `expires`. n
   unexpired mail recorded" otherwise. "100 of 140 loaded at the last visit" when not `complete`. A click opens that
   character's mails (not expired, soonest expiry first): sender, subject, money, COD, items,
   "expires in N days", "returned" when so; a back button returns to the characters. **A search in
-  Inbox** lists the matching mails of every character, each with its character's name.
+  Inbox** lists the matching mails of every character, each with its character's name, even from
+  one character's mails (clearing it returns there). A character's mails with nothing to list say
+  that character's line ("Empty when last seen", "No unexpired mail recorded").
 - **Empty states:** "Nothing sent yet", "Trash is empty", "No mailbox seen yet: open one on each
   character". When `Store.Ready()` is false: "Glass Mail's memory couldn't load" (and nothing
   else).
