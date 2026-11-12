@@ -372,6 +372,69 @@ function SendMail(to, subject, body)
 end
 function SendMailFrame_EnableSendMailButton() end
 
+-- The To box (MailFrame.xml:593) and what Blizzard does with it: the tabs
+-- (MailFrameTab_OnClick, MailFrame.lua:189: tab 2 shows the send tab and sets
+-- sendMode "send"), Reply (1091-1093: tab 2, then the sender), the reset
+-- after a send (1422-1424) and the MAIL_SEND_SUCCESS handler (144-150: reset,
+-- then back to the inbox after a reply). WoW.blizzardSendLate: the handler
+-- runs from a frame the test makes after the addon loads (its handlers first).
+local nameBox = CreateFrame("EditBox", "SendMailNameEditBox", SendMailFrame)
+nameBox._text = ""
+function Methods.HighlightText(e) e._highlighted = e._text end
+function Methods.SetFocus(e) WoW.focus = e end
+function Methods.HasFocus(e) return WoW.focus == e end
+-- WowTestKit #58: SetID keeps the ID and GetID returns it (0 until set), in the
+-- kit since c99451a; this pin predates it.
+if not rawget(Methods, "GetID") then
+    function Methods.SetID(w, id) w._id = id end
+    function Methods.GetID(w) return w._id or 0 end
+end
+CreateFrame("Button", "MailFrameTab1", mail):SetID(1)
+CreateFrame("Button", "MailFrameTab2", mail):SetID(2)
+function MailFrameTab_OnClick(self, tabID)
+    if not tabID then tabID = self:GetID() end
+    if tabID == 1 then SendMailFrame:Hide() else
+        SendMailFrame:Show()
+        SendMailFrame.sendMode = "send"
+    end
+end
+SendMailFrame:Hide()
+function SendMailFrame_Reset()
+    SendMailNameEditBox:SetText("")
+    SendMailNameEditBox:SetFocus()
+end
+function WoW.reply(sender)
+    MailFrameTab_OnClick(nil, 2)
+    SendMailNameEditBox:SetText(sender)
+    SendMailFrame.sendMode = "reply"
+end
+function WoW.blizzardSendSuccess()
+    SendMailFrame_Reset()
+    if SendMailFrame.sendMode == "reply" then MailFrameTab_OnClick(nil, 1) end
+end
+local blizzardSend = CreateFrame("Frame")
+blizzardSend:SetScript("OnEvent", function() if not WoW.blizzardSendLate then WoW.blizzardSendSuccess() end end)
+blizzardSend:RegisterEvent("MAIL_SEND_SUCCESS")
+
+-- Friends and the guild (S1's picker). WoW.friends = { { name = ... } };
+-- WoW.guild = { names } (nil: not in a guild); WoW.rosterRequests counts
+-- C_GuildInfo.GuildRoster().
+WoW.friends, WoW.rosterRequests = {}, 0
+C_FriendList = {
+    GetNumFriends = function() return WoW.friendCount or #WoW.friends end,
+    GetFriendInfoByIndex = function(i) return WoW.friends[i] end,
+}
+function IsInGuild() return WoW.guild ~= nil end
+function GetNumGuildMembers() return WoW.guild and #WoW.guild or 0 end
+function GetGuildRosterInfo(i) return WoW.guild and WoW.guild[i] end
+C_GuildInfo = { GuildRoster = function() WoW.rosterRequests = WoW.rosterRequests + 1 end }
+-- "Name-Realm" to "Name" on the player's own realm (normalized: no spaces).
+function Ambiguate(name, context)
+    local base, realm = name:match("^(.-)%-(.+)$")
+    if base and realm == (WoW.realm or ""):gsub("%s", "") then return base end
+    return name
+end
+
 -- Bags 0-4: WoW.bags[b] = { size, family, items = { [slot] = { id, count, locked } } }.
 -- Item facts: WoW.itemInfo[id] = { maxStack, family } (nil = not cached).
 WoW.bags, WoW.itemInfo = {}, {}
@@ -417,12 +480,25 @@ end }
 -- MenuUtil.CreateContextMenu (Blizzard_Menu): the generator fills a root
 -- description; WoW.menu holds its elements ({ kind, text, isSelected,
 -- setSelected, data }) so a test can read and click them.
-MenuUtil = { CreateContextMenu = function(owner, gen)
-    local root = { items = {} }
+-- CreateButton(text, callback) returns its own description (a submenu when
+-- given items: { kind = "button", text, callback, items, scroll }).
+local function description()
+    local d = { items = {} }
     local function add(kind) return function(self, text, isSel, setSel, data)
         table.insert(self.items, { kind = kind, text = text, isSelected = isSel, setSelected = setSel, data = data })
     end end
-    root.CreateTitle, root.CreateCheckbox, root.CreateRadio = add("title"), add("checkbox"), add("radio")
+    d.CreateTitle, d.CreateCheckbox, d.CreateRadio = add("title"), add("checkbox"), add("radio")
+    function d.CreateButton(self, text, callback)
+        local b = description()
+        b.kind, b.text, b.callback = "button", text, callback
+        table.insert(self.items, b)
+        return b
+    end
+    function d.SetScrollMode(self, extent) self.scroll = extent end
+    return d
+end
+MenuUtil = { CreateContextMenu = function(owner, gen)
+    local root = description()
     gen(owner, root)
     WoW.menu = root
 end }

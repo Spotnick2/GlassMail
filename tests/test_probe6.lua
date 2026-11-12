@@ -13,6 +13,7 @@ local draft = { money = 0, cod = 0, items = {} }
 local failInside = false   -- SendMail fires MAIL_FAILED before it returns
 CreateFrame("Button", "SendMailMailButton", SendMailFrame)
 CreateFrame("EditBox", "SendMailNameEditBox", SendMailFrame)
+WoW.blizzardSendLate = true   -- the stubs' Blizzard reset of the To box stays out of the draft lines
 rawset(_G, "SetSendMailCOD", function(c) draft.cod = c; WoW.fire("SEND_MAIL_COD_CHANGED") end)
 rawset(_G, "SetSendMailMoney", function(c) draft.money = c; WoW.fire("SEND_MAIL_MONEY_CHANGED") end)
 rawset(_G, "GetSendMailMoney", function() return draft.money end)

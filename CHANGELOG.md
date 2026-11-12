@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- An address book on the send tab: the button right of the To box lists your own characters
+  that can receive mail from this one, the names you mailed recently, your friends and your
+  guild. Pick one and it goes in the To box; you still click Send.
+- The To box starts with the last name this character mailed, highlighted, so two sends in a
+  row to the same alt need no typing. Reply still puts the sender in. Off on the options page
+  ("Fill in the last name this character mailed") or with `/gmail autofill off`.
 - The Glass Mail window (`/gmail mail`, or the new button on the mailbox's title bar), organised
   like Gmail: **Sent** (every send and return, newest first, with what it carried and whether the
   game confirmed it), **Inbox** (each character's mailbox as you last saw it: what is worth

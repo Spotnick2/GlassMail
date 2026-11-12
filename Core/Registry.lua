@@ -43,7 +43,8 @@ function Registry.Touch()
     local name = me.name or (old and old.name)
     if not name then return end
     Store.SetChar(me.guid, { name = name, realm = me.realm or (old and old.realm),
-        faction = me.faction or (old and old.faction), lastPlayDay = Store.PlayDay() })
+        faction = me.faction or (old and old.faction), lastPlayDay = Store.PlayDay(),
+        lastTo = old and old.lastTo })
 end
 
 -- AltStable's public API, when it is the version we know and says whose each

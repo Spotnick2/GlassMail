@@ -36,7 +36,8 @@ local PLAY_DAY_SUBTREES = { "chars", "recents", "sent", "snapshots" }
 local SPECS = {
     chars = {
         required = { name = "string", lastPlayDay = "number" },
-        optional = { realm = "string", faction = "string" },
+        -- lastTo: the Names.Key of this character's last attributed send (S1's fill).
+        optional = { realm = "string", faction = "string", lastTo = "string" },
     },
     recents = {
         required = { name = "string", day = "number" },
@@ -352,6 +353,17 @@ function Store.SetChar(guid, rec)
     local c = Store.Ready() and not API.IsSecret(guid) and type(guid) == "string" and clean("chars", rec)
     if not c then return false end
     Store.Chars()[guid] = c
+    return true
+end
+
+-- A character's last recipient (Core/Sent.lua), or nil to clear it. False when
+-- the Store isn't ready, the GUID has no record, or a value is secret.
+function Store.SetLastTo(guid, key)
+    if not Store.Ready() or API.IsSecret(guid) or API.IsSecret(key) then return false end
+    if key ~= nil and type(key) ~= "string" then return false end
+    local c = type(guid) == "string" and Store.Chars()[guid]
+    if not c then return false end
+    c.lastTo = key
     return true
 end
 

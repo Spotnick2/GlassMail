@@ -30,6 +30,9 @@ local Sent = {}
 GM.Sent = Sent
 
 Sent.WINDOW = 120
+-- Address.lua's fill: called with the recipient's key once an attributed send
+-- has set lastTo (Sent.onConfirmed = fn).
+Sent.onConfirmed = nil
 local REFUSED = 457          -- "Please enter a full character name." (session 6)
 
 local open = {}              -- the candidates, oldest first
@@ -63,7 +66,14 @@ local function save(rec, state)
     remove(rec)
     rec.state = state
     Store.AddSent(rec)
-    if state == "sent" then Store.AddRecent(rec.to) end
+    if state == "sent" then
+        Store.AddRecent(rec.to)
+        -- S1's fill: this character's last recipient (a return never comes here).
+        local key = Names.Key(rec.to)
+        if rec.from and key and Store.SetLastTo(rec.from, key) and Sent.onConfirmed then
+            Sent.onConfirmed(key)
+        end
+    end
 end
 
 -- The record's window opens now (once: at SendMail, or at the stranger
@@ -95,6 +105,11 @@ hooksecurefunc("SendMail", function(to, subject)
 end)
 
 local function onSuccess()
+    -- A send succeeded: whatever lastTo held is no longer the last one, before
+    -- anything below can fail (PLAN.md, "S1: the last recipient"). Only an
+    -- attributed send sets it again.
+    local me = Registry.CurrentGUID()
+    if me then Store.SetLastTo(me, nil) end
     local t, candidates = GetTime(), {}
     for _, r in ipairs(open) do
         if r.awaiting or t - r.opened <= Sent.WINDOW then candidates[#candidates + 1] = r end
