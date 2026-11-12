@@ -267,7 +267,16 @@ for guid in pairs(db.chars) do if guid ~= ME then db.chars[guid] = nil end end
 local ownBefore = #GM._test.skin.own
 press()
 check(shown(), "the button opens the picker")
-eq(#GM._test.skin.own, ownBefore + 2, "  glass and its search pane, in the skin's repaint list")
+eq(#GM._test.skin.own, ownBefore + 3, "  glass, its backing and its search pane, in the skin's repaint list")
+local backing = GM._test.skin.own[ownBefore + 2]
+eq(backing.key, "backing", "  a backing under the glass (Glass UI's tracker body)")
+eq(backing.tex._color[4], 0.35, "  at clear's opacity (Glass UI's clear body)")
+check(backing.tex._masks and backing.tex._masks[1] == GM._test.skin.own[ownBefore + 1].g.mask, "  clipped by the glass's mask")
+GM.Settings.SetSkin("smoked")
+eq(backing.tex._color[4], 0.92, "  smoked's after the setting changes")
+GM.Settings.SetSkin("stock")
+eq(backing.tex._color[4], 0.92, "  and smoked's under the stock look")
+GM.Settings.SetSkin("clear")
 eq(panel():GetParent(), SendMailFrame, "  on the send tab")
 eq(texts(), "", "nothing known: no rows")
 eq(T.ui().empty:GetText(), "No names yet", "  and a line says so")

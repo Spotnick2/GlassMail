@@ -167,7 +167,7 @@ local function build()
     panel:SetPoint("BOTTOMLEFT", mail, "BOTTOMRIGHT", 2, 0)
     panel:EnableMouse(true)
     panel:Hide()
-    Skin.AddWindow(panel)
+    Skin.AddWindow(panel, true)
     ui = { buttons = {} }
     local content = CreateFrame("Frame", nil, panel)
     content:SetAllPoints(panel)

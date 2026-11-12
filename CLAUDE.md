@@ -65,7 +65,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   the material. Material changes are LibGlass PRs.
 - **`Skin.lua`**: the look, `GM.db.skin` = `clear` / `smoked` (glass presets, AltStable's
   numbers) or `stock`. A glass panel under each mail window and a reading pane under the inbox
-  rows, repainted live by `Skin.Refresh()`. The stock art (template parentKeys, the inset,
+  rows, repainted live by `Skin.Refresh()`. Our floating panels (the picker, the item grid) have
+  an opaque backing under their glass, Glass UI's tracker body (`Skin.AddWindow(frame, true)`:
+  0.35 in clear, 0.92 in smoked). The stock art (template parentKeys, the inset,
   `InboxFrameBg`, the row borders, the horizontal bars and their unnamed ends) is faded with
   `SetAlpha`, never hidden, and found by structure, never by texture path (`GetTexture` returns
   file IDs). Under glass the letters go dark (`docs/mockups/inbox-and-send.png`): the stationery is

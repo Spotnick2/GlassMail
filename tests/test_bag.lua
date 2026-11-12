@@ -53,7 +53,8 @@ check(Bag.toggle and Bag.toggle:GetParent() == InboxFrame, "the Items button is 
 eq(T.panel(), nil, "the panel is built on first use")
 local ownBefore = #GM._test.skin.own
 click(Bag.toggle)
-eq(#GM._test.skin.own, ownBefore + 1, "  its glass joins the skin's repaint list (Skin.AddWindow)")
+eq(#GM._test.skin.own, ownBefore + 2, "  its glass and backing join the skin's repaint list (Skin.AddWindow)")
+eq(GM._test.skin.own[ownBefore + 2].key, "backing", "  a backing under the glass, as the picker's")
 local panel = T.panel()
 check(panel and panel:IsShown(), "the button shows the panel")
 eq(panel:GetParent(), InboxFrame, "  a child of the inbox")

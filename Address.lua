@@ -263,7 +263,7 @@ local function build(button)
     panel:SetClampedToScreen(true)
     panel:EnableMouse(true)
     panel:Hide()
-    Skin.AddWindow(panel)
+    Skin.AddWindow(panel, true)
     ui = { rows = {} }
     local content = CreateFrame("Frame", nil, panel)
     content:SetAllPoints(panel)
