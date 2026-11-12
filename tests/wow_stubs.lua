@@ -383,6 +383,9 @@ nameBox._text = ""
 function Methods.HighlightText(e) e._highlighted = e._text end
 function Methods.SetFocus(e) WoW.focus = e end
 function Methods.HasFocus(e) return WoW.focus == e end
+function Methods.ClearFocus(e) if WoW.focus == e then WoW.focus = nil end end
+-- The frame under the mouse (a test sets WoW.mouseOver).
+function Methods.IsMouseOver(w) return WoW.mouseOver == w end
 -- WowTestKit #58: SetID keeps the ID and GetID returns it (0 until set), in the
 -- kit since c99451a; this pin predates it.
 if not rawget(Methods, "GetID") then

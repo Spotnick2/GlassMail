@@ -240,23 +240,39 @@ check(not Store.SetLastTo(ME, "x"), "  a Store not ready")
 Store.loaded = true
 eq(lastTo(), "kaleid sumner", "  none changed it")
 
--- The picker ------------------------------------------------------------------------
+-- The picker: our panel, a search over the sections --------------------------------
 local T = GM._test.address
-local function menu()
-    T.menu(Address.button)
-    return WoW.menu
+local function panel() return T.panel() end
+local function shown() return panel() ~= nil and panel():IsShown() end
+-- The button as the mouse uses it: its mouse down (excluded from the outside
+-- close), then its click.
+local function press()
+    WoW.mouseOver = Address.button
+    WoW.fire("GLOBAL_MOUSE_DOWN", "LeftButton")
+    Address.button:GetScript("OnClick")(Address.button, "LeftButton")
+    WoW.mouseOver = nil
 end
-local function texts(d)
+local function search(text) T.ui().search:SetText(text) end
+local function texts()
     local out = {}
-    for _, it in ipairs(d.items) do out[#out + 1] = (it.kind == "title" and "# " or "") .. it.text end
+    for _, r in ipairs(T.rows()) do out[#out + 1] = r.title and ("# " .. r.title) or r.name end
     return table.concat(out, " | ")
 end
+local function listening(event) return panel()._events[event] == true end
 
 check(Address.button and Address.button:GetParent() == SendMailFrame, "the picker's button is on the send tab")
 db.recents = {}
 WoW.friends, WoW.guild = {}, nil
 for guid in pairs(db.chars) do if guid ~= ME then db.chars[guid] = nil end end
-eq(texts(menu()), "# No names yet", "nothing known: one line says so")
+local ownBefore = #GM._test.skin.own
+press()
+check(shown(), "the button opens the picker")
+eq(#GM._test.skin.own, ownBefore + 2, "  glass and its search pane, in the skin's repaint list")
+eq(panel():GetParent(), SendMailFrame, "  on the send tab")
+eq(texts(), "", "nothing known: no rows")
+eq(T.ui().empty:GetText(), "No names yet", "  and a line says so")
+press()
+check(not shown(), "the button again closes it")
 
 -- My characters: reachable, not hidden, not this one; recents; friends; guild.
 Store.SetChar("Player-1-ZZZ", { name = "Zed Alt", realm = "Doomhowl", faction = "Horde", lastPlayDay = db.playDay })
@@ -272,33 +288,160 @@ WoW.friends = { { name = "Pal Two" }, { name = "pal one" }, { name = "New Friend
 WoW.friendCount = #WoW.friends + 1   -- one index that returns nothing (MayReturnNothing)
 WoW.guild = { "Guildie Bee", "Karuzo Morphisto", "Guildie Ace-Doomhowl", "", "Old Friend" }
 local requests = WoW.rosterRequests
-local m = menu()
+WoW.focus = box
+press()
 eq(WoW.rosterRequests, requests + 1, "opening the picker asks for the guild roster")
-eq(m.scroll, 400, "the menu scrolls past 400 px")
-eq(texts(m), "# My characters | Bank Alt | Other Realm | Zed Alt | # Recent | New Friend | Old Friend | # Friends | pal one | Pal Two | Guild",
-    "sections in order, each sorted; own characters of this ruleset and faction (any realm); one name once (first wins)")
-local g = m.items[#m.items]
-eq(g.scroll, 400, "  the guild is a scrolling submenu")
-eq(texts(g), "Guildie Ace | Guildie Bee", "  this realm's suffix dropped; this character, blanks and repeats left out")
+eq(WoW.focus, T.ui().search, "  its search box has the focus")
+check(listening("GLOBAL_MOUSE_DOWN") and listening("GUILD_ROSTER_UPDATE"), "  it listens for outside clicks and the roster")
+eq(texts(), "# My characters | Bank Alt | Other Realm | Zed Alt | # Recent | New Friend | Old Friend"
+    .. " | # Friends | pal one | Pal Two | # Guild | Guildie Ace | Guildie Bee",
+    "sections in order, each sorted; own characters of this ruleset and faction (any realm); one name once"
+    .. " (first wins); the guild a section like the others")
+eq(T.ui().rows[1].label:GetText(), "My characters", "  a title row shows its section")
+check(not T.ui().rows[1]:IsEnabled(), "  and isn't clickable")
 
--- A pick fills the box, nothing else.
+-- Filtering.
+search("pal")
+eq(texts(), "# Friends | pal one | Pal Two", "a search filters every section; one with no match hides, title too")
+search("PAL TWO")
+eq(texts(), "# Friends | Pal Two", "  case ignored; every word must match")
+search("guildie a")
+eq(texts(), "# Guild | Guildie Ace", "  two words")
+search("a.t")
+eq(texts(), "", "  a '.' is taken literally")
+eq(T.ui().empty:GetText(), "No match", "  and nothing left says so")
+T.ui().search:GetScript("OnEnterPressed")(T.ui().search)
+check(shown(), "Enter with nothing listed does nothing")
+search("")
+eq(T.ui().empty:GetText(), "", "an empty search lists everything again")
+
+-- Pooled rows: name -> title -> unused -> name, nothing kept.
+search("bank")
+eq(T.ui().rows[2].name, "Bank Alt", "row 2: a name")
+search("pal")
+eq(T.ui().rows[1].name, nil, "row 1 now a title: no name to pick")
+T.ui().rows[1]:GetScript("OnClick")(T.ui().rows[1])
+check(shown(), "  a click on a title does nothing")
+search("zzz")
+check(not T.ui().rows[2]:IsShown() and T.ui().rows[2].name == nil, "  unused: hidden, no name")
+search("zed")
+eq(T.ui().rows[2].name, "Zed Alt", "  a name again: the new one")
+check(T.ui().rows[2]:IsEnabled(), "  enabled")
+
+-- Enter picks the first name; a pick fills the To box, closes, sends nothing.
 box:SetText("")
-WoW.focus = nil
+search("guildie")
 local sends = #WoW.sends
-m.items[2].callback()
-eq(box:GetText(), "Bank Alt", "a pick fills the To box")
-eq(WoW.focus, nil, "  and moves no focus")
-eq(#WoW.sends, sends, "  and sends nothing")
+T.ui().search:GetScript("OnEnterPressed")(T.ui().search)
+eq(box:GetText(), "Guildie Ace", "Enter picks the first name listed (titles skipped)")
+check(not shown(), "  and closes the picker")
+eq(#WoW.sends, sends, "  nothing is sent")
+check(WoW.focus ~= T.ui().search, "  the search's focus is cleared")
+check(not listening("GLOBAL_MOUSE_DOWN") and not listening("GUILD_ROSTER_UPDATE"), "  both events unregistered")
+press()
+eq(T.ui().search:GetText(), "", "reopened: the search box is empty again")
+eq(texts():sub(1, 15), "# My characters", "  and lists everything")
+T.ui().rows[2]:GetScript("OnClick")(T.ui().rows[2])
+eq(box:GetText(), "Bank Alt", "a click on a name picks it")
+check(not shown(), "  and closes")
+
+-- Escape, the x, an outside mouse down; the panel and the button don't close it.
+press()
+T.ui().search:GetScript("OnEscapePressed")(T.ui().search)
+check(not shown(), "Escape in the search closes it")
+press()
+T.ui().close:GetScript("OnClick")(T.ui().close)
+check(not shown(), "the x closes it")
+press()
+WoW.mouseOver = panel()
+WoW.fire("GLOBAL_MOUSE_DOWN", "LeftButton")
+check(shown(), "a mouse down on the panel leaves it open")
+WoW.mouseOver = nil
+WoW.fire("GLOBAL_MOUSE_DOWN", "MiddleButton")
+check(shown(), "  a middle button outside too")
+WoW.fire("GLOBAL_MOUSE_DOWN", "RightButton")
+check(not shown(), "a right or left mouse down outside closes it")
+check(WoW.focus ~= T.ui().search and not listening("GLOBAL_MOUSE_DOWN"), "  with the same cleanup")
+
+-- A send's success closes it: Blizzard's reset focuses the To box, ours doesn't take it back.
+press()
+WoW.fire("MAIL_SEND_SUCCESS")
+check(not shown(), "MAIL_SEND_SUCCESS closes the picker")
+eq(WoW.focus, box, "  the To box keeps the focus Blizzard's reset gave it")
+press()
+WoW.blizzardSendLate = true
+local lateReset = CreateFrame("Frame")
+lateReset:SetScript("OnEvent", function() WoW.blizzardSendSuccess() end)
+lateReset:RegisterEvent("MAIL_SEND_SUCCESS")
+WoW.fire("MAIL_SEND_SUCCESS")
+check(not shown(), "  with Blizzard's handler after ours too")
+eq(WoW.focus, box, "  the focus still the To box's")
+lateReset:UnregisterEvent("MAIL_SEND_SUCCESS")
+WoW.blizzardSendLate = nil
+frame()
+
+-- The send tab hidden, or the mailbox closed: closed for good.
+press()
+tab(1)
+check(not shown(), "the inbox tab closes it")
+tab(2)
+check(not shown(), "  back on the send tab it stays closed")
+press()
+MailFrame:Hide()
+-- The client fires a shown child's OnHide when its parent hides; the pinned kit doesn't.
+SendMailFrame:GetScript("OnHide")(SendMailFrame)
+check(not shown() and not listening("GLOBAL_MOUSE_DOWN"), "the mailbox's close closes it, cleaned up")
+openMailbox()
+tab(2)
+check(not shown(), "  and it stays closed at the next visit")
+
+-- A big guild: the pool, the scroll, a roster update while open.
+local guild = {}
+for i = 1, 500 do guild[i] = string.format("Member %03d", i) end
+WoW.guild = guild
+local frames = #WoW.frames
+press()
+eq(#WoW.frames, frames, "500 guild members build no frame")
+eq(#T.ui().rows, Address.ROWS, "  the pool stays its rows")
+T.ui().list:GetScript("OnMouseWheel")(T.ui().list, -1)
+eq(T.offset(), 3, "the wheel scrolls 3 rows")
+T.ui().scroll:SetValue(100)
+eq(T.offset(), 100, "the slider scrolls")
+T.setOffset(5000)
+eq(T.offset(), #T.rows() - Address.ROWS, "  never past the end")
+search("member 1")
+eq(T.offset(), 0, "a new query starts at the top")
+check(T.ui().rows[2].name == "Member 001", "  with the first match")
+T.setOffset(50)
+search("member")
+T.setOffset(200)
+-- The roster changes while open and scrolled: fewer, reordered; query, offset (clamped) and focus kept.
+local fewer = {}
+for i = 120, 1, -1 do fewer[#fewer + 1] = string.format("Member %03d", i) end
+WoW.guild = fewer
+WoW.focus = nil
+WoW.fire("GUILD_ROSTER_UPDATE")
+eq(T.ui().search:GetText(), "member", "a roster update keeps the query")
+eq(#T.rows(), 121, "  re-reads the guild (a title and 120 names)")
+eq(T.rows()[2].name, "Member 001", "  sorted again")
+eq(T.offset(), 121 - Address.ROWS, "  the offset clamped to the shorter list")
+eq(WoW.focus, nil, "  and takes no focus")
+press()
+press()
+eq(T.offset(), 0, "reopened: at the top")
+Address.Close()
 
 -- Hidden characters (AltStable) are left out.
+WoW.guild = nil
 rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
     GetCharacters = function()
         return { { guid = "Player-1-ZZZ", name = "Zed Alt", realm = "Doomhowl", faction = "Horde", hidden = true,
             provenance = "self" },
             { guid = "Player-1-FFF", name = "Shown Alt", realm = "Doomhowl", faction = "Horde", provenance = "own-account" } }
     end })
-check(texts(menu()):find("# My characters | Shown Alt | # Recent", 1, true) ~= nil,
-    "AltStable's list: hidden characters left out")
+press()
+check(texts():find("# My characters | Shown Alt | # Recent", 1, true) ~= nil, "AltStable's list: hidden characters left out")
+Address.Close()
 rawset(_G, "AltStable", nil)
 
 -- The setting -----------------------------------------------------------------------

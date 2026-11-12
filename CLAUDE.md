@@ -145,9 +145,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   (names, subjects, item names loaded on demand once per session), a forget × on every row. A pool
   of rows and an offset; glass in the current preset (`stock` shows it smoked, `Skin.AddWindow` /
   `AddPane`). Escape closes it out of combat only (its `UISpecialFrames` entry leaves in combat).
-- **`Address.lua`**: S1. Our button right of `SendMailNameEditBox` opens a `MenuUtil` menu: my
-  characters (reachable, not hidden), recents, friends, the guild (a scrolling submenu); each name
-  once, no other realm's, never the current character. A pick is `SetText` and nothing else. The
+- **`Address.lua`**: S1. Our button right of `SendMailNameEditBox` opens our glass panel (a child
+  of `SendMailFrame`): a search box, focused, over my characters (reachable, not hidden), recents,
+  friends and the guild, filtered as you type (every word, plain find), a fixed pool of rows; each
+  name once, no other realm's, never the current character. A pick (a click, or Enter for the
+  first) is `SetText`, then the panel closes; so do Escape, an outside click, a send's success and
+  the send tab going, all through one cleanup. The
   fill: an empty To box gets `recents[chars[guid].lastTo].name`, highlighted, from a
   `MailFrameTab_OnClick` post-hook and a frame after an attributed send (`Sent.onConfirmed`);
   setting `autofill`. No focus hooks on Blizzard's box.

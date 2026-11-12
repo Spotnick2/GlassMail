@@ -959,6 +959,68 @@ list ("The address PR in detail", In game); and the grid's:
   `OnChange`), an untouched selected mail stays.
 - `test_methods` exercises the panel.
 
+### The searchable picker (S1, in PR 5; owner, 2026-11-12; Codex gpt-6-astra, high, 2 rounds, consensus)
+
+**Why:** in game, a guild of several hundred made the `MenuUtil` guild submenu unusable (owner's
+screenshot: a scroll through every name). A search box can't live in Blizzard's menu without
+rebuilding the menu on each keystroke, so the address-book button opens **our own panel**
+instead. (Blizzard's own To-box autocomplete already searches the guild as you type,
+`AutoComplete.lua:19-22, 106`; the picker is for browsing your names and finding one by part of it.)
+
+**The panel** (`Address.lua`, replacing the menu; `Address.Sections()` unchanged):
+- Ours, a child of `SendMailFrame` (it goes with the send tab and the mailbox), anchored under
+  the button (`TOPLEFT` to its `BOTTOMLEFT`, 0, -2), about 240 x 330, `DIALOG` strata, toplevel,
+  glass (`Skin.AddWindow`, joins the repaint), a title ("Pick a recipient") and a close ×.
+- **A search box** (our `EditBox`, `SetAutoFocus(false)`) at the top, **focused when the panel
+  opens**. As you type, the list filters: lower-cased, plain `find`, every space-separated word
+  must be in the name; **each change of the query puts the list back at the top**. Enter picks the
+  first name of the filtered list (titles skipped; nothing when none). **While the search has
+  focus, Escape closes only the picker**; without focus, Blizzard's own keyboard handling applies
+  (the mailbox's Escape closes it, and the picker with it). No `UISpecialFrames` entry, no global
+  key handler.
+- **The list:** a fixed pool of rows (about 15 x 18 px), a row offset, the mouse wheel (3 rows a
+  notch) and a thin `Slider` (as the window's). Rows are section titles (gold, not clickable) and
+  names; a section with no name left after the filter isn't shown. Nothing at all: "No names yet"
+  (empty query) or "No match".
+- The guild is a section like the others (no submenu), all its members, filtered like the rest.
+- **A pick:** a name row's click is `SendMailNameEditBox:SetText(name)`, then the panel closes.
+  Nothing else (no focus given to the To box, no send).
+- **Built once** (frame, pool, skin), **its data read when it opens:** `Address.Sections()`, the
+  roster requested (`C_GuildInfo.GuildRoster()`), the query emptied, the offset 0. While it is
+  open, `GUILD_ROSTER_UPDATE` re-reads the sections (a big roster may arrive after the request),
+  keeping the query and the offset (clamped), and never taking focus.
+- **Closes on:** the ×, Escape in the search box, the button again, a pick, a left or right mouse
+  down outside the panel and the button (`GLOBAL_MOUSE_DOWN`, registered only while it is shown,
+  as Blizzard's menus do, Menu.lua:54; the button's own mouse down is excluded, so its click
+  toggles cleanly), **`MAIL_SEND_SUCCESS`** (attributed or not: Blizzard's reset focuses the To
+  box, MailFrame.lua:1422-1424, and the deferred fill may fill it; the picker steps aside and
+  doesn't take focus back), and its parent hiding (the inbox tab, the mailbox's close: the
+  parent's `OnHide` closes it for real, so coming back to the send tab doesn't reopen it). **Every
+  close is one cleanup:** hidden, the search's focus cleared, `GLOBAL_MOUSE_DOWN` and
+  `GUILD_ROSTER_UPDATE` unregistered.
+
+**Tests** (each mutation-tested; the `Address.Sections()` tests stay): the button opens and
+closes it, through its mouse down then its click, both ways; the search box has focus on open;
+filtering by one and two words, case, a `.` taken literally; a section with no match hidden, its
+title too; "No names yet" and "No match"; scrolled down, a new query starts at the top, and so
+does a reopen; Enter picks the first name (none: nothing); a click on a title does nothing; a pick
+fills the To box, closes, and sends nothing; Escape, the ×, an outside mouse down closing it (one
+on the panel or the button not); `MAIL_SEND_SUCCESS` closing it, with Sent's handler before and
+after Blizzard's, the fill then landing in the To box; the send tab hidden or the mailbox closed
+closing it for good (back on the send tab it stays closed); after every close the focus is
+cleared and both events unregistered; a roster update while open and scrolled re-reads it (names
+gone and reordered), the query and the focus as they were; a pooled row going name → title →
+unused → name keeps nothing of before (its name, its click, its enabled state); the pool never
+grows (500 guild members); the wheel and the slider scroll and clamp; the skin repaint.
+`test_methods` exercises it.
+
+**In game** (added to the gate): the panel under the button, nothing cut off by the screen's
+edge at the default scale; typing filters a big guild and stays responsive, and a late roster
+fills it in; movement keys type into the search while it has focus; Enter, Escape (with and
+without the search's focus) and a click outside; typing and chat work after it closes; the To
+box's own autocomplete still works after a pick; a stranger's send after a mouse pick and after an
+Enter pick goes through the confirmation with nothing blocked.
+
 ### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
 
 - **Sent:** a pending send survives a mailbox close (a success came 99 s late); no inferred

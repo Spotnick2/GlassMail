@@ -52,7 +52,8 @@ organised like Gmail:
 
 **An address book.** The button right of the To box lists your own characters that can receive
 mail from this one (same faction and ruleset, whichever realm), the names you mailed recently,
-your friends and your guild. Pick one and it goes in the To box; you still click Send. The To box
+your friends and your guild, with a search box to find one by part of its name. Pick one and it
+goes in the To box; you still click Send. The To box
 also starts with the last name this character mailed, so two sends in a row to the same alt need
 no typing (off on the options page or with `/gmail autofill off`). With AltStable loaded, your
 characters on your other accounts are listed too.
