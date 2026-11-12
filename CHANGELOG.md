@@ -1,10 +1,15 @@
 # Changelog
 
-## Unreleased
+## v0.2.0
 
+- Every item in the mailbox in one grid: the bag button on the inbox's title bar opens a panel
+  beside it, each item merged across mails with its total count; hover for how many mails hold
+  it, click to take every copy (money, other items and COD mail stay), Stop to end it.
 - An address book on the send tab: the button right of the To box lists your own characters
-  that can receive mail from this one, the names you mailed recently, your friends and your
-  guild. Pick one and it goes in the To box; you still click Send.
+  that can receive mail from this one (same faction and ruleset, whichever realm), the names you
+  mailed recently, your friends and your guild, with a search box: type part of a name, even in a
+  guild of hundreds, each name in its class colour. Click one, or press Enter for the first, and it
+  goes in the To box; you still click Send.
 - The To box starts with the last name this character mailed, highlighted, so two sends in a
   row to the same alt need no typing. Reply still puts the sender in. Off on the options page
   ("Fill in the last name this character mailed") or with `/gmail autofill off`.

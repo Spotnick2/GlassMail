@@ -28,6 +28,7 @@ ignore:
   - Tools
   - CLAUDE.md
   - README.md
+  - README.curseforge.md
   - CHANGELOG.md
   # The library's own .pkgmeta ignores these, but CurseForge's packager does
   # NOT honour an external's ignore list (Priestly #53), so they are named here.

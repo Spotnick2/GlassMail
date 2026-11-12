@@ -37,7 +37,8 @@ local SPECS = {
     chars = {
         required = { name = "string", lastPlayDay = "number" },
         -- lastTo: the Names.Key of this character's last attributed send (S1's fill).
-        optional = { realm = "string", faction = "string", lastTo = "string" },
+        -- class: the class file token ("PRIEST"), for the picker's colours.
+        optional = { realm = "string", faction = "string", lastTo = "string", class = "string" },
     },
     recents = {
         required = { name = "string", day = "number" },

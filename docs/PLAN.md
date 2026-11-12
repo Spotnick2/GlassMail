@@ -17,7 +17,7 @@ review's main corrections are listed at the end.
   `Core/Loot.lua`), the skin finished in clear and smoked glass, I1, I2, I3, X3, with the operation
   records that confirm each action succeeded. Five PRs: look → probe session 5 → core + I1 →
   I2 + I3 → X3 + v0.1.0. See "M1" below.
-- **M2** *(planned, #17; reviewed, see "M2" below)*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
+- **M2** *(done, #17; v0.2.0 once its in-game gate passes, "The grid PR in detail")*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
   and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here.
 - **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
@@ -190,10 +190,14 @@ needs no cleanup pass:
   is shown. Its sheet holds other players' characters too: only `provenance` `self` and
   `own-account` are taken. An AltStable without the provenance feature can't say whose a
   character is, so it isn't used (our own record is). Nothing from it is saved.
-- **Reachability:** an own character is offered as a recipient when its faction tag and realm name
-  match the current character's. Session 6: the other faction fails ("Target is unfriendly");
-  the other account's character on the same realm takes mail like an alt; other realms and
-  rulesets are unmeasured, so they stay out.
+- **Reachability:** an own character is offered as a recipient when its faction tag and
+  **ruleset** match the current character's (`Registry.RulesetOf`, from the realm's name,
+  AltStable's rule; "Unknown" matches nothing). Session 6: the other faction fails ("Target is
+  unfriendly"); the other account's character takes mail like an alt. **Owner, 2026-11-12:** on
+  Forever a realm is part of its ruleset (a ruleset is a group of servers, not worlds of their
+  own), and mail reached a character of another realm of the same ruleset ("Realm 1 PvE" and
+  "Realm 7 PvE"); the first rule (same realm) hid those characters. Another ruleset is
+  unmeasured, so it stays out.
 
 ### Sent (X2, `Core/Sent.lua`)
 
@@ -841,6 +845,181 @@ combat; `lastTo` after a full client exit; Reply puts the sender in; two sends i
 need no typing; a stranger's send with an autofilled name and one with a picked name go through
 the confirmation with no `ADDON_ACTION_BLOCKED` / `_FORBIDDEN`; the picker's sections with a
 guild; a friend's name format (unmeasured, FOREVER-PROBE "Still open" 8).
+
+### The grid PR in detail (PR 5 of M2; Codex gpt-6-astra, high, 2 rounds, consensus, 2026-11-12)
+
+What it ships: I4 (specified above, "I4: mail bag grid") and the v0.2.0 release prep. It closes
+#17; the tag waits for the in-game gate below.
+
+**Files** (TOC: `Bag.lua` after `Address.lua`, before `Options.lua`; started at `PLAYER_LOGIN`):
+- `Bag.lua`: the "Items" button, the panel and its grid.
+- `Core\Loot.lua`: the item filter. `Core\Ops.lua`: the `items` run kind.
+- `OpenAll.lua`: its end-of-run line names what an `items` run took.
+
+**`Loot` with `opts.items`** (`{ [itemID] = true }`), in `mailAction`, before everything else:
+- Unresolved first → `loading`: Scan can return an unresolved mail with no or some items listed
+  (a secret header field, a missing link), so its contents prove nothing either way.
+- Then a resolved mail with none of those items (by `itemID`, currency left out) offers nothing
+  and counts nowhere in the tally (`nil, nil`), so "left 2 COD" means mails that hold the item.
+- Then, as now: COD → `cod`, GM → `gm`. The type filters don't apply
+  (the player chose the item, as with the selection) and **money is skipped**: the money-first
+  branch is not reached.
+- Then that mail's slots holding one of the items, from the lowest: `failed` (`MAIL_FAILED` named
+  it this run), else `Loot.Fits` with `keepFree` (`full`, `loading`), the first that fits taken.
+- `opts.only` and `opts.items` are never set together.
+
+**`Ops`:**
+- `Ops.TakeItems(ids, opts, onStop, onChange)`: `start("items", { items = copy of ids,
+  keepFree = opts.keepFree, failed = {} }, ...)`. No remembered target: each dispatch takes what a
+  fresh scan offers now, so twins are fine (as Open All).
+- The kinds that wrap `C_Mail.SetOpeningAll(true/false)` and get a tally at the end become a set:
+  `openall`, `selected`, `items`. Every stop condition already applies to every run.
+- `Ops.Items()`: the active `items` run's set, else nil (the panel marks that button).
+- `stats.units`: the summed stack `count` of confirmed item takes (the attempts already carry it,
+  from the scan), beside `stats.items` (takes). Every kind keeps it; only the summary reads it.
+
+**The panel** (`Bag.lua`):
+- **The "Items" button:** ours, a 20 x 20 icon button (a bag icon, a tooltip "Items in the
+  mailbox"), a child of `InboxFrame` (so only on the inbox tab) on the title bar, left of the
+  window's button (`TOPRIGHT` -50, -2; the window's is at -28). Round 1: below the title, the
+  selection bar spans x 80-326 at y -36 to -58 and Open (n) would sit under a button there. It
+  toggles the panel; shown or not is remembered for the session.
+- **The panel:** our frame, a child of `InboxFrame` (it hides with the inbox: the send tab, the
+  close), anchored `TOPLEFT` to `MailFrame`'s `TOPRIGHT` (+2, 0), `MailFrame`'s height, glass
+  through `Skin.AddWindow` (as the window: `stock` shows it smoked). A title ("Items in the
+  mailbox") and a footer under the grid: "Click an item to take every copy", or, during an `items`
+  run, "Taking *name*" and a **Stop** button (the fixed stop control: the clicked item's button
+  can move, below).
+- **The grid:** 6 columns, a fixed pool of 6 x 9 plain `Button`s (36 px: an icon texture, a count
+  font string), a row offset with the mouse wheel when there are more distinct items. No
+  `ItemButtonTemplate` (unmeasured here).
+- **Entries**, from `Scan.Inbox()` at refresh: every non-currency attachment in the loaded inbox,
+  merged by `itemID`: the total `count`, the number of mails holding it, and how many of those are
+  COD (or GM). Order: first appearance in inbox order (stable while names load).
+  `C_Item.GetItemIconByID` for the icon.
+- **Tooltip:** `GameTooltip:SetItemByID(id)`, then "in N mails", and "N COD, left to you" when
+  some are.
+- **A click:** `Ops.TakeItems({ [id] = true }, { keepFree = GM.db.keepFree }, onStop, refresh)`.
+  While that run is on, the footer's Stop button stops it (`Ops.Stop("stopped")`); the button
+  showing that item, wherever it is now (the order is by first appearance, and a take can move
+  it), has a glow and also stops it on a click; every other button is disabled. Each refresh
+  repaints every pooled button whole (item, icon, count, enabled, glow), so a reused one keeps
+  nothing of its last item.
+  All disabled (and desaturated) while any other run, a letter, combat (`API.InCombat()`), or the
+  gamepad UI mode. The end line: `OpenAll.Summary(r)`, which for an `items` run says "took 120
+  Copper Ore" (`stats.units` and the item's name, `C_Item.GetItemNameByID`, "items" when not
+  cached), then the existing "left …" and "stopped" parts.
+- **Refresh**, only while the panel `IsVisible()` (it stays shown under a hidden inbox): its own
+  `OnShow`, the `InboxFrame:Update` post-hook, `Ops.Watch`, `MAIL_INBOX_UPDATE`, the combat events
+  (`API.NoteCombat` first), `INPUT_DEVICE_INTERFACE_TRANSITION`, the letter's show / hide. The
+  offset is clamped at each refresh.
+- **The selection:** a take changes its mail's fingerprint, and the selection drops a fingerprint
+  that is gone (Inbox.lua, outside its own run), as after Open All. Unchanged.
+
+**Release prep (v0.2.0, RELEASING.md §1, §3):** `CHANGELOG.md`'s `## Unreleased` becomes
+`## v0.2.0` (the grid's line added); `README.md` and `README.curseforge.md` describe v0.2.0 (the
+window, the memory, the address book, the fill, the grid, the new commands and options, nothing
+it no longer does: `/gmail sent` and `/gmail trash` are gone); FEATURES.md and CLAUDE.md's status.
+`.pkgmeta` ignores `README.curseforge.md` too (RELEASING §1; it is already gitignored), and the
+PR says the local copy changed (the owner pastes it). No tag in the PR.
+
+**The gate before the tag** (the owner, in game, after deploy of the commit to tag, noting the
+client build and the LibGlass pin deployed): PR 3's whole list ("The window PR in detail", In
+game: the window, Escape after a fight, live Sent, item-name search after a full client exit,
+forget, the snapshot freshness check); #27's steps (through the window's Sent and Trash); PR 4's
+list ("The address PR in detail", In game); and the grid's:
+- the panel beside the inbox; the "Items" button on the title bar beside the window's, nothing
+  overlapping with mails selected and with "too much mail" shown;
+- a click takes every copy across several mails, including twins; money and other items stay;
+  COD mail stays; a full bag stops with "no bag room"; a second click stops; the end line;
+- the grid follows the inbox as mails go; the send tab hides it; it comes back on the next open;
+- nothing blocked (the baseline's watcher).
+
+**Tests** (each mutation-tested):
+- Loot: with `opts.items`, money skipped, other items skipped, the lowest matching slot, COD / GM
+  / failed / full left, a mail without the item not counted in the tally, type filters ignored;
+  unresolved → `loading` both with the item listed (a missing link) and with an empty or partial
+  list; one mail with the item in slots 1 and 3 (counted once, the second take is slot 3); a
+  stack too big to fit, then a smaller one that fits a partial stack; a specialty bag at the
+  `keepFree` boundary.
+- Ops: an `items` run sets and clears `SetOpeningAll`, takes every copy across mails (twins too),
+  confirms each from the inbox, sums `units` (a failed or unconfirmed attempt adds none), skips
+  an ID `MAIL_FAILED` named, stops on one existing condition (the code is shared), and ends "done"
+  with a tally; the stock Open All button shown mid-run puts `SetOpeningAll(true)` back, and the
+  stop clears it.
+- Bag: the entries (merge, counts, mails, COD, currency left out, order); the button toggles the
+  panel; the pool never grows (200 distinct items); the wheel scrolls and clamps, also when
+  entries go; a click starts the run for that item; the footer's Stop stops it, and so does the
+  item's button where it moved (taking its first copy moves it out of view); the others are
+  disabled; a reused button keeps no item, glow or enabled state of its last one; disabled in
+  combat, with a letter open, during another run, in gamepad mode (and back, with no other event);
+  the first open and a reopen after hidden updates show the inbox as it is; the tooltip lines;
+  the end line; the skin repaint.
+- The selection: taking from a selected mail drops it from the selection (`Selection.Get()`,
+  `OnChange`), an untouched selected mail stays.
+- `test_methods` exercises the panel.
+
+### The searchable picker (S1, in PR 5; owner, 2026-11-12; Codex gpt-6-astra, high, 2 rounds, consensus)
+
+**Why:** in game, a guild of several hundred made the `MenuUtil` guild submenu unusable (owner's
+screenshot: a scroll through every name). A search box can't live in Blizzard's menu without
+rebuilding the menu on each keystroke, so the address-book button opens **our own panel**
+instead. (Blizzard's own To-box autocomplete already searches the guild as you type,
+`AutoComplete.lua:19-22, 106`; the picker is for browsing your names and finding one by part of it.)
+
+**The panel** (`Address.lua`, replacing the menu; `Address.Sections()` unchanged):
+- Ours, a child of `SendMailFrame` (it goes with the send tab and the mailbox), anchored under
+  the button (`TOPLEFT` to its `BOTTOMLEFT`, 0, -2), about 240 x 330, `DIALOG` strata, toplevel,
+  glass (`Skin.AddWindow`, joins the repaint), a title ("Pick a recipient") and a close ×.
+- **A search box** (our `EditBox`, `SetAutoFocus(false)`) at the top, **focused when the panel
+  opens**. As you type, the list filters: lower-cased, plain `find`, every space-separated word
+  must be in the name; **each change of the query puts the list back at the top**. Enter picks the
+  first name of the filtered list (titles skipped; nothing when none). **While the search has
+  focus, Escape closes only the picker**; without focus, Blizzard's own keyboard handling applies
+  (the mailbox's Escape closes it, and the picker with it). No `UISpecialFrames` entry, no global
+  key handler.
+- **The list:** a fixed pool of rows (about 15 x 18 px), a row offset, the mouse wheel (3 rows a
+  notch) and a thin `Slider` (as the window's). Rows are section titles (gold, not clickable) and
+  names; a section with no name left after the filter isn't shown. Nothing at all: "No names yet"
+  (empty query) or "No match".
+- The guild is a section like the others (no submenu), all its members, filtered like the rest.
+- **A pick:** a name row's click is `SendMailNameEditBox:SetText(name)`, then the panel closes.
+  Nothing else (no focus given to the To box, no send).
+- **Built once** (frame, pool, skin), **its data read when it opens:** `Address.Sections()`, the
+  roster requested (`C_GuildInfo.GuildRoster()`), the query emptied, the offset 0. While it is
+  open, `GUILD_ROSTER_UPDATE` re-reads the sections (a big roster may arrive after the request),
+  keeping the query and the offset (clamped), and never taking focus.
+- **Closes on:** the ×, Escape in the search box, the button again, a pick, a left or right mouse
+  down outside the panel and the button (`GLOBAL_MOUSE_DOWN`, registered only while it is shown,
+  as Blizzard's menus do, Menu.lua:54; the button's own mouse down is excluded, so its click
+  toggles cleanly), **`MAIL_SEND_SUCCESS`** (attributed or not: Blizzard's reset focuses the To
+  box, MailFrame.lua:1422-1424, and the deferred fill may fill it; the picker steps aside and
+  doesn't take focus back), and its parent hiding (the inbox tab, the mailbox's close: the
+  parent's `OnHide` closes it for real, so coming back to the send tab doesn't reopen it). **Every
+  close is one cleanup:** hidden, the search's focus cleared, `GLOBAL_MOUSE_DOWN` and
+  `GUILD_ROSTER_UPDATE` unregistered.
+
+**Tests** (each mutation-tested; the `Address.Sections()` tests stay): the button opens and
+closes it, through its mouse down then its click, both ways; the search box has focus on open;
+filtering by one and two words, case, a `.` taken literally; a section with no match hidden, its
+title too; "No names yet" and "No match"; scrolled down, a new query starts at the top, and so
+does a reopen; Enter picks the first name (none: nothing); a click on a title does nothing; a pick
+fills the To box, closes, and sends nothing; Escape, the ×, an outside mouse down closing it (one
+on the panel or the button not); `MAIL_SEND_SUCCESS` closing it, with Sent's handler before and
+after Blizzard's, the fill then landing in the To box; the send tab hidden or the mailbox closed
+closing it for good (back on the send tab it stays closed); after every close the focus is
+cleared and both events unregistered; a roster update while open and scrolled re-reads it (names
+gone and reordered), the query and the focus as they were; a pooled row going name → title →
+unused → name keeps nothing of before (its name, its click, its enabled state); the pool never
+grows (500 guild members); the wheel and the slider scroll and clamp; the skin repaint.
+`test_methods` exercises it.
+
+**In game** (added to the gate): the panel under the button, nothing cut off by the screen's
+edge at the default scale; typing filters a big guild and stays responsive, and a late roster
+fills it in; movement keys type into the search while it has focus; Enter, Escape (with and
+without the search's focus) and a click outside; typing and chat work after it closes; the To
+box's own autocomplete still works after a pick; a stranger's send after a mouse pick and after an
+Enter pick goes through the confirmation with nothing blocked.
 
 ### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
 

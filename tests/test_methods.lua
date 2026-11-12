@@ -46,10 +46,28 @@ A.button:GetScript("OnLeave")(A.button)
 Store.AddRecent("Kaleid Sumner")
 Store.SetLastTo(WoW.playerGUID, "kaleid sumner")
 A.button:GetScript("OnClick")(A.button)
-WoW.menu.items[2].callback()
+local picker = GM._test.address.ui()
+picker.search:SetText("kal")
+picker.list:GetScript("OnMouseWheel")(picker.list, -1)
+picker.scroll:SetValue(0)
+WoW.fire("GLOBAL_MOUSE_DOWN", "LeftButton")
+A.button:GetScript("OnClick")(A.button)
+picker.rows[2]:GetScript("OnClick")(picker.rows[2])
 SendMailNameEditBox:SetText("")
 MailFrame:Show()
 MailFrameTab_OnClick(MailFrameTab2)
+
+-- The item grid (Bag.lua): the toggle, a button's tooltip, a click, the Stop.
+local Bag = GM.Bag
+WoW.inbox = { { sender = "A", subject = "ore", items = { [1] = { id = 2770, count = 5 } } } }
+InboxFrame:Show()
+Bag.toggle:GetScript("OnEnter")(Bag.toggle)
+Bag.toggle:GetScript("OnClick")(Bag.toggle)
+local bagUI = GM._test.bag.ui()
+bagUI.buttons[1]:GetScript("OnEnter")(bagUI.buttons[1])
+bagUI.buttons[1]:GetScript("OnClick")(bagUI.buttons[1])
+bagUI.stop:GetScript("OnClick")(bagUI.stop)
+bagUI.content:GetScript("OnMouseWheel")(bagUI.content, -1)
 
 local recorded = Kit.checkMethods({ allow = {
     ["GameTooltip:SetItemByID"] = "a Lua accessor of Blizzard's tooltip mixin, over C_TooltipInfo.GetItemByID "

@@ -43,16 +43,22 @@ GM.Skin = Skin
 -- 2026-10-11), and so did 0.88 in clear. The same in both presets: they
 -- differ where there is no section (title, headers, rim). The reading panes
 -- stack on a section, darker still.
+-- backing: under the glass of our floating panels (the address book's picker,
+-- the item grid), clipped by its mask: Glass UI's body over the world, as its
+-- quest tracker wears it (GlassUI Suite.BODY and Suite.BACKING; the owner,
+-- 2026-11-12: the picker's bare tint let Shatter's window read through).
 Skin.PRESETS = {
     clear = {
         tint = { 0.13, 0.16, 0.22, 0.24 }, grain = 0, wash = 0.18,
         pane = { 0.04, 0.05, 0.07, 0.62 },
         section = { 0.04, 0.05, 0.07, 0.94 },
+        backing = { 0.04, 0.05, 0.07, 0.35 },
     },
     smoked = {
         tint = { 0.05, 0.06, 0.08, 0.62 }, grain = 0, wash = 0.14,
         pane = { 0.03, 0.03, 0.04, 0.80 },
         section = { 0.03, 0.03, 0.04, 0.94 },
+        backing = { 0.04, 0.05, 0.07, 0.92 },
     },
 }
 -- Every value of the setting, in the order the options page lists them.
@@ -435,12 +441,21 @@ function Skin.Refresh()
 end
 
 -- The glass body on frame (its content goes at Glass.ContentLevel(frame)).
-function Skin.AddWindow(frame)
+-- backing: an opaque layer under the tint, clipped by the glass's mask (a
+-- floating panel's, as Glass UI's tracker: the preset's `backing`).
+function Skin.AddWindow(frame, backing)
     local p = ownPreset()
     pushStyle(p)
     local o = { g = Glass.Apply(frame, "large") }
     own[#own + 1] = o
     paintOwn(o, p)
+    if backing then
+        local b = { tex = frame:CreateTexture(nil, "BACKGROUND", nil, -7), key = "backing" }
+        b.tex:SetAllPoints(frame)
+        b.tex:AddMaskTexture(o.g.mask)
+        own[#own + 1] = b
+        paintOwn(b, p)
+    end
     return o.g
 end
 

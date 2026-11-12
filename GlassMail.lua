@@ -254,6 +254,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("comforts", GM.Comforts.Start)
         start("window", GM.Window.Start)
         start("address", GM.Address.Start)
+        start("bag", GM.Bag.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.

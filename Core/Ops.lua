@@ -40,8 +40,15 @@ driver:Hide()
 
 function Ops.Running() return run ~= nil end
 
--- "openall", "selected", "return", "delete", or nil.
+-- "openall", "selected", "items", "return", "delete", or nil.
 function Ops.Kind() return run and run.kind end
+
+-- The runs that take (Open All's kind): wrapped in C_Mail.SetOpeningAll, and
+-- tallied at the end.
+local TAKING = { openall = true, selected = true, items = true }
+
+-- An items run's set of itemIDs (I4), else nil.
+function Ops.Items() return run and run.kind == "items" and run.opts.items or nil end
 
 -- A selected run's live targets: the selection, moved to each residual.
 function Ops.Targets() return run and run.opts.only end
@@ -52,7 +59,8 @@ function Ops.LetterOpen()
     return f ~= nil and f:IsShown() == true
 end
 
--- The active run's counters, for the UI: { money, items, failed }.
+-- The active run's counters, for the UI: { money, items (takes), units (the
+-- stacks' counts), failed }.
 function Ops.Stats() return run and run.stats end
 
 -- The money confirmed taken, any run, since the last call; zeroes it.
@@ -80,7 +88,7 @@ local function finish(reason)
     local r = run
     run = nil
     driver:Hide()
-    if r.kind == "openall" or r.kind == "selected" then
+    if TAKING[r.kind] then
         C_Mail.SetOpeningAll(false)
         local ok, tally = pcall(function() return Loot.Tally(Scan.Inbox(), Loot.Bags(), r.opts) end)
         r.tally = ok and tally or {}
@@ -101,9 +109,9 @@ function Ops.Stop(reason) finish(reason or "stopped") end
 
 local function start(kind, opts, onStop, onChange)
     if run or InputUtil.IsGamepadUIEnabled() or Ops.LetterOpen() then return false end
-    run = { kind = kind, opts = opts, stats = { money = 0, items = 0, failed = 0 }, lastDispatch = -math.huge,
-        onStop = onStop, onChange = onChange }
-    if kind == "openall" or kind == "selected" then C_Mail.SetOpeningAll(true) end
+    run = { kind = kind, opts = opts, stats = { money = 0, items = 0, units = 0, failed = 0 },
+        lastDispatch = -math.huge, onStop = onStop, onChange = onChange }
+    if TAKING[kind] then C_Mail.SetOpeningAll(true) end
     driver:Show()
     notify()
     return true
@@ -125,6 +133,15 @@ function Ops.OpenSelected(fps, opts, onStop, onChange)
     local only = {}
     for fp in pairs(fps) do only[fp] = true end
     return start("selected", { only = only, keepFree = opts.keepFree, failed = {} }, onStop, onChange)
+end
+
+-- I4: take every copy of these items (a set of itemIDs, copied) across the
+-- loaded inbox; no money, no other item, COD and GM left, keepFree kept. No
+-- remembered target: twins are fine, as for Open All.
+function Ops.TakeItems(ids, opts, onStop, onChange)
+    local items = {}
+    for id in pairs(ids) do items[id] = true end
+    return start("items", { items = items, keepFree = opts.keepFree, failed = {} }, onStop, onChange)
 end
 
 -- Return or delete the one mail with this fingerprint: kind "return" (only
@@ -237,6 +254,7 @@ local function resolve()
         visitMoney = visitMoney + a.money
     else
         run.stats.items = run.stats.items + 1
+        run.stats.units = run.stats.units + (a.count or 0)
         run.bagWait = now()
     end
     if run.onChange then

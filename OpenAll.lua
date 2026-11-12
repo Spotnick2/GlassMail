@@ -75,7 +75,17 @@ end
 -- One line at the end of a run.
 local function summary(r)
     local parts = {}
-    if r.stats.items > 0 then parts[#parts + 1] = r.stats.items .. (r.stats.items == 1 and " item" or " items") end
+    local id = r.kind == "items" and next(r.opts.items)
+    if id then
+        -- I4: the item by name and its whole count ("took 120 Copper Ore").
+        if r.stats.units > 0 then
+            local name = C_Item.GetItemNameByID(id)
+            if API.IsSecret(name) or type(name) ~= "string" or name == "" then name = "items" end
+            parts[#parts + 1] = r.stats.units .. " " .. name
+        end
+    elseif r.stats.items > 0 then
+        parts[#parts + 1] = r.stats.items .. (r.stats.items == 1 and " item" or " items")
+    end
     if r.stats.money > 0 then parts[#parts + 1] = money(r.stats.money) end
     local line = #parts > 0 and ("took " .. table.concat(parts, " and ")) or "nothing taken"
     local t, left = r.tally or {}, {}
