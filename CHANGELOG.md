@@ -2,12 +2,18 @@
 
 ## Unreleased
 
-- Glass Mail now remembers what you send (M2, part 2; the window to browse it comes next). Every
-  send is kept in a Sent list, marked sent once the game confirms it, or unconfirmed when no
-  confirmation can be tied to it. Mail you return goes there too, as "returned to". Mail you delete
+- The Glass Mail window (`/gmail mail`, or the new button on the mailbox's title bar), organised
+  like Gmail: **Sent** (every send and return, newest first, with what it carried and whether the
+  game confirmed it), **Inbox** (each character's mailbox as you last saw it: what is worth
+  keeping, gold, the first expiry, and every mail) and **Trash**. Search names, subjects and item
+  names; forget any row with its ×.
+- Each character's mailbox is remembered when you visit it, so the window can show your alts'
+  mail from anywhere. A mail goes from memory when it would have expired; the rest goes with its
+  character.
+- Glass Mail remembers what you send: every send is kept in Sent, marked sent once the game
+  confirms it, or unconfirmed when no confirmation can be tied to it. Mail you return goes there too, as "returned to". Mail you delete
   goes to Trash, until it would have expired. Only what Glass Mail could prove is kept: a delete or
-  return made while another mail action was still in flight is left out. For now, `/gmail sent` and
-  `/gmail trash` list the last 10 of each.
+  return made while another mail action was still in flight is left out.
 - Nothing piles up: a name you stop mailing, an alt you stop playing and an old Sent record are
   forgotten after 30 days of play (7, 14, 60 or 90 on the options page, or `/gmail expiry`); days
   you don't play don't count. The recent recipients are capped at 20 (10 or 50, `/gmail recents`).

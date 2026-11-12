@@ -10,7 +10,10 @@ SendMailFrame.GetRegions = function() error("regions unavailable") end
 local GM = loadAddon()
 check(not GM.Skin.IsSkinned(MailFrame), "MailFrame is not skinned")
 local after = 0
-for _, w in ipairs(WoW.frames) do if w._parent == MailFrame then after = after + 1 end end
+-- Our window's button (Window.lua) is meant to be there.
+for _, w in ipairs(WoW.frames) do
+    if w._parent == MailFrame and w ~= GM.Window.mailButton then after = after + 1 end
+end
 eq(after, children, "no orphan panel is left under MailFrame")
 check(GM.failures["skin MailFrame"] ~= nil, "the failure is recorded for /gmail failures")
 check(GM.Skin.IsSkinned(OpenMailFrame), "the open letter is still skinned")

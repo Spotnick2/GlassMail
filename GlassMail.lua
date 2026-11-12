@@ -129,21 +129,13 @@ local function failures()
     if not any then say("no failures recorded") end
 end
 
-local LIST_LINES = 10   -- /gmail sent and /gmail trash
-
-local function list(lines, empty)
-    if #lines == 0 then return say(empty) end
-    for _, line in ipairs(lines) do say(line) end
-end
-
 -- The command list: /gmail help prints it, the options page can show it.
 local function helpLines()
     return {
         "/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")",
         "/gmail tradeblock on/off - block trades while the mailbox is open (" .. (GM.db.tradeBlock and "on" or "off") .. ")",
         "/gmail alert on/off - a chat line when new mail comes (" .. (GM.db.newMailAlert and "on" or "off") .. ")",
-        "/gmail sent - the last " .. LIST_LINES .. " mails sent or returned",
-        "/gmail trash - the last " .. LIST_LINES .. " mails deleted",
+        "/gmail mail - the Glass Mail window: Sent, Trash and every character's mailbox",
         "/gmail expiry " .. table.concat(GM.Store.EXPIRY_CHOICES, "/")
             .. " - play days before an unused name or record is forgotten (" .. GM.db.expiryDays .. ")",
         "/gmail recents " .. table.concat(GM.Store.RECENT_CHOICES, "/") .. " - recent recipients kept ("
@@ -185,10 +177,8 @@ local function slash(msg)
         if ONOFF[arg] == nil then return say("/gmail alert on/off") end
         Settings.SetNewMailAlert(ONOFF[arg])
         say("new-mail alert " .. arg)
-    elseif cmd == "sent" then
-        list(GM.Sent.Lines(LIST_LINES), "nothing sent or returned yet")
-    elseif cmd == "trash" then
-        list(GM.Trash.Lines(LIST_LINES), "nothing deleted yet")
+    elseif cmd == "mail" then
+        GM.Window.Toggle()
     elseif cmd == "expiry" then
         if not Settings.SetExpiryDays(tonumber(arg)) then
             return say("/gmail expiry " .. table.concat(GM.Store.EXPIRY_CHOICES, "/"))
@@ -248,6 +238,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("open all", GM.OpenAll.Start)
         start("inbox", GM.Inbox.Start)
         start("comforts", GM.Comforts.Start)
+        start("window", GM.Window.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.

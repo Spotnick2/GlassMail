@@ -107,18 +107,6 @@ events:SetScript("OnEvent", function()
 end)
 API.RegisterEvents(events, { "MAIL_INBOX_UPDATE" })
 
--- The last n Trash entries, oldest first, one line each.
-function Trash.Lines(n)
-    local trash, lines, now = Store.Trash(), {}, time()
-    for i = math.max(1, #trash - n + 1), #trash do
-        local e = trash[i]
-        local days = math.max(0, math.ceil((e.expires - now) / DAY))
-        lines[#lines + 1] = date("%m-%d %H:%M", e.at) .. " " .. Sent.CharName(e.from) .. " deleted mail from "
-            .. (e.sender or "?") .. Sent.Contents(e) .. ", gone in " .. days .. (days == 1 and " day" or " days")
-    end
-    return lines
-end
-
 GM._test = GM._test or {}
 GM._test.trash = {
     state = function() return { unsettled = unsettled, lastUpdate = lastUpdate, capture = capture } end,

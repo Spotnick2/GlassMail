@@ -1,11 +1,12 @@
 -- Core/Store.lua: the saved memory (M2), its shape, the play-day clock and
 -- expiry. Owns GlassMailDB.version, playDay, lastDate and the subtrees chars,
--- recents, sent and trash. The settings in the same table are not ours:
+-- recents, sent, trash and snapshots. The settings in the same table are not ours:
 -- GlassMail.lua validates them, key by key, and nothing here touches them.
 --
 -- Everything saved ends by itself (PLAN.md, M2): records stamped in play days
 -- age by expiryDays, Trash by real time (a mail's expiry), and every list has
--- a cap. A subtree of an unreadable shape is dropped whole, never half-read.
+-- a cap; a snapshot's mails go as they expire, and the snapshot with its
+-- character. A subtree of an unreadable shape is dropped whole, never half-read.
 -- Only plain values are saved: every field is checked with issecretvalue
 -- before it is kept; a secret field is left out, and a record whose required
 -- field (a name, a GUID) is secret is not kept at all.
@@ -19,16 +20,19 @@ GM.Store = Store
 Store.VERSION = 1
 Store.SENT_MAX = 1000
 Store.TRASH_MAX = 500
+Store.MAILS_MAX = 100                          -- a snapshot holds the loaded inbox at most
 Store.EXPIRY_CHOICES = { 7, 14, 30, 60, 90 }   -- play days (setting expiryDays)
 Store.RECENT_CHOICES = { 10, 20, 50 }          -- recent recipients kept (setting recentMax)
 
-local SUBTREES = { "chars", "recents", "sent", "trash" }
+local SUBTREES = { "chars", "recents", "sent", "trash", "snapshots" }
 -- Stamped in play days: they belong to the counter, and go when it restarts.
-local PLAY_DAY_SUBTREES = { "chars", "recents", "sent" }
+-- Snapshots too: they end with their characters, whose registry goes then.
+local PLAY_DAY_SUBTREES = { "chars", "recents", "sent", "snapshots" }
 
 -- Record shapes. `required`: a record without one of these (or of the wrong
 -- type, or secret) is invalid. `optional`: a bad one is left out. Fields not
--- listed are not kept. "items" is a list of { id, count } numbers.
+-- listed are not kept. "items" is a list of { id, count } numbers; "mails" a
+-- list of records under the `mail` spec, at most MAILS_MAX.
 local SPECS = {
     chars = {
         required = { name = "string", lastPlayDay = "number" },
@@ -48,7 +52,20 @@ local SPECS = {
         required = { at = "number", from = "string", expires = "number" },
         optional = { sender = "string", subject = "string", money = "number", cod = "number", items = "items" },
     },
+    -- One character's mailbox as last seen (Core/Memory.lua), keyed by GUID.
+    snapshots = {
+        required = { at = "number", loaded = "number", total = "number", complete = "boolean", mails = "mails" },
+        optional = {},
+    },
+    mail = {
+        required = { expires = "number", type = "string" },
+        optional = { sender = "string", subject = "string", money = "number", cod = "number",
+            wasReturned = "boolean", items = "items" },
+        enums = { type = { ah = true, system = true, player = true } },
+    },
 }
+
+local clean
 
 local function isList(t)
     if type(t) ~= "table" then return false end
@@ -62,6 +79,15 @@ end
 
 local function plain(v, kind)
     if API.IsSecret(v) then return nil end
+    if kind == "mails" then
+        if not isList(v) or #v > Store.MAILS_MAX then return nil end
+        local out = {}
+        for i, m in ipairs(v) do
+            out[i] = clean("mail", m)
+            if out[i] == nil then return nil end
+        end
+        return out
+    end
     if kind == "items" then
         if not isList(v) then return nil end
         local out = {}
@@ -81,7 +107,7 @@ local function plain(v, kind)
 end
 
 -- A clean copy of rec under spec `name`, or nil when it is invalid.
-local function clean(name, rec)
+function clean(name, rec)
     local spec = SPECS[name]
     if type(rec) ~= "table" or API.IsSecret(rec) then return nil end
     local out = {}
@@ -152,6 +178,7 @@ function Store.Load()
     rawset(t, "recents", loadKeyed("recents", rawget(t, "recents")))
     rawset(t, "sent", loadList("sent", rawget(t, "sent")))
     rawset(t, "trash", loadList("trash", rawget(t, "trash")))
+    rawset(t, "snapshots", loadKeyed("snapshots", rawget(t, "snapshots")))
     Store.loaded = true
 end
 
@@ -161,12 +188,25 @@ function Store.Chars() return rawget(db(), "chars") end
 function Store.Recents() return rawget(db(), "recents") end
 function Store.Sent() return rawget(db(), "sent") end
 function Store.Trash() return rawget(db(), "trash") end
+function Store.Snapshots() return rawget(db(), "snapshots") end
+
+-- Whoever shows the memory (the window): called after every change.
+local watchers = {}
+function Store.OnChange(fn) watchers[#watchers + 1] = fn end
+local function changed()
+    for _, fn in ipairs(watchers) do
+        local ok, err = pcall(fn)
+        if not ok then API.Fail("store watcher", err) end
+    end
+end
 
 local function age(day) return Store.PlayDay() - day end
 
--- Expiry: play days for what ages with play, real time for Trash; then the caps.
+-- Expiry: play days for what ages with play, real time for Trash and a
+-- snapshot's mails; then the caps. A snapshot goes with its character.
 function Store.Prune()
     if not Store.Ready() then return end
+    local before = Store.Count()
     local expiry = GM.db.expiryDays
     local current = GM.Registry and GM.Registry.CurrentGUID()
     local chars = Store.Chars()
@@ -190,6 +230,28 @@ function Store.Prune()
     end
     while #trash > Store.TRASH_MAX do table.remove(trash, 1) end
     rawset(db(), "trash", trash)
+    local snapshots = Store.Snapshots()
+    for guid, snap in pairs(snapshots) do
+        if not chars[guid] then
+            snapshots[guid] = nil
+        else
+            local mails = {}
+            for _, m in ipairs(snap.mails) do
+                if m.expires >= now then mails[#mails + 1] = m end
+            end
+            snap.mails = mails
+        end
+    end
+    if Store.Count() ~= before then changed() end
+end
+
+-- How many records the memory holds, for Prune's "did anything go".
+function Store.Count()
+    local n = #Store.Sent() + #Store.Trash()
+    for _ in pairs(Store.Chars()) do n = n + 1 end
+    for _ in pairs(Store.Recents()) do n = n + 1 end
+    for _, snap in pairs(Store.Snapshots()) do n = n + 1 + #snap.mails end
+    return n
 end
 
 -- The oldest recent recipients past recentMax go (by day, then key: a play
@@ -228,6 +290,7 @@ function Store.AddSent(rec)
     local sent = Store.Sent()
     sent[#sent + 1] = c
     while #sent > Store.SENT_MAX do table.remove(sent, 1) end
+    changed()
     return true
 end
 
@@ -237,6 +300,7 @@ function Store.AddTrash(rec)
     local trash = Store.Trash()
     trash[#trash + 1] = c
     while #trash > Store.TRASH_MAX do table.remove(trash, 1) end
+    changed()
     return true
 end
 
@@ -248,6 +312,40 @@ function Store.AddRecent(name)
     Store.Recents()[key] = { name = display, day = Store.PlayDay() }
     Store.TrimRecents()
     return true
+end
+
+-- The current character's mailbox as last seen (Core/Memory.lua).
+function Store.SetSnapshot(guid, snap)
+    local c = Store.Ready() and not API.IsSecret(guid) and type(guid) == "string" and clean("snapshots", snap)
+    if not c then return false end
+    Store.Snapshots()[guid] = c
+    changed()
+    return true
+end
+
+-- Forget, from the window: only the memory changes, never the mailbox. Each
+-- takes the record the window shows (the saved table itself).
+local function removeFrom(list, rec)
+    for i, r in ipairs(list) do
+        if r == rec then
+            table.remove(list, i)
+            changed()
+            return true
+        end
+    end
+    return false
+end
+function Store.ForgetSent(rec) return Store.Ready() and removeFrom(Store.Sent(), rec) end
+function Store.ForgetTrash(rec) return Store.Ready() and removeFrom(Store.Trash(), rec) end
+function Store.ForgetSnapshot(guid)
+    if not (Store.Ready() and Store.Snapshots()[guid]) then return false end
+    Store.Snapshots()[guid] = nil
+    changed()
+    return true
+end
+function Store.ForgetMail(guid, mail)
+    local snap = Store.Ready() and Store.Snapshots()[guid]
+    return snap and removeFrom(snap.mails, mail) or false
 end
 
 function Store.SetChar(guid, rec)

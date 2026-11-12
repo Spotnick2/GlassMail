@@ -18,7 +18,8 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed plan is in
 docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
-(#17) is under way: its core (the memory, Sent and Trash capture, no window yet) is PR 2 of 5.
+(#17) is under way: the core (the memory, Sent and Trash capture) is merged; the window (Inbox
+snapshots, the Sent / Inbox / Trash folders) is PR 3 of 5.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -50,8 +51,8 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
 `Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Names.lua` → `Core\Store.lua` → `Core\Registry.lua` →
-`Core\Sent.lua` → `Core\Trash.lua` → `OpenAll.lua` → `Inbox.lua` → `Comforts.lua` → `Options.lua` →
-`GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
+`Core\Sent.lua` → `Core\Trash.lua` → `Core\Summary.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
+`Comforts.lua` → `Window.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
@@ -98,10 +99,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   and `Names.Display` (trimmed). A secret name has neither.
 - **`Core\Store.lua`**: M2's saved memory in `GlassMailDB`: `version`, the play-day clock
   (`playDay`, `lastDate`, a high-water mark; `Store.Tick` at login and every 10 minutes), and the
-  subtrees `chars`, `recents`, `sent`, `trash`. Each subtree is read with a shape check and dropped
-  whole if it fails; a secret field is never saved. Expiry: `expiryDays` play days (Trash: when its
-  mail would have expired), then the caps (`recentMax`, 1000 Sent, 500 Trash). The settings in the
-  same table aren't its business.
+  subtrees `chars`, `recents`, `sent`, `trash`, `snapshots`. Each subtree is read with a shape check
+  and dropped whole if it fails; a secret field is never saved. Expiry: `expiryDays` play days
+  (Trash and a snapshot's mails: when the mail would have expired; a snapshot goes with its
+  character), then the caps (`recentMax`, 1000 Sent, 500 Trash, 100 mails a snapshot). The forget
+  calls, and `Store.OnChange` after every change. The settings in the same table aren't its
+  business.
 - **`Core\Registry.lua`**: own characters by GUID (`chars`, refreshed on every tick), or
   AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1 with the `provenance` feature;
   only its `self` and `own-account` characters, never a third party's; nothing from it saved);
@@ -109,11 +112,16 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Core\Sent.lua`**: every send, captured at the `SendMail` post-hook and attributed by a 120 s
   window (`sent` only when it is the one candidate at `MAIL_SEND_SUCCESS`, else `unconfirmed` at its
   end; a stranger's send waits for the dialog's close; error 457 drops it), plus the returns Trash
-  confirms. A `sent` send makes a recent recipient. `/gmail sent`.
+  confirms. A `sent` send makes a recent recipient.
 - **`Core\Trash.lua`**: every Delete / Return, ours or Blizzard's, captured at its post-hook and kept
   only when the next update proves it (its fingerprint and the loaded count each one fewer, within
   5 s, on a settled inbox, with no other call in between). Deletes go to Trash, returns to Sent.
-  `/gmail trash`.
+- **`Core\Summary.lua`**: `Summary.Of(snapshot, now)`, AltStable's mail rule (mails with items or
+  money and time left: count, money, soonest expiry).
+- **`Core\Memory.lua`**: X1's snapshots. A visit runs from `MAIL_SHOW` to the close; each inbox
+  update in it scans a frame later, for that visit only; a scan replaces the character's snapshot
+  only when it read every loaded mail whole (else the old one stays). That the first update carries
+  the visit's own inbox is assumed, checked in game before v0.2.0 (the debug line logs each scan).
 - **`OpenAll.lua`**: I1. Our button in the stock one's place (hidden in mouse mode on every show;
   left alone in gamepad UI mode), right-click filters (`MenuUtil`), the message count, a chat
   summary at the end.
@@ -129,6 +137,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   nothing written in combat, a per-character claim for crash recovery; never silent: a failed
   unblock and a login recovery are said in chat, `/gmail tradeblock` names who blocks); the new-mail alert (the
   latest senders changed, away from the mailbox).
+- **`Window.lua`**: Glass Mail's own window (`/gmail mail`, and our button on the mailbox's title
+  bar): Inbox (each character's snapshot, opening into its mails), Sent and Trash, a search box
+  (names, subjects, item names loaded on demand once per session), a forget × on every row. A pool
+  of rows and an offset; glass in the current preset (`stock` shows it smoked, `Skin.AddWindow` /
+  `AddPane`). Escape closes it out of combat only (its `UISpecialFrames` entry leaves in combat).
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).
 - **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the

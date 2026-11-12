@@ -106,7 +106,7 @@ local function readMail(i)
     end
     if sender == nil and subject == nil and money == nil then return nil end
     local m = { index = i, daysLeft = daysLeft, wasRead = wasRead == true, wasReturned = wasReturned == true,
-        canReply = canReply == true, isGM = isGM == true, items = {} }
+        canReply = canReply == true, isGM = isGM == true, itemCount = itemCount, items = {} }
     m.sender, m.subject, m.money, m.cod = sender or "", subject or "", money or 0, cod or 0
     local resolved
     if itemCount then m.items, resolved = attachments(i) else resolved = true end
