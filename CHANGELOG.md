@@ -8,8 +8,8 @@
 - An address book on the send tab: the button right of the To box lists your own characters
   that can receive mail from this one (same faction and ruleset, whichever realm), the names you
   mailed recently, your friends and your guild, with a search box: type part of a name, even in a
-  guild of hundreds. Click one, or press Enter for the first, and it goes in the To box; you still
-  click Send.
+  guild of hundreds, each name in its class colour. Click one, or press Enter for the first, and it
+  goes in the To box; you still click Send.
 - The To box starts with the last name this character mailed, highlighted, so two sends in a
   row to the same alt need no typing. Reply still puts the sender in. Off on the options page
   ("Fill in the last name this character mailed") or with `/gmail autofill off`.

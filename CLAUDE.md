@@ -151,7 +151,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   of `SendMailFrame`): a search box, focused, over my characters (reachable, not hidden), recents,
   friends and the guild, filtered as you type (every word, plain find), a fixed pool of rows; each
   name once, no other realm's, never the current character. A pick (a click, or Enter for the
-  first) is `SetText`, then the panel closes; so do Escape, an outside click, a send's success and
+  first) is `SetText`, then the panel closes. Names are in their class colour when the class is
+  known (`chars[guid].class`, AltStable's, the roster's token or a localized name mapped back,
+  a recent taking its name's class from the others; else white); so do Escape, an outside click, a send's success and
   the send tab going, all through one cleanup. The
   fill: an empty To box gets `recents[chars[guid].lastTo].name`, highlighted, from a
   `MailFrameTab_OnClick` post-hook and a frame after an attributed send (`Sent.onConfirmed`);

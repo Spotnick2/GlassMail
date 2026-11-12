@@ -429,7 +429,23 @@ C_FriendList = {
 }
 function IsInGuild() return WoW.guild ~= nil end
 function GetNumGuildMembers() return WoW.guild and #WoW.guild or 0 end
-function GetGuildRosterInfo(i) return WoW.guild and WoW.guild[i] end
+-- A member is a name, or { name, className (localized, 5th), classFile (11th) }:
+-- the returns' order is Retail's, unmeasured on Forever.
+function GetGuildRosterInfo(i)
+    local g = WoW.guild and WoW.guild[i]
+    if type(g) == "table" then return g.name, "Member", 1, 20, g.className, "Zone", "", "", true, 0, g.classFile end
+    return g
+end
+-- Classes: the player's (UnitClass's second return is the file token), the
+-- colours (Blizzard_SharedXML/ClassColors.lua) and the localized names.
+WoW.playerClass = "WARLOCK"
+function UnitClass(unit) if unit == "player" then return "Warlock", WoW.playerClass, 9 end end
+-- The priest's is white in the client; off-white here, so a test can tell it from
+-- the white a name gets when its class isn't known.
+RAID_CLASS_COLORS = { WARLOCK = { r = 0.53, g = 0.53, b = 0.93 }, PRIEST = { r = 0.98, g = 0.97, b = 0.96 },
+    MAGE = { r = 0.25, g = 0.78, b = 0.92 }, ROGUE = { r = 1, g = 0.96, b = 0.41 } }
+LOCALIZED_CLASS_NAMES_MALE = { WARLOCK = "Warlock", PRIEST = "Priest", MAGE = "Mage", ROGUE = "Rogue" }
+LOCALIZED_CLASS_NAMES_FEMALE = { WARLOCK = "Warlock", PRIEST = "Priestess", MAGE = "Mage", ROGUE = "Rogue" }
 C_GuildInfo = { GuildRoster = function() WoW.rosterRequests = WoW.rosterRequests + 1 end }
 -- "Name-Realm" to "Name" on the player's own realm (normalized: no spaces).
 function Ambiguate(name, context)

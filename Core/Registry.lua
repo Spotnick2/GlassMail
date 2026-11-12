@@ -30,11 +30,11 @@ end
 
 function Registry.CurrentGUID() return str(UnitGUID("player")) end
 
--- The current character as { guid, name, realm, faction }; any field nil
--- when the client won't say.
+-- The current character as { guid, name, realm, faction, class }; any field
+-- nil when the client won't say. class is the file token ("PRIEST").
 function Registry.Current()
     return { guid = Registry.CurrentGUID(), name = API.PlayerFullName(), realm = str(GetRealmName()),
-        faction = str((UnitFactionGroup("player"))) }
+        faction = str((UnitFactionGroup("player"))), class = str(select(2, UnitClass("player"))) }
 end
 
 -- Store.Tick's hook: the current character is played today.
@@ -45,8 +45,8 @@ function Registry.Touch()
     local name = me.name or (old and old.name)
     if not name then return end
     Store.SetChar(me.guid, { name = name, realm = me.realm or (old and old.realm),
-        faction = me.faction or (old and old.faction), lastPlayDay = Store.PlayDay(),
-        lastTo = old and old.lastTo })
+        faction = me.faction or (old and old.faction), class = me.class or (old and old.class),
+        lastPlayDay = Store.PlayDay(), lastTo = old and old.lastTo })
 end
 
 -- AltStable's public API, when it is the version we know and says whose each
@@ -74,7 +74,8 @@ function Registry.Characters()
             for _, c in ipairs(list) do
                 if type(c) == "table" and str(c.guid) and str(c.name) and OWN[str(c.provenance) or ""] then
                     out[#out + 1] = { guid = c.guid, name = c.name, realm = str(c.realm), faction = str(c.faction),
-                        hidden = c.hidden == true, current = c.guid == current, provenance = str(c.provenance) }
+                        class = str(c.class), hidden = c.hidden == true, current = c.guid == current,
+                        provenance = str(c.provenance) }
                 end
             end
             return out, "altstable"
@@ -82,8 +83,8 @@ function Registry.Characters()
         API.Fail("altstable", ok and "GetCharacters returned no list" or list)
     end
     for guid, c in pairs(Store.Ready() and Store.Chars() or {}) do
-        out[#out + 1] = { guid = guid, name = c.name, realm = c.realm, faction = c.faction, hidden = false,
-            current = guid == current }
+        out[#out + 1] = { guid = guid, name = c.name, realm = c.realm, faction = c.faction, class = c.class,
+            hidden = false, current = guid == current }
     end
     table.sort(out, function(a, b) return a.name < b.name end)
     return out, "own"

@@ -75,12 +75,40 @@ end
 
 local function byName(a, b) return a:lower() < b:lower() end
 
+-- A class file token ("PRIEST") from a token or a localized class name, or
+-- nil: only a class RAID_CLASS_COLORS knows. The guild roster's returns are
+-- undocumented on Forever (GlassChat's Levels.lua), and a friend's class is
+-- its localized name, so both are checked against the client's own lists.
+local function classToken(v)
+    if API.IsSecret(v) or type(v) ~= "string" or v == "" then return nil end
+    local colors = rawget(_G, "RAID_CLASS_COLORS")
+    if type(colors) ~= "table" then return nil end
+    if colors[v] then return v end
+    for _, list in ipairs({ rawget(_G, "LOCALIZED_CLASS_NAMES_MALE"), rawget(_G, "LOCALIZED_CLASS_NAMES_FEMALE") }) do
+        if type(list) == "table" then
+            for token, name in pairs(list) do
+                if name == v and colors[token] then return token end
+            end
+        end
+    end
+    return nil
+end
+Address.ClassToken = classToken
+
+-- { r, g, b } for a class token, or nil.
+local function classColor(token)
+    local colors = rawget(_G, "RAID_CLASS_COLORS")
+    local c = token and type(colors) == "table" and colors[token]
+    if type(c) ~= "table" or type(c.r) ~= "number" then return nil end
+    return c.r, c.g, c.b
+end
+
 local function friends()
     local out = {}
     if not (C_FriendList and C_FriendList.GetNumFriends) then return out end
     for i = 1, C_FriendList.GetNumFriends() or 0 do
         local info = C_FriendList.GetFriendInfoByIndex(i)
-        if type(info) == "table" then out[#out + 1] = info.name end
+        if type(info) == "table" then out[#out + 1] = { name = info.name, class = classToken(info.className) } end
     end
     return out
 end
@@ -89,32 +117,43 @@ local function guild()
     local out = {}
     if not IsInGuild() then return out end
     for i = 1, GetNumGuildMembers() or 0 do
-        out[#out + 1] = (GetGuildRosterInfo(i))
+        local name, _, _, _, className, _, _, _, _, _, classFile = GetGuildRosterInfo(i)
+        out[#out + 1] = { name = name, class = classToken(classFile) or classToken(className) }
     end
     return out
 end
 
--- The menu's sections, each { title, names }, empty ones left out; each name
--- once across sections (the first wins).
+-- The sections, each { title, names, classes = { [name] = token } }, empty
+-- ones left out; each name once across sections (the first wins). A recent
+-- recipient takes the class its name has in another section.
 function Address.Sections()
     local me = Names.Key(API.PlayerFullName())
     local seen = {}
     local function section(title, raw, sorted)
-        local names = {}
+        local names, classes = {}, {}
         for _, n in ipairs(raw) do
-            local c = candidate(n, me)
+            local c = candidate(n.name, me)
             local key = c and Names.Key(c)
             if key and not seen[key] then
                 seen[key] = true
                 names[#names + 1] = c
+                classes[c] = n.class
             end
         end
         if sorted then table.sort(names, byName) end
-        return { title = title, names = names }
+        return { title = title, names = names, classes = classes }
     end
     local mine = {}
     for _, c in ipairs(Registry.Characters()) do
-        if not c.hidden and Registry.Reachable(c) then mine[#mine + 1] = c.name end
+        if not c.hidden and Registry.Reachable(c) then mine[#mine + 1] = { name = c.name, class = classToken(c.class) } end
+    end
+    local pals, members = friends(), guild()
+    local known = {}
+    for _, list in ipairs({ mine, pals, members }) do
+        for _, n in ipairs(list) do
+            local key = Names.Key(n.name)
+            if key and n.class and not known[key] then known[key] = n.class end
+        end
     end
     local recent = {}
     if Store.Ready() then
@@ -124,11 +163,11 @@ function Address.Sections()
             if a.day ~= b.day then return a.day > b.day end
             return byName(a.name, b.name)
         end)
-        for _, r in ipairs(list) do recent[#recent + 1] = r.name end
+        for _, r in ipairs(list) do recent[#recent + 1] = { name = r.name, class = known[Names.Key(r.name) or ""] } end
     end
     local out = {}
     for _, s in ipairs({ section("My characters", mine, true), section("Recent", recent, false),
-        section("Friends", friends(), true), section("Guild", guild(), true) }) do
+        section("Friends", pals, true), section("Guild", members, true) }) do
         if #s.names > 0 then out[#out + 1] = s end
     end
     return out
@@ -172,7 +211,7 @@ local function filter()
         for _, name in ipairs(sec.names) do
             if matches(name, ws) then
                 if first then out[#out + 1] = { title = sec.title }; first = false end
-                out[#out + 1] = { name = name }
+                out[#out + 1] = { name = name, class = sec.classes and sec.classes[name] }
             end
         end
     end
@@ -189,7 +228,13 @@ local function paint()
         r:SetEnabled(r.name ~= nil)
         if e then
             r.label:SetText(e.title or e.name)
-            if e.title then r.label:SetTextColor(GOLD[1], GOLD[2], GOLD[3]) else r.label:SetTextColor(1, 1, 1) end
+            if e.title then
+                r.label:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+            else
+                -- A name in its class colour when its class is known, else white.
+                local cr, cg, cb = classColor(e.class)
+                if cr then r.label:SetTextColor(cr, cg, cb) else r.label:SetTextColor(1, 1, 1) end
+            end
             r:Show()
         else
             r:Hide()

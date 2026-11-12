@@ -285,17 +285,20 @@ check(not shown(), "the button again closes it")
 
 -- My characters: reachable, not hidden, not this one; recents; friends; guild.
 Store.SetChar("Player-1-ZZZ", { name = "Zed Alt", realm = "Doomhowl", faction = "Horde", lastPlayDay = db.playDay })
-Store.SetChar("Player-1-CCC", { name = "Bank Alt", realm = "Doomhowl", faction = "Horde", lastPlayDay = db.playDay })
+Store.SetChar("Player-1-CCC", { name = "Bank Alt", realm = "Doomhowl", faction = "Horde", class = "MAGE",
+    lastPlayDay = db.playDay })
 Store.SetChar("Player-1-DDD", { name = "Other Side", realm = "Doomhowl", faction = "Alliance", lastPlayDay = db.playDay })
 Store.SetChar("Player-1-EEE", { name = "Far Away", realm = "Elsewhere PvP", faction = "Horde", lastPlayDay = db.playDay })
 Store.SetChar("Player-1-GGG", { name = "Other Realm", realm = "Doomhowl Two", faction = "Horde", lastPlayDay = db.playDay })
 db.recents["old friend"] = { name = "Old Friend", day = db.playDay - 2 }
 db.recents["new friend"] = { name = "New Friend", day = db.playDay }
 db.recents["bank alt"] = { name = "Bank Alt", day = db.playDay }
-WoW.friends = { { name = "Pal Two" }, { name = "pal one" }, { name = "New Friend" }, { name = "Realm Guy-Elsewhere" },
+WoW.friends = { { name = "Pal Two", className = "Priestess" }, { name = "pal one", className = WoW.Secret("class") }, { name = "New Friend" }, { name = "Realm Guy-Elsewhere" },
     { name = WoW.Secret("Hidden Pal") } }
 WoW.friendCount = #WoW.friends + 1   -- one index that returns nothing (MayReturnNothing)
-WoW.guild = { "Guildie Bee", "Karuzo Morphisto", "Guildie Ace-Doomhowl", "", "Old Friend" }
+WoW.guild = { { name = "Guildie Bee", className = "Rogue", classFile = "ROGUE" }, "Karuzo Morphisto",
+    { name = "Guildie Ace-Doomhowl", className = "Mage", classFile = "NOTACLASS" }, "",
+    { name = "Old Friend", className = "Priest" } }
 local requests = WoW.rosterRequests
 WoW.focus = box
 press()
@@ -307,6 +310,36 @@ eq(texts(), "# My characters | Bank Alt | Other Realm | Zed Alt | # Recent | New
     "sections in order, each sorted; own characters of this ruleset and faction (any realm); one name once"
     .. " (first wins); the guild a section like the others")
 eq(T.ui().rows[1].label:GetText(), "My characters", "  a title row shows its section")
+-- Names in their class colour, when the class is known; white otherwise.
+local function colorOf(name)
+    for i, r in ipairs(T.ui().rows) do
+        if r:IsShown() and r.name == name then
+            local cr, cg, cb = r.label:GetTextColor()
+            return string.format("%.2f %.2f %.2f", cr, cg, cb)
+        end
+    end
+end
+local function rgb(c) return string.format("%.2f %.2f %.2f", c.r, c.g, c.b) end
+eq(colorOf("Bank Alt"), rgb(RAID_CLASS_COLORS.MAGE), "my character in its class colour (saved with it)")
+eq(colorOf("Zed Alt"), "1.00 1.00 1.00", "  one whose class isn't known: white")
+eq(T.ui().rows[1].label:GetTextColor(), 1, "  a title stays gold")
+eq(select(3, T.ui().rows[1].label:GetTextColor()), 0, "  ...")
+search("friend")
+eq(colorOf("Old Friend"), rgb(RAID_CLASS_COLORS.PRIEST), "a recent recipient takes the class its name has in the guild")
+eq(colorOf("New Friend"), "1.00 1.00 1.00", "  one known nowhere: white")
+search("pal")
+eq(colorOf("Pal Two"), rgb(RAID_CLASS_COLORS.PRIEST), "a friend: its localized class name, female form too")
+eq(colorOf("pal one"), "1.00 1.00 1.00", "  a secret class: white")
+search("guildie")
+eq(colorOf("Guildie Bee"), rgb(RAID_CLASS_COLORS.ROGUE), "a guild member: the roster's class token")
+eq(colorOf("Guildie Ace"), rgb(RAID_CLASS_COLORS.MAGE), "  an unknown token: its localized name instead")
+search("")
+eq(Address.ClassToken("WARLOCK"), "WARLOCK", "ClassToken: a token")
+eq(Address.ClassToken("Warlock"), "WARLOCK", "  a localized name")
+eq(Address.ClassToken("Paladin"), nil, "  a class the client's colours don't list")
+eq(Address.ClassToken(""), nil, "  blank")
+eq(db.chars[ME].class, "WARLOCK", "this character's class is saved with it (UnitClass's token)")
+
 check(not T.ui().rows[1]:IsEnabled(), "  and isn't clickable")
 
 -- Filtering.
