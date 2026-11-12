@@ -258,7 +258,7 @@ end
 -- Blizzard's shows seven slots on ruled paper). Per row a rounded slot behind
 -- the item button (where its icon goes, MailFrame.xml:69: 37 x 37 at 4, -3) and
 -- a line under every row but the last; and, when the inbox holds no mail, our
--- envelope faded in the middle with "No mail". All of it on the pane's own
+-- envelope faded in the middle with "No mail", the lines then hidden. All of it on the pane's own
 -- frame, under the rows (children of InboxFrame, a level up): a mail's icon
 -- and text draw over its slot. Shown under glass while `inboxGuides` is on.
 local guides   -- { slots = { texture, ... }, lines = { texture, ... }, empty = { icon, text } }
@@ -316,11 +316,13 @@ local function paintGuides(p)
         t:SetShown(on)
         t:SetColorTexture(c.slot[1], c.slot[2], c.slot[3], c.slot[4])
     end
+    -- An empty inbox's envelope and "No mail" sit across the rows: no lines
+    -- through them (owner, 2026-11-12, from a screenshot).
+    local empty = on and inboxEmpty()
     for _, t in ipairs(guides.lines) do
-        t:SetShown(on)
+        t:SetShown(on and not empty)
         t:SetColorTexture(c.line[1], c.line[2], c.line[3], c.line[4])
     end
-    local empty = on and inboxEmpty()
     guides.empty.icon:SetShown(empty)
     guides.empty.icon:SetAlpha(c.envelope)
     guides.empty.text:SetShown(empty)

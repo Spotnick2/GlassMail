@@ -80,7 +80,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   Glass Mail envelope (`Media\Envelope.tga`) and an open letter's the glass scroll
   (`Media\Scroll.tga`), our textures over Blizzard's faded ones. The inbox's guides, on the
   reading pane's frame under the rows: a slot behind each row's item button, a line under every
-  row but the last, and the envelope with "No mail" when nothing is loaded or on the server (an
+  row but the last (hidden while the inbox is empty), and the envelope with "No mail" when nothing is loaded or on the server (an
   `InboxFrame:Update` post-hook); shown under glass while `inboxGuides` is on.
 - **`Core\Scan.lua`**: the inbox as plain values (`Scan.Inbox()`), never `GetInboxText`. Each mail
   has a type (`ah` by the six `AUCTION_*_MAIL_SUBJECT` templates, `system` when it can't be

@@ -42,20 +42,23 @@ local function emptyHidden() return not guides.empty.icon:IsShown() and not guid
 
 WoW.inbox = {}
 InboxFrame:Update()
-check(shown(guides.slots) and shown(guides.lines), "clear glass: the slots and lines show")
+check(shown(guides.slots), "clear glass: the slots show")
 local c = GM.Skin.GUIDES
 eq(guides.slots[1]._color[4], c.slot[4], "  in the slot colour")
 eq(guides.lines[1]._color[4], c.line[4], "  and the line colour")
 check(emptyShown(), "an empty inbox: the envelope and \"No mail\"")
+check(hidden(guides.lines), "  on a clean pane: no lines through them")
 eq(guides.empty.icon:GetAlpha(), c.envelope, "  the envelope faded")
 
 WoW.inbox = { { sender = "A", subject = "hi" } }
 InboxFrame:Update()
 check(emptyHidden(), "a mail: no \"No mail\" (Blizzard's update repaints it)")
 check(shown(guides.slots), "  the slots stay, under the mail's icon")
+check(shown(guides.lines), "  and the lines between the rows are back")
 WoW.inbox, WoW.inboxTotal = {}, 3
 InboxFrame:Update()
 check(emptyHidden(), "none loaded but some on the server: not empty")
+check(shown(guides.lines), "  so the lines show")
 WoW.inboxTotal = nil
 local real = GetInboxNumItems
 GetInboxNumItems = function() return WoW.Secret(0), WoW.Secret(0) end
@@ -78,7 +81,7 @@ check(hidden(guides.slots) and hidden(guides.lines) and emptyHidden(), "stock: n
 InboxFrame:Update()
 check(emptyHidden(), "  not even after an inbox update")
 GM.Settings.SetSkin("smoked")
-check(shown(guides.slots) and shown(guides.lines) and emptyShown(), "smoked: all back")
+check(shown(guides.slots) and hidden(guides.lines) and emptyShown(), "smoked: all back (empty: no lines)")
 
 -- /gmail guides, the options page, a bad saved value -------------------------------
 SlashCmdList.GLASSMAIL("guides off")
