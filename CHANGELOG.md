@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The embedded glass library is LibGlass r11. Glass Mail's material is unchanged, so nothing looks
+  different.
+
 ## v0.2.1
 
 - Typing in the To box now completes your characters on your other WoW accounts too (the ones

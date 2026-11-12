@@ -62,7 +62,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   read by `/gmail failures`), `PlayerFullName`, `AddOnVersion`, `SafeFrame`, `Button`;
   `MEASURED_ON_BUILD`; `Debug` (the in-game checks' line, `/gmail debug on`, this session only). A
   subset of GlassChat's; lift more from there.
-- **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })` (LibGlass r8's
+- **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })` (LibGlass r11's
   clean material: thin rims, no grain), this addon's instance of
   the material. Material changes are LibGlass PRs.
 - **`Skin.lua`**: the look, `GM.db.skin` = `clear` / `smoked` (glass presets, AltStable's
@@ -299,6 +299,9 @@ Same as GlassChat's CLAUDE.md, "Workflow and releasing":
   `gpt-6-astra` at high effort, looping until consensus. Hand it this file, `docs/PLAN.md`,
   `docs/FEATURES.md` and the porting guide. Verify its claims; push back on complexity.
 - **Code reviews are manual** (by the owner) unless the owner asks for one.
+- **A release tag (`vX.Y.Z`) updates both READMEs in its prep PR** (RELEASING.md §3): `README.md`
+  and the untracked `README.curseforge.md` describe that release, and the PR body says that
+  `README.curseforge.md` changed (the owner pastes it into CurseForge and Wago afterwards).
 - **A tag publishes three times** (`C:\Projects\WoW\References\Docs\RELEASING.md`):
   - CurseForge (project `1743548`) builds its own file from the tag webhook through `.pkgmeta`;
   - CI's `release` job makes a GitHub Release with the zip `check` built and `release.json`;
