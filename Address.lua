@@ -123,6 +123,16 @@ local function guild()
     return out
 end
 
+-- My characters the current one can mail (reachable, not hidden), each
+-- { name, class }; candidate() still to apply.
+local function myCharacters()
+    local out = {}
+    for _, c in ipairs(Registry.Characters()) do
+        if not c.hidden and Registry.Reachable(c) then out[#out + 1] = { name = c.name, class = classToken(c.class) } end
+    end
+    return out
+end
+
 -- The sections, each { title, names, classes = { [name] = token } }, empty
 -- ones left out; each name once across sections (the first wins). A recent
 -- recipient takes the class its name has in another section.
@@ -143,10 +153,7 @@ function Address.Sections()
         if sorted then table.sort(names, byName) end
         return { title = title, names = names, classes = classes }
     end
-    local mine = {}
-    for _, c in ipairs(Registry.Characters()) do
-        if not c.hidden and Registry.Reachable(c) then mine[#mine + 1] = { name = c.name, class = classToken(c.class) } end
-    end
+    local mine = myCharacters()
     local pals, members = friends(), guild()
     local known = {}
     for _, list in ipairs({ mine, pals, members }) do
