@@ -18,8 +18,9 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed plan is in
 docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
-(#17) is under way: the core (the memory, Sent and Trash capture) is merged; the window (Inbox
-snapshots, the Sent / Inbox / Trash folders) is PR 3 of 5.
+(#17) is under way: the core (the memory, Sent and Trash capture) and the window (Inbox
+snapshots, the Sent / Inbox / Trash folders) are merged; S1 (the address book, the last-recipient
+fill) is PR 4 of 5.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -52,7 +53,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
 `Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Names.lua` → `Core\Store.lua` → `Core\Registry.lua` →
 `Core\Sent.lua` → `Core\Trash.lua` → `Core\Summary.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
-`Comforts.lua` → `Window.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
+`Comforts.lua` → `Window.lua` → `Address.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
@@ -112,7 +113,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Core\Sent.lua`**: every send, captured at the `SendMail` post-hook and attributed by a 120 s
   window (`sent` only when it is the one candidate at `MAIL_SEND_SUCCESS`, else `unconfirmed` at its
   end; a stranger's send waits for the dialog's close; error 457 drops it), plus the returns Trash
-  confirms. A `sent` send makes a recent recipient.
+  confirms. A `sent` send makes a recent recipient and its character's `lastTo` (S1's fill); every
+  success first clears the current character's `lastTo`, so only an attributed one sets it.
 - **`Core\Trash.lua`**: every Delete / Return, ours or Blizzard's, captured at its post-hook and kept
   only when the next update proves it (its fingerprint and the loaded count each one fewer, within
   5 s, on a settled inbox, with no other call in between). Deletes go to Trash, returns to Sent.
@@ -142,6 +144,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   (names, subjects, item names loaded on demand once per session), a forget × on every row. A pool
   of rows and an offset; glass in the current preset (`stock` shows it smoked, `Skin.AddWindow` /
   `AddPane`). Escape closes it out of combat only (its `UISpecialFrames` entry leaves in combat).
+- **`Address.lua`**: S1. Our button right of `SendMailNameEditBox` opens a `MenuUtil` menu: my
+  characters (reachable, not hidden), recents, friends, the guild (a scrolling submenu); each name
+  once, no other realm's, never the current character. A pick is `SetText` and nothing else. The
+  fill: an empty To box gets `recents[chars[guid].lastTo].name`, highlighted, from a
+  `MailFrameTab_OnClick` post-hook and a frame after an attributed send (`Sent.onConfirmed`);
+  setting `autofill`. No focus hooks on Blizzard's box.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).
 - **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the

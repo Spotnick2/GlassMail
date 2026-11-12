@@ -331,8 +331,10 @@ name this character mailed. In `Address.lua`, beside the picker.
      in between has cleared it). No reset hook. An unattributed success schedules nothing, so the
      box stays empty. A reply's success shows the inbox (MailFrame.lua:148-150): not visible,
      nothing filled.
-- **How:** `SetText(name)` then `HighlightText()`, so typing replaces it. Nothing else: no focus
-  change, no autocomplete (`SetText` isn't user input), no send. The player still clicks Send and
+- **How:** `SetText(name)` then `HighlightText()`, so typing replaces it after a send (the box
+  has focus then); on the tab's open a click may drop the highlight, and the player selects the
+  name to replace it (the PR's detail, below). Nothing else: no focus change, no autocomplete
+  (`SetText` isn't user input), no send. The player still clicks Send and
   any confirmation.
 - **Setting `autofill`** (default on): a checkbox under "Memory", `/gmail autofill on|off`,
   validated in `ensureDefaults` like the other booleans.
@@ -344,8 +346,8 @@ name this character mailed. In `Address.lua`, beside the picker.
   (A sent, a stranger cancelled, B's success ambiguous); a reply's success fills nothing; the
   mailbox closed or a name typed before the deferred fill → nothing; a non-string `lastTo` is
   dropped at load.
-- **In game, before it ships** (with the picker's check): the send tab opens with the name
-  highlighted; typing replaces it; Reply puts the sender in; two sends in a row to an alt need no
+- **In game, before it ships** (with the picker's check): the send tab opens with the name;
+  after a send, typing replaces it (on the tab's open, what a click does to the highlight); Reply puts the sender in; two sends in a row to an alt need no
   typing; a stranger's send with an autofilled name goes through the confirmation with no
   `ADDON_ACTION_BLOCKED` / `_FORBIDDEN`.
 
@@ -743,6 +745,102 @@ left, attachments matching `itemCount`, nil being 0); the deferred scan belongs 
 first-update freshness is an in-game gate, not a padded delay; a restarted clock drops snapshots
 with their characters; "empty" is said only when seen empty; Escape's entry waits out combat at
 creation too.
+
+### The address PR in detail (PR 4 of M2; Codex gpt-6-astra, high, 2 rounds, consensus, 2026-11-12)
+
+What it ships: S1, the picker and the last-recipient fill (both specified above), and the
+`autofill` setting.
+
+**Files** (TOC: `Address.lua` after `Window.lua`, before `Options.lua`; started at `PLAYER_LOGIN`
+from `GlassMail.lua`, as the window is; `Blizzard_MailFrame` isn't load-on-demand):
+- `Address.lua`: the picker button and its menu, the fill.
+- `Core\Store.lua`: `chars[guid].lastTo` (optional string), `Store.SetLastTo(guid, key)`.
+- `Core\Registry.lua`: `Registry.Touch` rewrites the current character's record every tick; it
+  keeps `lastTo` (else the 10-minute tick would erase it).
+- `Core\Sent.lua`: sets and clears `lastTo` (below).
+- `GlassMail.lua`, `Options.lua`: the setting.
+
+**`lastTo`** (as specified in "S1: the last recipient"):
+- **Cleared first, on every `MAIL_SEND_SUCCESS`**, on the current character's record (the one
+  that sent: mail is sent only from the open mailbox), before Sent's attribution: an error caught
+  later in Sent's handler, a capture whose GUID or recipient wasn't readable, zero candidates (a
+  send before a /reload) and two or more all leave it cleared. Another character's is never touched.
+- **Set again** only in Sent's `save(rec, "sent")` for a `send` (never a return: `Sent.AddReturn`
+  doesn't go there), on `rec.from`'s record: `Names.Key(rec.to)`, beside `Store.AddRecent(rec.to)`,
+  when both are readable.
+- `Store.SetLastTo(guid, key)`: `key` a string or nil; nothing when the Store isn't ready, the
+  GUID has no record, or either is secret. No `Store.OnChange` (nothing the window shows).
+- At load the `chars` spec takes `lastTo` as an optional string: a non-string is dropped, the
+  record kept.
+
+**The fill** (`Address.lua`):
+- `fill()` writes only when all hold at that moment: `GM.db.autofill`, `Store.Ready()`,
+  `SendMailFrame:IsVisible()`, `SendMailNameEditBox:GetText() == ""`, the current GUID's record has
+  a string `lastTo`, and `Store.Recents()[lastTo]` exists. It writes that entry's `name` with
+  `SetText`, then `HighlightText()`.
+- **Tab 2:** a `hooksecurefunc("MailFrameTab_OnClick", fill)` post-hook. It needn't read the tab
+  (`tabID or self:GetID()`, MailFrame.lua:189-192): `fill()` needs the send tab visible, which only
+  tab 2 leaves it. The tabs call it with `self` (MailFrame.xml:884); Reply with `nil, 2`
+  (MailFrame.lua:1092), then sets the sender over ours.
+- **After a send**, as the spec says: Sent, having set `lastTo` in its attributed branch, calls
+  one callback, `Sent.onConfirmed(key)` (Address sets it; no general notification), which
+  schedules `fill()` with `C_Timer.After(0)`: by then every handler of that event has run
+  (Blizzard's reset among them). `fill()` reads `lastTo` then, so an unattributed success in
+  between (which cleared it) leaves nothing to fill.
+- **Typing replaces it after a send**: the box has focus then (`SendMailFrame_Reset`,
+  MailFrame.lua:1424), and the highlight is on. **On the tab's open** the box has no focus; a
+  click into it may place the cursor and drop the highlight, so the player selects the name to
+  replace it. No focus hooks on Blizzard's box (round 1: the extra interaction state isn't worth
+  it).
+
+**The picker** (`Address.lua`, as specified in "S1: the address book picker"):
+- **Button:** ours, a child of `SendMailFrame`, 20 x 20, `LEFT` on the To box's `RIGHT` + 4 (the
+  postage line is right-anchored at the frame's edge, MailFrame.xml:660-663); an address-book icon,
+  a tooltip ("Glass Mail: pick a recipient"). Not disabled in combat: `SetText` isn't protected and
+  nothing is sent.
+- **Menu:** `MenuUtil.CreateContextMenu(button, generator)`, built on each click, scrolling past
+  400 px (`root:SetScrollMode(400)`: 50 recents and the friends would pass the screen, and a menu
+  scrolls only when asked, Menu.lua:1485), sections as titles, each skipped when empty:
+  1. **My characters:** `Registry.Characters()`, `Registry.Reachable`, not `hidden`; by name.
+  2. **Recent:** `Store.Recents()`, newest `day` first, then name.
+  3. **Friends:** `C_FriendList.GetNumFriends()` and `GetFriendInfoByIndex(i)`, which may return
+     nothing (FriendListDocumentation.lua:108: skipped), its `name`; online or not (mail reaches
+     either); by name.
+  4. **Guild:** `IsInGuild()`, `GetNumGuildMembers()`, `GetGuildRosterInfo(i)` (its first
+     return); by name, in a submenu (`CreateButton("Guild")`) with `SetScrollMode(400)`.
+     `C_GuildInfo.GuildRoster()` is requested when the picker opens; an open menu isn't rebuilt
+     (session 6: on a loaded roster no `GUILD_ROSTER_UPDATE` comes), the next open has it.
+  Nothing at all → one disabled line, "No names yet".
+- **Each candidate:** `Names.Display`; a secret or blank name is skipped; `Ambiguate(name,
+  "none")` drops the current realm's suffix (session 6: guild names unchanged by it); a name that
+  still has a `-` (another realm: a character name has none) is left out; the current
+  character's own name is left out; once per `Names.Key`, the first section wins.
+- **A pick:** `SendMailNameEditBox:SetText(name)`, nothing else (no focus, no send).
+
+**Setting `autofill`** (default on): `DEFAULTS.autofill = true`; `ensureDefaults` drops a
+non-boolean; `Settings.SetAutofill(on)`; a checkbox under "Memory" ("Fill in the last name this
+character mailed"); `/gmail autofill on|off` and its help line.
+
+**Tests** (each mutation-tested): the spec's list ("S1: the last recipient", Tests), plus:
+`Registry.Touch` keeps `lastTo`; a zero-candidate success clears it and keeps another
+character's; an error inside Sent's success handling leaves it cleared (no fill, none on
+reopening the tab); one candidate whose GUID or recipient wasn't readable leaves it cleared; an
+attributed success then an unattributed one before the frame's timers: nothing filled; the setting
+turned off or the recent removed before the deferred fill: nothing; `SetLastTo` refuses a secret,
+an unknown GUID, a not-ready Store. Picker: each section and its order; empty sections skipped;
+"No names yet"; the current character, hidden, unreachable, other-realm and secret names left
+out; a friend index that returns nothing skipped; one name once across sections (first wins); the
+menu and the guild submenu scroll; the roster asked on open; a pick fills the box and nothing else.
+The setting: default, `ensureDefaults`, slash, checkbox. `test_methods` covers the new widget
+calls.
+
+**In game** (the spec's list, on the PR and in #27's issue): the send tab opens with the name;
+after a send, typing replaces it (on the tab's open: what a click does to the highlight);
+Blizzard's autocomplete still works once the player types over a filled name; the picker in
+combat; `lastTo` after a full client exit; Reply puts the sender in; two sends in a row to an alt
+need no typing; a stranger's send with an autofilled name and one with a picked name go through
+the confirmation with no `ADDON_ACTION_BLOCKED` / `_FORBIDDEN`; the picker's sections with a
+guild; a friend's name format (unmeasured, FOREVER-PROBE "Still open" 8).
 
 ### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
 

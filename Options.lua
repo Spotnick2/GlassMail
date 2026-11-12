@@ -124,8 +124,11 @@ local function build()
     local _, recentGroup = radios(panel, keep, counts, function() return GM.db.recentMax end,
         GM.Settings.SetRecentMax)
     Options._test.expiryRadios, Options._test.recentRadios = dayGroup, recentGroup
+    local autofill = checkbox(panel, lastDays, "Fill in the last name this character mailed",
+        function() return GM.db.autofill end, GM.Settings.SetAutofill)
+    Options._test.autofill = autofill
     local hint = label(panel, "Type /gmail help for every command.", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", lastDays, "BOTTOMLEFT", 0, -16)
+    hint:SetPoint("TOPLEFT", autofill, "BOTTOMLEFT", 0, -16)
 end
 
 panel:SetScript("OnShow", function()

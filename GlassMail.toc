@@ -28,5 +28,6 @@ OpenAll.lua
 Inbox.lua
 Comforts.lua
 Window.lua
+Address.lua
 Options.lua
 GlassMail.lua

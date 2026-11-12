@@ -20,6 +20,8 @@ local DEFAULTS = {
     -- M2's memory (Core/Store.lua): play days before a recent recipient, an own
     -- character or a Sent record is forgotten, and the recent recipients kept.
     expiryDays = 30, recentMax = 20,
+    -- S1: the To box starts with the last name this character mailed (Address.lua).
+    autofill = true,
 }
 GM.DEFAULTS = DEFAULTS
 
@@ -43,6 +45,7 @@ local function ensureDefaults()
     if db.keepFree ~= nil and not validKeepFree(db.keepFree) then db.keepFree = nil end
     if db.expiryDays ~= nil and not GM.Store.ValidExpiry(db.expiryDays) then db.expiryDays = nil end
     if db.recentMax ~= nil and not GM.Store.ValidRecentMax(db.recentMax) then db.recentMax = nil end
+    if db.autofill ~= nil and type(db.autofill) ~= "boolean" then db.autofill = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     setmetatable(db, { __index = DEFAULTS })
     if type(GlassMailCharDB) ~= "table" then GlassMailCharDB = {} end
@@ -95,6 +98,11 @@ function Settings.SetExpiryDays(n)
     return true
 end
 
+function Settings.SetAutofill(on)
+    GM.db.autofill = on == true
+    return true
+end
+
 function Settings.SetRecentMax(n)
     if not GM.Store.ValidRecentMax(n) then return false end
     GM.db.recentMax = n
@@ -140,6 +148,8 @@ local function helpLines()
             .. " - play days before an unused name or record is forgotten (" .. GM.db.expiryDays .. ")",
         "/gmail recents " .. table.concat(GM.Store.RECENT_CHOICES, "/") .. " - recent recipients kept ("
             .. GM.db.recentMax .. ")",
+        "/gmail autofill on/off - start the To box with the last name this character mailed ("
+            .. (GM.db.autofill and "on" or "off") .. ")",
         "/gmail options - open the options page",
         "/gmail failures - what failed to build or register",
         "/gmail version - client build vs the measured one",
@@ -189,6 +199,10 @@ local function slash(msg)
             return say("/gmail recents " .. table.concat(GM.Store.RECENT_CHOICES, "/"))
         end
         say("keep " .. arg .. " recent recipients")
+    elseif cmd == "autofill" then
+        if ONOFF[arg] == nil then return say("/gmail autofill on/off") end
+        Settings.SetAutofill(ONOFF[arg])
+        say("autofill " .. arg)
     elseif cmd == "debug" then
         -- Not in the help list: the in-game checks' debug line (#27).
         if ONOFF[arg] == nil then return say("/gmail debug on/off") end
@@ -239,6 +253,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("inbox", GM.Inbox.Start)
         start("comforts", GM.Comforts.Start)
         start("window", GM.Window.Start)
+        start("address", GM.Address.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.

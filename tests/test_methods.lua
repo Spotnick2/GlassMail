@@ -38,6 +38,19 @@ ui.search:SetText("kaleid")
 ui.list:GetScript("OnMouseWheel")(ui.list, -1)
 GM.Settings.SetSkin("smoked")
 
+-- The address book (Address.lua): its button's tooltip, a pick, and the fill
+-- on the send tab.
+local A = GM.Address
+A.button:GetScript("OnEnter")(A.button)
+A.button:GetScript("OnLeave")(A.button)
+Store.AddRecent("Kaleid Sumner")
+Store.SetLastTo(WoW.playerGUID, "kaleid sumner")
+A.button:GetScript("OnClick")(A.button)
+WoW.menu.items[2].callback()
+SendMailNameEditBox:SetText("")
+MailFrame:Show()
+MailFrameTab_OnClick(MailFrameTab2)
+
 local recorded = Kit.checkMethods({ allow = {
     ["GameTooltip:SetItemByID"] = "a Lua accessor of Blizzard's tooltip mixin, over C_TooltipInfo.GetItemByID "
         .. "(Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:525; QuestInfo.lua:1285 calls it)",
