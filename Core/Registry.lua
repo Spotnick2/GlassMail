@@ -10,9 +10,11 @@
 --    player's own ("self", "own-account") are taken; an AltStable that can't
 --    say whose a character is isn't used. Its "forget" isn't mirrored: absence
 --    from GetCharacters() can't be told from "never known".
--- A character is reachable by mail when its faction tag and realm match the
--- current character's (session 6: the other faction fails; other realms and
--- rulesets are unmeasured, so they stay out).
+-- A character is reachable by mail when its faction tag and ruleset match the
+-- current character's (session 6: the other faction fails). On Forever a
+-- realm is part of its ruleset, not a world of its own (owner, 2026-11-12: mail
+-- reached a character from another realm of the same ruleset); another
+-- ruleset is unmeasured, so it stays out.
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
@@ -87,9 +89,28 @@ function Registry.Characters()
     return out, "own"
 end
 
--- True when mail from the current character can reach c.
+-- A realm's ruleset, from its name: the name is all there is (AltStable's
+-- rule, AltStable/Config.lua RulesetOf). Whole words, so an "rp" inside
+-- another word isn't RP; RP and PvP together are RP-PvP; a realm that can't
+-- be read is "Unknown", which matches nothing.
+function Registry.RulesetOf(realm)
+    if type(realm) ~= "string" or API.IsSecret(realm) or not realm:find("%S") then return "Unknown" end
+    local words = " " .. (realm:lower():gsub("[^%w]", " ")) .. " "
+    if words:find(" hardcore ", 1, true) or words:find(" hc ", 1, true) then return "Hardcore" end
+    if words:find(" rppvp ", 1, true) then return "RPPvP" end
+    local pvp = words:find("pvp", 1, true) ~= nil
+    if words:find(" rp ", 1, true) or words:find(" roleplay ", 1, true) then
+        return pvp and "RPPvP" or "RP"
+    end
+    if pvp then return "PvP" end
+    return "Normal"
+end
+
+-- True when mail from the current character can reach c: same faction, same
+-- ruleset (any of its realms), not the current character.
 function Registry.Reachable(c)
     local me = Registry.Current()
-    return not c.current and me.realm ~= nil and me.faction ~= nil and c.realm == me.realm
-        and c.faction == me.faction
+    local ruleset = Registry.RulesetOf(me.realm)
+    return not c.current and me.faction ~= nil and c.faction == me.faction and ruleset ~= "Unknown"
+        and Registry.RulesetOf(c.realm) == ruleset
 end

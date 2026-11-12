@@ -51,6 +51,18 @@ SendMailNameEditBox:SetText("")
 MailFrame:Show()
 MailFrameTab_OnClick(MailFrameTab2)
 
+-- The item grid (Bag.lua): the toggle, a button's tooltip, a click, the Stop.
+local Bag = GM.Bag
+WoW.inbox = { { sender = "A", subject = "ore", items = { [1] = { id = 2770, count = 5 } } } }
+InboxFrame:Show()
+Bag.toggle:GetScript("OnEnter")(Bag.toggle)
+Bag.toggle:GetScript("OnClick")(Bag.toggle)
+local bagUI = GM._test.bag.ui()
+bagUI.buttons[1]:GetScript("OnEnter")(bagUI.buttons[1])
+bagUI.buttons[1]:GetScript("OnClick")(bagUI.buttons[1])
+bagUI.stop:GetScript("OnClick")(bagUI.stop)
+bagUI.content:GetScript("OnMouseWheel")(bagUI.content, -1)
+
 local recorded = Kit.checkMethods({ allow = {
     ["GameTooltip:SetItemByID"] = "a Lua accessor of Blizzard's tooltip mixin, over C_TooltipInfo.GetItemByID "
         .. "(Blizzard_SharedXMLGame/Tooltip/TooltipDataHandler.lua:525; QuestInfo.lua:1285 calls it)",

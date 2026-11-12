@@ -262,7 +262,8 @@ eq(texts(menu()), "# No names yet", "nothing known: one line says so")
 Store.SetChar("Player-1-ZZZ", { name = "Zed Alt", realm = "Doomhowl", faction = "Horde", lastPlayDay = db.playDay })
 Store.SetChar("Player-1-CCC", { name = "Bank Alt", realm = "Doomhowl", faction = "Horde", lastPlayDay = db.playDay })
 Store.SetChar("Player-1-DDD", { name = "Other Side", realm = "Doomhowl", faction = "Alliance", lastPlayDay = db.playDay })
-Store.SetChar("Player-1-EEE", { name = "Far Away", realm = "Elsewhere", faction = "Horde", lastPlayDay = db.playDay })
+Store.SetChar("Player-1-EEE", { name = "Far Away", realm = "Elsewhere PvP", faction = "Horde", lastPlayDay = db.playDay })
+Store.SetChar("Player-1-GGG", { name = "Other Realm", realm = "Doomhowl Two", faction = "Horde", lastPlayDay = db.playDay })
 db.recents["old friend"] = { name = "Old Friend", day = db.playDay - 2 }
 db.recents["new friend"] = { name = "New Friend", day = db.playDay }
 db.recents["bank alt"] = { name = "Bank Alt", day = db.playDay }
@@ -274,8 +275,8 @@ local requests = WoW.rosterRequests
 local m = menu()
 eq(WoW.rosterRequests, requests + 1, "opening the picker asks for the guild roster")
 eq(m.scroll, 400, "the menu scrolls past 400 px")
-eq(texts(m), "# My characters | Bank Alt | Zed Alt | # Recent | New Friend | Old Friend | # Friends | pal one | Pal Two | Guild",
-    "sections in order, each sorted; own characters only when reachable; one name once (first wins)")
+eq(texts(m), "# My characters | Bank Alt | Other Realm | Zed Alt | # Recent | New Friend | Old Friend | # Friends | pal one | Pal Two | Guild",
+    "sections in order, each sorted; own characters of this ruleset and faction (any realm); one name once (first wins)")
 local g = m.items[#m.items]
 eq(g.scroll, 400, "  the guild is a scrolling submenu")
 eq(texts(g), "Guildie Ace | Guildie Bee", "  this realm's suffix dropped; this character, blanks and repeats left out")

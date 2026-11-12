@@ -18,9 +18,8 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed plan is in
 docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
-(#17) is under way: the core (the memory, Sent and Trash capture) and the window (Inbox
-snapshots, the Sent / Inbox / Trash folders) are merged; S1 (the address book, the last-recipient
-fill) is PR 4 of 5.
+(#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); the v0.2.0 tag waits for the
+in-game gate in docs/PLAN.md ("The grid PR in detail").
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -53,7 +52,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
 `Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Names.lua` → `Core\Store.lua` → `Core\Registry.lua` →
 `Core\Sent.lua` → `Core\Trash.lua` → `Core\Summary.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
-`Comforts.lua` → `Window.lua` → `Address.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
+`Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
@@ -94,7 +93,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   as a bare index; a removal above it would shift it). Open All takes twins (no remembered target);
   a remembered target (the selection, a Return / Delete) needs one match, and waits for every mail
   to load (5 s at most; our controls stay disabled meanwhile). Run kinds: `openall`,
-  `selected` (its targets move to their residuals), `return`, `delete`; `Ops.Watch` repaints
+  `selected` (its targets move to their residuals), `items` (I4: `opts.items`, only those items,
+  never money; an unresolved mail is `loading`), `return`, `delete`; `Ops.Watch` repaints
   every control when a run starts or stops. A `SendMail` is a foreign call too.
 - **`Core\Names.lua`**: `Names.Key` (trimmed, spaces collapsed, lower-cased; a `-Realm` suffix kept)
   and `Names.Display` (trimmed). A secret name has neither.
@@ -109,7 +109,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Core\Registry.lua`**: own characters by GUID (`chars`, refreshed on every tick), or
   AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1 with the `provenance` feature;
   only its `self` and `own-account` characters, never a third party's; nothing from it saved);
-  `Registry.Reachable` (same realm and faction tag, not the current character).
+  `Registry.Reachable` (same faction tag and ruleset, `Registry.RulesetOf` from the realm name,
+  any realm of it; not the current character).
 - **`Core\Sent.lua`**: every send, captured at the `SendMail` post-hook and attributed by a 120 s
   window (`sent` only when it is the one candidate at `MAIL_SEND_SUCCESS`, else `unconfirmed` at its
   end; a stranger's send waits for the dialog's close; error 457 drops it), plus the returns Trash
@@ -150,6 +151,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   fill: an empty To box gets `recents[chars[guid].lastTo].name`, highlighted, from a
   `MailFrameTab_OnClick` post-hook and a frame after an attributed send (`Sent.onConfirmed`);
   setting `autofill`. No focus hooks on Blizzard's box.
+- **`Bag.lua`**: I4. Our bag button on the inbox's title bar (left of the window's) toggles a
+  glass panel beside `MailFrame` (a child of `InboxFrame`): every non-currency attachment merged
+  by itemID in a fixed pool of 6 x 9 buttons, a row offset. A click is an Ops `items` run
+  (`Ops.TakeItems`: only those items, never money, COD and GM left); the footer's Stop, or the
+  item's own button, stops it. Refreshed only while visible.
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).
 - **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the

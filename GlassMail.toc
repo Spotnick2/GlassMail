@@ -29,5 +29,6 @@ Inbox.lua
 Comforts.lua
 Window.lua
 Address.lua
+Bag.lua
 Options.lua
 GlassMail.lua

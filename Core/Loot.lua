@@ -56,25 +56,40 @@ function Loot.Fits(item, bags, keepFree)
     return bags.general > (keepFree or 0)
 end
 
+-- True when the mail holds one of these items (currency is never one).
+local function holds(m, items)
+    for _, it in ipairs(m.items) do
+        if not it.isCurrency and items[it.itemID] then return true end
+    end
+    return false
+end
+
 -- What this mail offers now, or nil, and why not: "cod", "filtered",
 -- "loading", "full", "failed". Money first (it needs no slot), then the
 -- occupied slots from the lowest; COD and GM mail are left to the player, as
 -- Blizzard's Open All does. With opts.only (the selection, a set of
 -- fingerprints, counted in `counts`) only those mails count, each only while
 -- it is unique, and the type filters don't apply: the player chose them.
+-- With opts.items (I4: a set of itemIDs) only those items are taken, never
+-- money; an unresolved mail is "loading" (its list proves nothing), a
+-- resolved one without them counts nowhere.
 local function mailAction(m, bags, opts, counts)
     if opts.only then
         if not (m.fp and opts.only[m.fp]) then return nil, nil end
         if counts[m.fp] ~= 1 then return nil, "twin" end
     end
     if not m.resolved then return nil, "loading" end
+    local items = opts.items
+    if items and not holds(m, items) then return nil, nil end
     if m.cod > 0 then return nil, "cod" end
     if m.isGM then return nil, "gm" end
-    if not opts.only and opts.types and opts.types[m.type] == false then return nil, "filtered" end
-    if m.money > 0 then return { mail = m, kind = "money" } end
+    if not (opts.only or items) and opts.types and opts.types[m.type] == false then return nil, "filtered" end
+    if not items and m.money > 0 then return { mail = m, kind = "money" } end
     local why
     for _, it in ipairs(m.items) do
-        if not it.isCurrency and opts.failed and opts.failed[it.itemID] then
+        if items and (it.isCurrency or not items[it.itemID]) then
+            -- not one of the items asked for
+        elseif not it.isCurrency and opts.failed and opts.failed[it.itemID] then
             why = why or "failed"
         else
             local fits = Loot.Fits(it, bags, opts.keepFree)

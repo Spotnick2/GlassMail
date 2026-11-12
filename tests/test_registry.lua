@@ -44,12 +44,34 @@ for _, c in ipairs(list) do byGuid[c.guid] = c end
 check(byGuid[ME] and byGuid[ME].current, "  the current character is flagged")
 eq(byGuid["Player-1-BBB"] and byGuid["Player-1-BBB"].name, "Kaleid Morphisto", "  the other is listed")
 
--- Reachability: same realm and faction, not the current one.
+-- Reachability: same ruleset and faction, not the current one.
 check(Registry.Reachable(byGuid["Player-1-BBB"]), "same realm and faction: reachable")
 check(not Registry.Reachable(byGuid[ME]), "the current character isn't a recipient")
 check(not Registry.Reachable(byGuid["Player-1-CCC"]), "the other faction isn't reachable")
-check(not Registry.Reachable({ name = "X Y", realm = "Elsewhere", faction = "Horde" }), "nor another realm")
+check(Registry.Reachable({ name = "X Y", realm = "Elsewhere", faction = "Horde" }),
+    "another realm of the same ruleset is reachable (a realm is part of its ruleset)")
+check(not Registry.Reachable({ name = "X Y", realm = "Elsewhere PvP", faction = "Horde" }), "another ruleset isn't")
 check(not Registry.Reachable({ name = "X Y", faction = "Horde" }), "nor one with no realm known")
+local realm = WoW.realm
+WoW.realm = nil
+check(not Registry.Reachable(byGuid["Player-1-BBB"]), "  nor anyone while this character's realm is unknown")
+check(not Registry.Reachable({ name = "X Y", faction = "Horde" }), "  not even one whose realm is unknown too")
+WoW.realm = realm
+
+-- Rulesets, from the realm's name (AltStable's rule).
+local R = Registry.RulesetOf
+eq(R("CAMWOW US2 Realm 1 PvE"), "Normal", "a PvE realm is Normal")
+eq(R("CAMWOW US2 Realm 7 PvE"), R("CAMWOW US2 Realm 1 PvE"), "  realms 1 and 7: the same ruleset")
+eq(R("Classic Beta PvP 2"), "PvP", "a PvP realm, numbered")
+eq(R("Some RP Realm"), "RP", "RP, as a word")
+eq(R("Sharp Realm"), "Normal", "  not inside another word")
+eq(R("Roleplay PvP"), "RPPvP", "RP and PvP together: RP-PvP")
+eq(R("RPPvP One"), "RPPvP", "  written as one word")
+eq(R("Hardcore Realm"), "Hardcore", "Hardcore")
+eq(R("HC One"), "Hardcore", "  HC as a word")
+eq(R(""), "Unknown", "an empty name is Unknown")
+eq(R(nil), "Unknown", "  so is none")
+eq(R(WoW.Secret("realm")), "Unknown", "  and a secret one")
 
 -- AltStable with an unknown API version: ignored.
 local calls = 0

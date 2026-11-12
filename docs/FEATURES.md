@@ -45,7 +45,8 @@ light text (owner, 2026-10-10); the target for the rest of the look is
 
 Characters are keyed by GUID, with "First Surname" as the mail address. Each entry also keeps the
 realm, ruleset and faction, and a character is offered as a recipient only when those show mail
-can reach it from the current character. Two sources:
+can reach it from the current character: the same faction and ruleset, any realm of it (a realm is
+part of its ruleset on Forever). Two sources:
 1. GlassMail's own account-wide record of the characters that have logged in.
 2. AltStable, live and read-only, when it is loaded: `AltStable.GetCharacters()` (checked against
    `PUBLIC_API_VERSION`) and `AltStable.RegisterCallback("CharactersChanged", fn)`. AltStable
