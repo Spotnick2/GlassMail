@@ -21,7 +21,7 @@ inbox()
 local GM = loadAddon()
 local O = GM._test.openAll
 local button = O.button()
-local function step(dt) WoW.now = WoW.now + (dt or 0.2); WoW.tick(dt or 0.2) end
+local function step(dt) WoW.tick(dt or 0.2) end   -- WoW.tick moves the clock (WowTestKit #9)
 local function last() return WoW.mailCalls[#WoW.mailCalls] end
 local function callText(c) return c and (c[1] .. "(" .. tostring(c[2]) .. (c[3] and (", " .. c[3]) or "") .. ")") end
 local function click(b, mouse) b._scripts.OnClick(b, mouse or "LeftButton") end

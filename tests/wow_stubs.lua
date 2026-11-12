@@ -124,7 +124,7 @@ Settings = {
 
 local function mailWindow(name)
     local w = CreateFrame("Frame", name, UIParent)
-    w._shown = false
+    w:Hide()
     w._level = 10
     w.NineSlice = CreateFrame("Frame", nil, w)
     w.Bg = Methods.CreateTexture(w)
@@ -402,12 +402,6 @@ function Methods.HasFocus(e) return WoW.focus == e end
 function Methods.ClearFocus(e) if WoW.focus == e then WoW.focus = nil end end
 -- The frame under the mouse (a test sets WoW.mouseOver).
 function Methods.IsMouseOver(w) return WoW.mouseOver == w end
--- WowTestKit #58: SetID keeps the ID and GetID returns it (0 until set), in the
--- kit since c99451a; this pin predates it.
-if not rawget(Methods, "GetID") then
-    function Methods.SetID(w, id) w._id = id end
-    function Methods.GetID(w) return w._id or 0 end
-end
 CreateFrame("Button", "MailFrameTab1", mail):SetID(1)
 CreateFrame("Button", "MailFrameTab2", mail):SetID(2)
 function MailFrameTab_OnClick(self, tabID)
@@ -434,6 +428,12 @@ end
 local blizzardSend = CreateFrame("Frame")
 blizzardSend:SetScript("OnEvent", function() if not WoW.blizzardSendLate then WoW.blizzardSendSuccess() end end)
 blizzardSend:RegisterEvent("MAIL_SEND_SUCCESS")
+-- The mailbox opening shows the mail window (MailFrame.lua:99, MailFrame_Show), before
+-- any addon's handler: Blizzard_MailFrame registers first. Its children's OnShow
+-- (OpenAllMail's) fire only under a shown parent (WowTestKit #21).
+local blizzardShow = CreateFrame("Frame")
+blizzardShow:SetScript("OnEvent", function() MailFrame:Show() end)
+blizzardShow:RegisterEvent("MAIL_SHOW")
 
 -- Blizzard's autocomplete on the To box (AutoComplete.lua; MailFrame.xml:628-657),
 -- enough of it for S1's completion. C_AutoComplete answers from
