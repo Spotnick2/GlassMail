@@ -177,7 +177,9 @@ function Methods.SetItemByID(t, id) t._lines, t._itemID = {}, id end
 -- A tooltip's SetText starts it over with one line; any other widget's is the core's.
 local coreSetText = Methods.SetText
 function Methods.SetText(t, text, ...)
-    if t._type == "GameTooltip" then t._lines = { text } else return coreSetText(t, text, ...) end
+    if t._type == "GameTooltip" then t._lines = { text }; return end
+    if t._type == "EditBox" then t._cursor, t._hl, t._highlighted = nil, nil, nil end
+    return coreSetText(t, text, ...)
 end
 function Methods.IsTruncated(fs) return fs._truncated == true end
 function GameTooltip_Hide() GameTooltip:Hide() end
@@ -380,7 +382,21 @@ function SendMailFrame_EnableSendMailButton() end
 -- runs from a frame the test makes after the addon loads (its handlers first).
 local nameBox = CreateFrame("EditBox", "SendMailNameEditBox", SendMailFrame)
 nameBox._text = ""
-function Methods.HighlightText(e) e._highlighted = e._text end
+-- An EditBox's highlight and cursor, in bytes. HighlightText(start, stop):
+-- both optional, the whole text without them (a negative stop: to the end);
+-- e._hl keeps the range, e._highlighted its text. SetText (the core's, wrapped
+-- below) puts the cursor at the end and drops the highlight.
+function Methods.HighlightText(e, s, t)
+    local text = e._text or ""
+    s = s or 0
+    if t == nil or t < 0 then t = #text end
+    e._hl, e._highlighted = { s, t }, text:sub(s + 1, t)
+end
+function Methods.GetCursorPosition(e) return math.min(e._cursor or math.huge, #(e._text or "")) end
+function Methods.SetCursorPosition(e, n) e._cursor = n end
+function Methods.GetUTF8CursorPosition(e) return strlenutf8((e._text or ""):sub(1, e:GetCursorPosition())) end
+function Methods.IsInIMECompositionMode(e) return e._ime == true end
+function strlenutf8(s) return select(2, s:gsub("[^\128-\191]", "")) end
 function Methods.SetFocus(e) WoW.focus = e end
 function Methods.HasFocus(e) return WoW.focus == e end
 function Methods.ClearFocus(e) if WoW.focus == e then WoW.focus = nil end end
@@ -418,6 +434,102 @@ end
 local blizzardSend = CreateFrame("Frame")
 blizzardSend:SetScript("OnEvent", function() if not WoW.blizzardSendLate then WoW.blizzardSendSuccess() end end)
 blizzardSend:RegisterEvent("MAIL_SEND_SUCCESS")
+
+-- Blizzard's autocomplete on the To box (AutoComplete.lua; MailFrame.xml:628-657),
+-- enough of it for S1's completion. C_AutoComplete answers from
+-- WoW.autocomplete (names): the text up to the UTF-8 cursor starts the name,
+-- case aside (WoW.autocompleteCalls counts the calls). AutoCompleteBox shows
+-- the results (.parent, .first: the selected entry); a lone exact match isn't
+-- shown (AutoComplete.lua:202). The box's OnTextChanged updates it on user
+-- input (367-378), OnChar completes inline (392-418), OnEnterPressed takes
+-- the shown entry or moves on (MailFrame.xml:643-647, AutoComplete.lua:358).
+WoW.autocomplete, WoW.autocompleteCalls = {}, 0
+AUTOCOMPLETE_LIST = { MAIL = { include = 1, exclude = 2 } }
+local function utf8Prefix(s, n)
+    local out, i = {}, 0
+    for ch in s:gmatch("[%z\1-\127\192-\247][\128-\191]*") do
+        if i >= n then break end
+        out[#out + 1], i = ch, i + 1
+    end
+    return table.concat(out)
+end
+-- Blizzard's side calls this local, so a test can take C_AutoComplete away
+-- (or make it throw) for the addon only.
+local function results(text, num, cursor, allowFullMatch, include, exclude)
+    WoW.autocompleteCalls = WoW.autocompleteCalls + 1
+    local typed, out = utf8Prefix(text, cursor):lower(), {}
+    for _, name in ipairs(WoW.autocomplete) do
+        if #out < num and name:lower():sub(1, #typed) == typed then out[#out + 1] = { name = name, priority = 0 } end
+    end
+    return out
+end
+C_AutoComplete = { GetAutoCompleteResults = results }
+local dropdown = CreateFrame("Frame", "AutoCompleteBox", UIParent)
+dropdown:Hide()
+local function hideDropdown(box)
+    if dropdown.parent == box then dropdown.parent, dropdown.first = nil, nil; dropdown:Hide() end
+end
+local function updateDropdown(box, text, cursor)
+    if text == "" then return hideDropdown(box) end
+    local r = results(text, 6, cursor, true, 1, 2)
+    if #r == 1 and r[1].name == text then r[1] = nil end
+    if #r > 0 then
+        dropdown.parent, dropdown.first = box, r[1].name
+        dropdown:Show()
+    else
+        hideDropdown(box)
+    end
+end
+nameBox:SetScript("OnTextChanged", function(self, userInput)
+    if userInput then updateDropdown(self, self:GetText(), self:GetUTF8CursorPosition()) end
+    if self:GetText() == "" then hideDropdown(self) end
+end)
+nameBox:SetScript("OnChar", function(self)
+    local text = self:GetText()
+    local cursor = self:GetUTF8CursorPosition()
+    if cursor ~= strlenutf8(text) then return end
+    local info = results(text, 1, cursor, true, 1, 2)[1]
+    if info then
+        updateDropdown(self, text, cursor)
+        self:SetText(info.name)
+        self:HighlightText(#text, #info.name)
+        self:SetCursorPosition(#text)
+    end
+end)
+nameBox:SetScript("OnEnterPressed", function(self)
+    if dropdown:IsShown() and dropdown.parent == self then
+        local name = dropdown.first
+        hideDropdown(self)
+        self:SetText(name)
+        self:SetCursorPosition(#name)
+    else
+        self:ClearFocus()   -- SendMailSubjectEditBox:SetFocus()
+        self._hl, self._highlighted = nil, nil   -- EditBox_ClearHighlight on focus lost
+    end
+end)
+-- A typed character as the client handles it: it replaces the highlight (or
+-- goes in at the cursor), the cursor after it; then OnTextChanged(true) and
+-- OnChar, in that order, or OnChar first with WoW.charFirst. With OnChar first,
+-- a SetText inside it takes the typed change's own update away (SetText clears
+-- userInput, AutoComplete.lua:401): the worst case.
+function WoW.typeInto(e, ch)
+    local text, cur = e._text or "", e:GetCursorPosition()
+    local s, t = cur, cur
+    if e._hl and e._hl[2] > e._hl[1] then s, t = e._hl[1], e._hl[2] end
+    text = text:sub(1, s) .. ch .. text:sub(t + 1)
+    e._text, e._cursor, e._hl, e._highlighted = text, s + #ch, nil, nil
+    local changed, onChar = e:GetScript("OnTextChanged"), e:GetScript("OnChar")
+    if WoW.charFirst then
+        if onChar then onChar(e, ch) end
+        if changed and e._text == text then changed(e, true) end
+    else
+        if changed then changed(e, true) end
+        if onChar then onChar(e, ch) end
+    end
+end
+function WoW.typeText(e, s)
+    for ch in s:gmatch("[%z\1-\127\192-\247][\128-\191]*") do WoW.typeInto(e, ch) end
+end
 
 -- Friends and the guild (S1's picker). WoW.friends = { { name = ... } };
 -- WoW.guild = { names } (nil: not in a guild); WoW.rosterRequests counts

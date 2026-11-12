@@ -56,6 +56,13 @@ picker.rows[2]:GetScript("OnClick")(picker.rows[2])
 SendMailNameEditBox:SetText("")
 MailFrame:Show()
 MailFrameTab_OnClick(MailFrameTab2)
+-- The completion: typing one of my characters' start into the To box.
+Store.SetChar("Player-1-VVV", { name = "Vex Morrow", realm = WoW.realm, faction = WoW.faction, lastPlayDay = Store.PlayDay() })
+SendMailNameEditBox:SetText("")
+SlashCmdList.GLASSMAIL("debug on")
+WoW.typeText(SendMailNameEditBox, "ve")
+SlashCmdList.GLASSMAIL("debug off")
+check(SendMailNameEditBox:GetText() == "Vex Morrow", "the exercise completed a name")
 
 -- The item grid (Bag.lua): the toggle, a button's tooltip, a click, the Stop.
 local Bag = GM.Bag
