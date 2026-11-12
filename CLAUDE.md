@@ -51,9 +51,9 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 
 ## Layout
 
-TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
-`Core\Scan.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Names.lua` → `Core\Store.lua` → `Core\Registry.lua` →
-`Core\Sent.lua` → `Core\Trash.lua` → `Core\Summary.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
+TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
+`Core\Mailbox.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Store.lua` → `Core\Registry.lua` →
+`Core\Sent.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
 `Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
@@ -83,11 +83,19 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   reading pane's frame under the rows: a slot behind each row's item button, a line under every
   row but the last (hidden while the inbox is empty), and the envelope with "No mail" when nothing is loaded or on the server (an
   `InboxFrame:Update` post-hook); shown under glass while `inboxGuides` is on.
-- **`Core\Scan.lua`**: the inbox as plain values (`Scan.Inbox()`), never `GetInboxText`. Each mail
+- **`Libs\LibMailbox-1.0`** (M3; `..\LibMailbox`, github.com/Spotnick2/LibMailbox; its
+  `docs/DESIGN.md` is the contract): the inbox as plain values, never `GetInboxText`. Each mail
   has a type (`ah` by the six `AUCTION_*_MAIL_SUBJECT` templates, `system` when it can't be
   replied to, else `player`) and a fingerprint (length-prefixed sender, subject, money, COD,
   returned, and each slot's number, link and count). A secret field or a missing link leaves the
-  mail unresolved: no fingerprint. `Scan.Residual` is the fingerprint an action should leave.
+  mail unresolved: no fingerprint; a withheld header is `secret`, and `scan.headers` says every
+  header was read. The summary (two shapes: a saved mail, AltStable's live rule) and the name key
+  are there too. AltStable embeds it as well (its `mail_*` summary).
+- **`Core\Mailbox.lua`**: GlassMail's `Scan` (`Inbox`, `Count`, `Residual`, `Fingerprint`),
+  `Summary.Of(snapshot, now)` and `Names` (`Key`, `Display`) over the library, names and
+  signatures unchanged. Each call looks the library's function up when it runs and first asks
+  `LM.Ready()`: after a newer embedded copy failed half-way, a scan is unreadable, a count empty,
+  a summary or a name nil. `Scan.Residual` is the fingerprint an action should leave.
 - **`Core\Loot.lua`**: what Open All takes next (`Loot.Next`, money first, then slots from the
   lowest) and whether an item fits (`Loot.Fits`: unlocked partial stacks, a specialty bag of its
   family, general slots above `keepFree`; unknown when not cached). Bags 0-4.
@@ -103,8 +111,6 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   `selected` (its targets move to their residuals), `items` (I4: `opts.items`, only those items,
   never money; an unresolved mail is `loading`), `return`, `delete`; `Ops.Watch` repaints
   every control when a run starts or stops. A `SendMail` is a foreign call too.
-- **`Core\Names.lua`**: `Names.Key` (trimmed, spaces collapsed, lower-cased; a `-Realm` suffix kept)
-  and `Names.Display` (trimmed). A secret name has neither.
 - **`Core\Store.lua`**: M2's saved memory in `GlassMailDB`: `version`, the play-day clock
   (`playDay`, `lastDate`, a high-water mark; `Store.Tick` at login and every 10 minutes), and the
   subtrees `chars`, `recents`, `sent`, `trash`, `snapshots`. Each subtree is read with a shape check
@@ -126,8 +132,6 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 - **`Core\Trash.lua`**: every Delete / Return, ours or Blizzard's, captured at its post-hook and kept
   only when the next update proves it (its fingerprint and the loaded count each one fewer, within
   5 s, on a settled inbox, with no other call in between). Deletes go to Trash, returns to Sent.
-- **`Core\Summary.lua`**: `Summary.Of(snapshot, now)`, AltStable's mail rule (mails with items or
-  money and time left: count, money, soonest expiry).
 - **`Core\Memory.lua`**: X1's snapshots. A visit runs from `MAIL_SHOW` to the close; each inbox
   update in it scans a frame later, for that visit only; a scan replaces the character's snapshot
   only when it read every loaded mail whole (else the old one stays). That the first update carries
@@ -255,7 +259,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
 Lua 5.1 at `C:\Program Files (x86)\Lua\5.1\` (`lua.exe`, `luac.exe`). No build step.
 
 ```powershell
-pwsh tests\run.ps1                                                   # luac -p on the TOC files + probe, then every tests\test_*.lua, through WowTestKit at its pin (needs ..\LibGlass or $env:LIBGLASS)
+pwsh tests\run.ps1                                                   # luac -p on the TOC files + probe, then every tests\test_*.lua, through WowTestKit at its pin (needs ..\LibGlass and ..\LibMailbox, or $env:LIBGLASS / $env:LIBMAILBOX)
 pwsh tests\run.ps1 -KitDev                                           # the same against the ..\WowTestKit working copy
 & 'C:\Program Files (x86)\Lua\5.1\lua.exe' tests\test_boot.lua      # one test, from the repo root (once run.ps1 has fetched the kit)
 pwsh Tools\deploy.ps1 -Probe                                         # copy the addon (+ MailProbe) into AddOns
@@ -315,7 +319,7 @@ Same as GlassChat's CLAUDE.md, "Workflow and releasing":
 ## Conventions
 
 - **Right-size for a single maintainer.** The simplest thing that works; no speculative
-  abstraction. No library until a second addon needs the code (M3).
+  abstraction. No library until a second addon needs the code (M3's LibMailbox: AltStable).
 - **Measured beats reasoned.** If a claim about the client can be checked in game, check it.
 - Match the surrounding code's idiom. Keep pure refactors in their own commit.
 

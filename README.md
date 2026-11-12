@@ -105,13 +105,14 @@ Lua errors are hidden by default on this client. If something seems broken, type
 
 ## Development
 
-- Tests: `pwsh tests/run.ps1` (Lua 5.1, needs a LibGlass checkout at `..\LibGlass` or
-  `$env:LIBGLASS`).
+- Tests: `pwsh tests/run.ps1` (Lua 5.1, needs LibGlass and LibMailbox checkouts at `..\LibGlass` and
+  `..\LibMailbox`, or `$env:LIBGLASS` / `$env:LIBMAILBOX`).
 - Deploy a dev copy: `pwsh Tools/deploy.ps1 -Probe`.
 - [CLAUDE.md](CLAUDE.md) has the conventions, [docs/PLAN.md](docs/PLAN.md) the milestones, and
   [docs/FOREVER-PROBE.md](docs/FOREVER-PROBE.md) what was measured on the live client.
 
 ## Licence
 
-MIT, see [LICENSE](LICENSE). The embedded LibGlass-1.0 is MIT too, under its own licence.
+MIT, see [LICENSE](LICENSE). The embedded LibGlass-1.0 and LibMailbox-1.0 are MIT too, under their own
+licences.
 Glass Mail is an independent addon, not affiliated with Postal.

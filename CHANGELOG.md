@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Glass Mail reads the mailbox through LibMailbox, a small library it now shares with AltStable,
+  so both read your mail the same way. Nothing looks different.
 - The embedded glass library is LibGlass r11. Glass Mail's material is unchanged, so nothing looks
   different.
 

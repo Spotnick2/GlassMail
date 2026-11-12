@@ -2,7 +2,7 @@ name: Package check
 
 # From the template in References\Docs\release\package-check.yml (RELEASING.md
 # §2), with this repo's own steps in its two REPO-SPECIFIC places: the pinned
-# LibGlass, the syntax check and unit tests, and the zip allowlist.
+# LibGlass and LibMailbox, the syntax check and unit tests, and the zip allowlist.
 #
 # `check` is a dry run. -d is the real no-upload switch: merely leaving
 # CF_API_KEY out still lets the packager cut a GitHub release - with the WHOLE
@@ -57,6 +57,8 @@ jobs:
         run: |
           bash tests/fetch_external.sh Libs/LibGlass-1.0 "$RUNNER_TEMP/LibGlass"
           echo "LIBGLASS=$RUNNER_TEMP/LibGlass" >> "$GITHUB_ENV"
+          bash tests/fetch_external.sh Libs/LibMailbox-1.0 "$RUNNER_TEMP/LibMailbox"
+          echo "LIBMAILBOX=$RUNNER_TEMP/LibMailbox" >> "$GITHUB_ENV"
 
       # WoW runs Lua 5.1, so the tests do too. tests/run.ps1 is the Windows
       # entry point for the same files.
@@ -109,7 +111,7 @@ jobs:
           args: -d
 
       # The zip is what players install, so assert its SHAPE: the TOC, every
-      # Lua file it loads, LICENSE, our Media/*.tga, and under Libs/LibGlass-1.0 exactly what
+      # Lua file it loads, LICENSE, our Media/*.tga, and under each Libs/<library> exactly what
       # the library ships (its XML, every file the XML loads, LICENSE,
       # Media/*.tga). NOTHING else.
       - name: The package is exactly the addon and its library
@@ -127,6 +129,11 @@ jobs:
             tr -d '\r' < "$LIBGLASS/LibGlass-1.0.xml" | perl -0pe 's/<!--.*?-->//gs' |
               sed -n 's/.*<Script file="\([^"]*\)".*/\1/p' | tr '\\' '/' | sed "s|^|$lib/|"
             (cd "$LIBGLASS" && ls Media/*.tga) | sed "s|^|$lib/|"
+            mb=GlassMail/Libs/LibMailbox-1.0
+            echo "$mb/LibMailbox-1.0.xml"
+            echo "$mb/LICENSE"
+            tr -d '\r' < "$LIBMAILBOX/LibMailbox-1.0.xml" | perl -0pe 's/<!--.*?-->//gs' |
+              sed -n 's/.*<Script file="\([^"]*\)".*/\1/p' | tr '\\' '/' | sed "s|^|$mb/|"
           } | sort > expected.txt
           (cd unpacked && find . -type f | sed 's|^\./||' | sort) > actual.txt
           if ! diff -u expected.txt actual.txt; then
@@ -140,13 +147,16 @@ jobs:
       - name: The packaged library is the pinned commit
         run: |
           bad=0
-          lib=unpacked/GlassMail/Libs/LibGlass-1.0
-          while read -r f; do
-            case "$f" in
-              *.lua|*.xml) cmp -s <(tr -d '\r' < "$lib/$f") <(tr -d '\r' < "$LIBGLASS/$f") ;;
-              *) cmp -s "$lib/$f" "$LIBGLASS/$f" ;;
-            esac || { echo "LibGlass-1.0 differs from the pinned checkout: $f"; bad=1; }
-          done < <(cd "$lib" && find . -type f | sed 's|^\./||')
+          for pair in "LibGlass-1.0:$LIBGLASS" "LibMailbox-1.0:$LIBMAILBOX"; do
+            name=${pair%%:*} src=${pair#*:}
+            lib=unpacked/GlassMail/Libs/$name
+            while read -r f; do
+              case "$f" in
+                *.lua|*.xml) cmp -s <(tr -d '\r' < "$lib/$f") <(tr -d '\r' < "$src/$f") ;;
+                *) cmp -s "$lib/$f" "$src/$f" ;;
+              esac || { echo "$name differs from the pinned checkout: $f"; bad=1; }
+            done < <(cd "$lib" && find . -type f | sed 's|^\./||')
+          done
           test "$bad" -eq 0
 
       # The packager must have replaced @project-version@.

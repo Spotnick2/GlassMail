@@ -8,7 +8,8 @@
     into Libs\LibGlass-1.0 (.pkgmeta externals); for a dev copy this script
     hands that job to the LibGlass checkout's own deploy.ps1, which checks the
     checkout, copies only the shipped files and prints its commit. The checkout
-    is $env:LIBGLASS, else ..\LibGlass. (GlassChat's deploy, trimmed.)
+    is $env:LIBGLASS, else ..\LibGlass. The mailbox reader, LibMailbox-1.0, the
+    same way from $env:LIBMAILBOX, else ..\LibMailbox. (GlassChat's deploy, trimmed.)
 
     Usage:
         pwsh Tools/deploy.ps1               # GlassMail
@@ -32,6 +33,7 @@ if (-not (Test-Path $AddOnsPath)) { Write-Error "AddOns path not found: $AddOnsP
 
 . (Join-Path $PSScriptRoot "LibGlassPin.ps1")
 $LibGlass = if ($env:LIBGLASS) { $env:LIBGLASS } else { Join-Path (Split-Path -Parent $RepoRoot) "LibGlass" }
+$LibMailbox = if ($env:LIBMAILBOX) { $env:LIBMAILBOX } else { Join-Path (Split-Path -Parent $RepoRoot) "LibMailbox" }
 $ForeverProbe = if ($env:FOREVERPROBE) { $env:FOREVERPROBE } else { Join-Path (Split-Path -Parent $RepoRoot) "ForeverProbe" }
 
 function Deploy-Addon {
@@ -45,6 +47,13 @@ function Deploy-Addon {
     # refusal must leave the deployed addon as it was.
     & pwsh -NoProfile -File (Join-Path $LibGlass "Tools\deploy.ps1") -Addon GlassMail -AddOnsPath $AddOnsPath
     if ($LASTEXITCODE -ne 0) { Write-Error "LibGlass deploy refused; GlassMail was not touched"; exit 1 }
+    if (-not (Test-Path -LiteralPath (Join-Path $LibMailbox "Tools\deploy.ps1"))) {
+        Write-Error "LibMailbox checkout not found at $LibMailbox (clone github.com/Spotnick2/LibMailbox there, or set `$env:LIBMAILBOX)"
+        exit 1
+    }
+    Write-LibGlassPinStatus $RepoRoot $LibMailbox "this deploy tests a library the release won't ship" "Libs/LibMailbox-1.0"
+    & pwsh -NoProfile -File (Join-Path $LibMailbox "Tools\deploy.ps1") -Addon GlassMail -AddOnsPath $AddOnsPath
+    if ($LASTEXITCODE -ne 0) { Write-Error "LibMailbox deploy refused; GlassMail was not touched"; exit 1 }
     Write-Host "Deploying GlassMail -> $dest" -ForegroundColor Cyan
     New-Item -ItemType Directory -Force -Path $dest | Out-Null
     # The TOC is the list of what ships (subfolders included, e.g. Core\).
