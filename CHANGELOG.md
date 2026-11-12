@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Typing in the To box now completes your characters on your other WoW accounts too (the ones
+  AltStable knows), which the game's own suggestions can't see. It works like the game's: the rest
+  of the name appears highlighted, keep typing to change it, Enter or Tab to keep it. Names the
+  game already suggests are left to it.
+
 ## v0.2.0
 
 - Every item in the mailbox in one grid: the bag button on the inbox's title bar opens a panel

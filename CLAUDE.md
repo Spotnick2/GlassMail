@@ -18,8 +18,9 @@ probe checklist are [docs/PLAN.md](docs/PLAN.md); measured results go in
 **Status: M0 done** (skeleton, options page, first glass pass, MailProbe run on the live client,
 results in docs/FOREVER-PROBE.md). **M1 done** (issue #4, v0.1.0; the reviewed plan is in
 docs/PLAN.md): the look, the mail core with Open All, selection with row extras, and X3. **M2**
-(#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); the v0.2.0 tag waits for the
-in-game gate in docs/PLAN.md ("The grid PR in detail").
+(#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); v0.2.0 is released (2026-11-12),
+and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as they play. After it:
+the To box's completion ("S1: completing a name as you type").
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -157,7 +158,11 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Compat.lua` → `Glass
   the send tab going, all through one cleanup. The
   fill: an empty To box gets `recents[chars[guid].lastTo].name`, highlighted, from a
   `MailFrameTab_OnClick` post-hook and a frame after an attributed send (`Sent.onConfirmed`);
-  setting `autofill`. No focus hooks on Blizzard's box.
+  setting `autofill`. No focus hooks on Blizzard's box. The completion: one `OnChar` post-hook on
+  the box completes one of my characters Blizzard's way (rest highlighted, cursor after the typed
+  part) only when Blizzard's own source has nothing, its dropdown is hidden, no IME composition and
+  the cursor is at the end; Blizzard's autocomplete is only read, never written. A second hook,
+  `OnTextChanged`, only traces under `/gmail debug on`.
 - **`Bag.lua`**: I4. Our bag button on the inbox's title bar (left of the window's) toggles a
   glass panel beside `MailFrame` (a child of `InboxFrame`): every non-currency attachment merged
   by itemID in a fixed pool of 6 x 9 buttons, a row offset. A click is an Ops `items` run

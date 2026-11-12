@@ -17,14 +17,16 @@ review's main corrections are listed at the end.
   `Core/Loot.lua`), the skin finished in clear and smoked glass, I1, I2, I3, X3, with the operation
   records that confirm each action succeeded. Five PRs: look → probe session 5 → core + I1 →
   I2 + I3 → X3 + v0.1.0. See "M1" below.
-- **M2** *(done, #17; v0.2.0 once its in-game gate passes, "The grid PR in detail")*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
-  and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here.
+- **M2** *(done, #17; v0.2.0, released 2026-11-12; the owner runs its in-game gate as they play,
+  "The grid PR in detail")*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
+  and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here. After it, the
+  To box's completion ("S1: completing a name as you type").
 - **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
   addon needs them.
 - **M4:** N1 bank character (`Core/Send.lua`, one Send click per batch), N2 local return assistance.
-- **Later:** cross-account N2 over LibAccountSync, shared-settings sync, merged autocomplete, Forward.
+- **Later:** cross-account N2 over LibAccountSync, shared-settings sync, Forward.
 
 ## M1 (reviewed with Codex, 4 rounds, consensus)
 
@@ -1020,6 +1022,115 @@ fills it in; movement keys type into the search while it has focus; Enter, Escap
 without the search's focus) and a click outside; typing and chat work after it closes; the To
 box's own autocomplete still works after a pick; a stranger's send after a mouse pick and after an
 Enter pick goes through the confirmation with nothing blocked.
+
+### S1: completing a name as you type (owner, 2026-11-12, after v0.2.0; Codex gpt-6-astra, high, 2 rounds, consensus)
+
+**Why:** in game, typing an alt of another WoW account into the To box offers nothing. The box's
+completion is Blizzard's, from `C_AutoComplete.GetAutoCompleteResults` with
+`AUTOCOMPLETE_LIST.MAIL` (`MailFrame.xml:630`, `AutoComplete.lua:106`): friends, guild, people
+interacted with and **this WoW account's** characters. The client never sees the other accounts;
+AltStable does, and the picker lists them, but only once opened.
+
+**What it does:** where Blizzard completes nothing, Glass Mail completes the name **the way
+Blizzard does** (`AutoCompleteEditBox_AddHighlightedText`, `AutoComplete.lua:392-418`): the rest
+of the name is added, highlighted, the cursor after what was typed. Typing on replaces the
+highlight; Backspace removes it; while Blizzard's dropdown stays hidden (it has no results),
+Enter moves to the subject and Tab to the next field, keeping the name; losing focus clears the highlight
+(`EditBox_ClearHighlight`), the text stays. All Blizzard's own key handling, untouched.
+
+**How** (`Address.lua`, no new file, no setting):
+- **One behavioural post-hook,** `SendMailNameEditBox:HookScript("OnChar", ...)`, at
+  `Address.Start`, plus a diagnostic `OnTextChanged` hook that only logs while `/gmail debug on`
+  (below). It runs
+  after the template's `AutoCompleteEditBox_OnChar` (`AutoComplete.xml:8`; the box's own scripts,
+  `MailFrame.xml:628-657`, don't replace it). Nothing else is hooked, written or replaced:
+  Blizzard's `AutoCompleteBox`, its buttons, the box's `autoCompleteSource` and fields are left
+  alone (the 2026-10-09 review's "a picker instead of an autocomplete hook" was about replacing
+  that source; this doesn't). No focus hooks. OnChar fires for typed characters only (not
+  Backspace, not a paste, not `SetText`), so the fill and the picker's pick never trigger it.
+- **Only when all hold,** checked at that moment:
+  1. the box isn't composing IME input (`b:IsInIMECompositionMode()`, an EditBox method);
+  2. the text is a string, not secret, not empty (a `-`, another realm's, never starts one of
+     our names, which have none);
+  3. the cursor is at the end (`GetCursorPosition() == #text`, bytes): typing in the middle gets
+     nothing, and so does a keystroke Blizzard just completed (its completion puts the cursor back
+     before the added part, `AutoComplete.lua:410`);
+  4. **Blizzard's dropdown isn't shown** (`AutoCompleteBox:IsShown()`, read only; any dropdown, not
+     just this box's, which is the conservative side). A dropdown left from the previous letter
+     could otherwise stay under our completion, and Enter would pick its entry over ours
+     (`AutoComplete.lua:358-365`). Cost: when the previous letter had Blizzard results and this
+     one has none, ours may come one letter later.
+  5. **Blizzard has no result for the text:** the same call Blizzard makes,
+     `C_AutoComplete.GetAutoCompleteResults(text, 1, GetUTF8CursorPosition(), true,
+     AUTOCOMPLETE_LIST.MAIL.include, AUTOCOMPLETE_LIST.MAIL.exclude)`, returns no entry. This
+     covers Blizzard's exact match too (it adds nothing, cursor at the end, but the name is
+     Blizzard's: we must not lengthen it into another). The table or the list missing: nothing
+     (we can't tell, so we don't compete); the call throwing: nothing, one `API.Fail`;
+  6. **our match:** `Address.Complete(text)`, from **my characters only** (the problem is the
+     other account's alts; Blizzard already has friends, guild and people interacted with): the
+     picker's "My characters" list (reachable, not hidden, not the current character, no other
+     realm's; one function now shared by `Address.Sections()` and the completion, no other section
+     read), in name order, the first whose lower-cased start equals the lower-cased
+     text (plain bytes, `name:lower():sub(1, #text) == text:lower()`) and that is longer than the
+     text. **The whole list is checked first:** if the text already is one of them
+     (case-insensitively), nothing, even when a longer one comes earlier.
+- **The completion:** `SetText(name)` (the name's own case, as Blizzard's), then
+  `HighlightText(#text, #name)` and `SetCursorPosition(#text)`, bytes, as Blizzard
+  (`AutoComplete.lua:408-410`). `SetText` is the picker's pick (session 6: `SetText` then Send
+  passed, through the stranger's confirmation).
+- **Event order (measured in game, not assumed):** whether a typed character fires
+  `OnTextChanged(userInput)` before or after `OnChar`, and whether our `SetText` inside `OnChar`
+  turns that pending update's `userInput` false (Blizzard's comment says `SetText` clears it,
+  `AutoComplete.lua:401`), isn't known on this client. Condition 4 keeps us off any shown
+  dropdown in either order. One case stays open: a later `AutoComplete_Update` on the completed
+  text with the cursor inside it (`AutoComplete.lua:167, 195`) is a different query from ours and
+  might show Blizzard's dropdown under our completion; Enter would then take Blizzard's name. In
+  game: the dropdown after a completion, both on a fresh box and after a letter that had
+  Blizzard results. If it shows, that's a visible choice, not a silent overwrite; noted, not
+  worked around (no Blizzard dropdown helper is called, they write Blizzard's fields).
+- Errors: `safely("address complete", ...)`, one `API.Fail` key. My characters are read on each
+  eligible keystroke (the registry, or AltStable's list live; no cache to go stale).
+
+**Known limits** (said, not fixed): when Blizzard has any match, ours isn't offered even if it
+is the alt you meant ("Ka" gives Blizzard's guildmate "Kaleid", not your other account's
+"Karuzo"): type one more letter, or use the picker. Only my characters complete (a recent
+recipient Blizzard doesn't know doesn't). Inline only, no dropdown entry. Lower-casing is ASCII
+(`string.lower`), so an accented capital matches only as typed.
+
+**Tests** (`test_complete.lua`, each mutation-tested). The stubs get enough of Blizzard's
+autocomplete on the To box: `C_AutoComplete` answering from `WoW.autocomplete` (the text up to the
+UTF-8 cursor, case aside), `AutoCompleteBox` shown with the results, the box's `OnTextChanged` /
+`OnChar` / `OnEnterPressed` as `AutoComplete.lua` has them; `HighlightText` keeping its byte range;
+the cursor; `SetText` putting the cursor at the end and clearing the highlight. A typing helper: a
+character replaces the highlight or goes in at the cursor, then `OnTextChanged(true)` and `OnChar`
+in either order (with `OnChar` first, a `SetText` inside it takes the typed change's own update
+away, the worst case). Cases: an other-account alt from AltStable completes ("ve" → "Vex Morrow",
+highlighted from 2, cursor at 2), in both orders; the next matching letter keeps it, one that
+doesn't leaves what was typed; Enter then keeps it; Blizzard's result wins (its completion
+unchanged), and so does its exact match; a dropdown shown from the previous letter, then a letter
+Blizzard has nothing for: not completed (in the `OnChar`-first order), and Enter doesn't swap what
+was typed for a stale entry; IME composing: nothing; the cursor in the middle, a selection in the
+middle: nothing; `Address.Complete` of an empty, a secret or a whole name: nil; a selection through
+the end replaced (the last-recipient fill's whole highlight, then a letter): completes; typing over
+a pick: completes; the text already one of my characters, a longer one beside it: nothing more; the
+case taken from the name; name order; the current character, a hidden, an unreachable or a third
+party's one, a recent, a friend or a guild member: never offered; this realm's suffix dropped,
+another realm's name never offered; `C_AutoComplete`, its function or the list missing: nothing; it
+throwing: one `API.Fail` and the box as typed; a typed prefix that holds a multi-byte character
+highlights from its byte length; the debug trace off and on. `test_methods` types into the box.
+Equivalent mutants, kept: `Complete`'s secret check (the kit's secrets are userdata, caught by the
+type check; a client secret string may not be) and the trace's early return (`API.Debug` checks too;
+it saves the formatting).
+
+**In game:** typing the start of another account's alt completes it; with Blizzard's dropdown
+hidden, Enter, Tab and a click on Send keep it; a stranger's send after a completion, with an item
+or money, goes through the confirmation; a name Blizzard knows still completes Blizzard's way, its
+dropdown as before; after a completion, whether Blizzard's dropdown shows (fresh box, and after a
+letter with Blizzard results), and if it shows, the recipient Enter leaves; which order
+`OnTextChanged` / `OnChar` came in (`/gmail debug on` logs each, numbered, after Blizzard's handler,
+with the cursor, the text's byte length, the dropdown, and a line before our `SetText`; start with a
+prefix nobody completes, then compare one of ours with one of Blizzard's); Backspace, Delete, typing
+in the middle, a paste and focus loss behave as before.
 
 ### Review outcome (Codex gpt-6-astra, high, 5 rounds, consensus, 2026-10-13)
 

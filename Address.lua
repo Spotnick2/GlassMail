@@ -10,6 +10,8 @@
 -- - The fill: the To box starts with the last name this character mailed
 --   (chars[guid].lastTo, set and cleared by Core/Sent.lua), when the send tab
 --   opens and again after an attributed send, only while the box is empty.
+-- - The completion: typing in the To box completes one of my characters when
+--   Blizzard's own completion has nothing (another WoW account's alts).
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
@@ -123,6 +125,16 @@ local function guild()
     return out
 end
 
+-- My characters the current one can mail (reachable, not hidden), each
+-- { name, class }; candidate() still to apply.
+local function myCharacters()
+    local out = {}
+    for _, c in ipairs(Registry.Characters()) do
+        if not c.hidden and Registry.Reachable(c) then out[#out + 1] = { name = c.name, class = classToken(c.class) } end
+    end
+    return out
+end
+
 -- The sections, each { title, names, classes = { [name] = token } }, empty
 -- ones left out; each name once across sections (the first wins). A recent
 -- recipient takes the class its name has in another section.
@@ -143,10 +155,7 @@ function Address.Sections()
         if sorted then table.sort(names, byName) end
         return { title = title, names = names, classes = classes }
     end
-    local mine = {}
-    for _, c in ipairs(Registry.Characters()) do
-        if not c.hidden and Registry.Reachable(c) then mine[#mine + 1] = { name = c.name, class = classToken(c.class) } end
-    end
+    local mine = myCharacters()
     local pals, members = friends(), guild()
     local known = {}
     for _, list in ipairs({ mine, pals, members }) do
@@ -407,6 +416,78 @@ function Address.Toggle(button)
 end
 
 --------------------------------------------------------------------------------
+-- The completion (PLAN.md, "S1: completing a name as you type"): where
+-- Blizzard's own completes nothing (it doesn't know another WoW account's
+-- characters), the To box completes one of my characters Blizzard's way.
+--------------------------------------------------------------------------------
+
+-- The name of my characters the typed text starts (case aside, plain bytes)
+-- and is shorter than, the first in name order; nil when the text already is
+-- one of them, or isn't a name's start.
+function Address.Complete(text)
+    if API.IsSecret(text) or type(text) ~= "string" or text == "" then return nil end
+    local me = Names.Key(API.PlayerFullName())
+    local names = {}
+    for _, n in ipairs(myCharacters()) do
+        local c = candidate(n.name, me)
+        if c then names[#names + 1] = c end
+    end
+    table.sort(names, byName)
+    local low, found = text:lower(), nil
+    for _, c in ipairs(names) do
+        local l = c:lower()
+        if l == low then return nil end
+        if not found and l:sub(1, #text) == low then found = c end   -- equal length: the line above
+    end
+    return found
+end
+
+-- Whether Blizzard's own source has anything for the text (the call its
+-- OnChar makes, AutoComplete.lua:399); true when it can't be asked.
+local function blizzardHas(b, text)
+    local ac, lists = rawget(_G, "C_AutoComplete"), rawget(_G, "AUTOCOMPLETE_LIST")
+    local mail = type(lists) == "table" and lists.MAIL
+    if not (type(ac) == "table" and type(ac.GetAutoCompleteResults) == "function" and type(mail) == "table") then
+        return true
+    end
+    local r = ac.GetAutoCompleteResults(text, 1, b:GetUTF8CursorPosition(), true, mail.include, mail.exclude)
+    return type(r) ~= "table" or r[1] ~= nil
+end
+
+local function dropdownShown()
+    local d = rawget(_G, "AutoCompleteBox")
+    return d ~= nil and d:IsShown()
+end
+
+-- /gmail debug on: the To box's events in order, for the in-game check (the
+-- order of OnTextChanged and OnChar isn't measured). Post-script: each line
+-- comes after Blizzard's handler ran.
+local seq = 0
+local function trace(b, what)
+    if not API.debug then return end
+    seq = seq + 1
+    local text = b:GetText()
+    local len = (not API.IsSecret(text) and type(text) == "string") and #text or -1
+    API.Debug(("To box %d: %s; cursor %d of %d bytes, dropdown %s"):format(seq, what, b:GetCursorPosition(), len,
+        tostring(dropdownShown())))
+end
+
+-- After Blizzard's OnChar: every condition at this moment.
+local function complete(b)
+    if b:IsInIMECompositionMode() then return end
+    local text = b:GetText()
+    if API.IsSecret(text) or type(text) ~= "string" or text == "" then return end
+    if b:GetCursorPosition() ~= #text then return end   -- typing mid-text, or Blizzard just completed
+    if dropdownShown() then return end
+    local name = Address.Complete(text)
+    if not name or blizzardHas(b, text) then return end
+    trace(b, "completing " .. name)
+    b:SetText(name)
+    b:HighlightText(#text, #name)
+    b:SetCursorPosition(#text)
+end
+
+--------------------------------------------------------------------------------
 -- Start (PLAYER_LOGIN; Blizzard_MailFrame isn't load-on-demand)
 --------------------------------------------------------------------------------
 
@@ -433,6 +514,15 @@ function Address.Start()
     if type(rawget(_G, "MailFrameTab_OnClick")) == "function" then
         hooksecurefunc("MailFrameTab_OnClick", safely("address tab", fill))
     end
+    -- The completion runs after Blizzard's OnChar (AutoComplete.xml:8). The
+    -- OnTextChanged hook only logs, for the in-game check of the events' order.
+    b:HookScript("OnChar", safely("address complete", function(self)
+        trace(self, "OnChar")
+        complete(self)
+    end))
+    b:HookScript("OnTextChanged", function(self, userInput)
+        if API.debug then trace(self, "OnTextChanged, userInput " .. tostring(userInput)) end
+    end)
 end
 
 -- After an attributed send (Core/Sent.lua): a frame later, once every
