@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The address book's button beside the To box no longer covers the "P" of "Postage" when a mail
+  costs more than a few copper to send.
+
 ## v0.3.0
 
 - **Recall a mail sent to the wrong alt.** In the Glass Mail window's Sent folder, the new arrow

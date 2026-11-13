@@ -261,6 +261,14 @@ end
 local function listening(event) return panel()._events[event] == true end
 
 check(Address.button and Address.button:GetParent() == SendMailFrame, "the picker's button is on the send tab")
+-- Its place: right of the To box, clear of "Postage:" (the box ends at x 199 of
+-- SendMailFrame, MailFrame.xml:594-596; the label starts near x 222 at 1s 80c).
+do
+    local p = Address.button._points[1]
+    local w = Address.button:GetWidth()
+    check(p and p[1] == "LEFT" and p[2] == SendMailNameEditBox and p[3] == "RIGHT", "  right of the To box")
+    check(199 + p[4] + w <= 218, "  ending by x 218, clear of the postage label (ends at " .. (199 + p[4] + w) .. ")")
+end
 db.recents = {}
 WoW.friends, WoW.guild = {}, nil
 for guid in pairs(db.chars) do if guid ~= ME then db.chars[guid] = nil end end

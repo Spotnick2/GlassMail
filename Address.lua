@@ -498,14 +498,19 @@ end
 -- Start (PLAYER_LOGIN; Blizzard_MailFrame isn't load-on-demand)
 --------------------------------------------------------------------------------
 
+Address.BUTTON_SIZE, Address.BUTTON_GAP = 16, 2
 local started = false
 function Address.Start()
     local frame, b = rawget(_G, "SendMailFrame"), box()
     if started or not (frame and b) then return end
     started = true
+    -- 16 px, 2 px from the box (x 201-217 of SendMailFrame): "Postage:" is
+    -- right-aligned to the amount (MailFrame.xml:660), and at 1s 80c its left
+    -- edge is about x 222 (a 20 px button 4 px out hid its "P"). Postage tops
+    -- out at 3s 60c (12 attachments), the same width.
     local button = CreateFrame("Button", nil, frame)
-    button:SetSize(20, 20)
-    button:SetPoint("LEFT", b, "RIGHT", 4, 0)
+    button:SetSize(Address.BUTTON_SIZE, Address.BUTTON_SIZE)
+    button:SetPoint("LEFT", b, "RIGHT", Address.BUTTON_GAP, 0)
     button:SetNormalTexture(ICON)
     button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     button:SetScript("OnClick", safely("address picker", function(self) Address.Toggle(self) end))
