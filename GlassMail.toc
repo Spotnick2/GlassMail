@@ -11,18 +11,17 @@
 ## OptionalDeps: AltStable
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
+Libs\LibMailbox-1.0\LibMailbox-1.0.xml
 Compat.lua
 Glass.lua
 Skin.lua
-Core\Scan.lua
+Core\Mailbox.lua
 Core\Loot.lua
 Core\Ops.lua
-Core\Names.lua
 Core\Store.lua
 Core\Registry.lua
 Core\Sent.lua
 Core\Trash.lua
-Core\Summary.lua
 Core\Memory.lua
 OpenAll.lua
 Inbox.lua

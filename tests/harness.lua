@@ -1,6 +1,6 @@
 -- harness.lua: the addon loader and GlassMail's test helpers. dofile it after
 -- wow_stubs.lua. check / eq / done are WowTestKit's (tests/kit.lua).
--- GlassChat's harness, trimmed: no plugins, one embedded library.
+-- GlassChat's harness, trimmed: no plugins; two embedded libraries.
 
 TOC = "GlassMail.toc"
 
@@ -11,12 +11,14 @@ function tocLines() return Kit.tocLines(TOC) end
 -- Lua files listed in the TOC, in load order.
 function tocFiles() return Kit.tocFiles(TOC) end
 
--- The embedded library comes from a checkout, not from Libs\ (gitignored,
--- filled by the packager): $LIBGLASS, else ..\LibGlass. No checkout fails the
+-- The embedded libraries come from checkouts, not from Libs\ (gitignored,
+-- filled by the packager): $LIBGLASS, else ..\LibGlass; $LIBMAILBOX, else ..\LibMailbox. No checkout fails the
 -- run loudly; a silently skipped library would test nothing.
 LIBGLASS_XML = "Libs\\LibGlass-1.0\\LibGlass-1.0.xml"
+LIBMAILBOX_XML = "Libs\\LibMailbox-1.0\\LibMailbox-1.0.xml"
 LIBS = {
     [LIBGLASS_XML] = { env = "LIBGLASS", dir = "../LibGlass", xml = "LibGlass-1.0.xml" },
+    [LIBMAILBOX_XML] = { env = "LIBMAILBOX", dir = "../LibMailbox", xml = "LibMailbox-1.0.xml" },
 }
 
 function libRoot(line)
@@ -114,4 +116,13 @@ function chatHas(pattern)
         if line:find(pattern) then return true end
     end
     return false
+end
+
+-- LibMailbox.lua's source from its checkout, for tests that load another
+-- copy of it (a failed upgrade).
+function readLibMailbox()
+    local f = assert(io.open(libRoot(LIBMAILBOX_XML) .. "/LibMailbox.lua", "rb"))
+    local s = f:read("*a")
+    f:close()
+    return s
 end

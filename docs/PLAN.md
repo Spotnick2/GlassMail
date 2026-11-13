@@ -21,7 +21,7 @@ review's main corrections are listed at the end.
   "The grid PR in detail")*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
   and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here. After it, the
   To box's completion ("S1: completing a name as you type").
-- **M3, reuse:** `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
+- **M3, reuse** *(in progress, #46)*: `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
   addon needs them.
@@ -1144,6 +1144,144 @@ in the middle, a paste and focus loss behave as before.
 - **The play-day clock** also advances over midnight; the version covers only the new data, never
   the settings; realm suffixes are kept until measured; the item filter precedes money-first.
 - **Order:** the window (Sent first) before the picker; contacts cut.
+
+## M3: LibMailbox-1.0 (owner, 2026-11-12; Codex gpt-6-astra, high, 2 rounds, consensus)
+
+**Why.** AltStable reads the inbox too, twice: `Core.lua` `ScanMail` (the synced `mail_count` /
+`mail_expiry` / `mail_money` summary) and the Warband plugin's `ReadInbox` (attachments by item ID).
+Neither tests for secret values, and the summary rule is written twice (GlassMail's `Summary.Of`
+copies AltStable's). One library reads the inbox the same way for both (each addon still calls it
+itself: no shared cache, no event ownership). Nothing a player sees changes.
+
+**What moves.** `Core/Scan.lua`, `Core/Summary.lua`, `Core/Names.lua`: the inbox as plain values,
+the fingerprint and its residuals, the AH-subject classification, the "worth keeping" summary, the
+name key. What stays in GlassMail: Loot, Ops, Store, Memory, Sent, Trash (one consumer each).
+
+### The library (`C:\Projects\WoW\LibMailbox`, github.com/Spotnick2/LibMailbox, public, MIT)
+
+LibShowcase's layout: no TOC; `LibMailbox-1.0.xml` loads `LibStub\LibStub.lua`, then
+`LibMailbox.lua` (`MAJOR, MINOR = "LibMailbox-1.0", 1`); `LICENSE`; `README.md`; `CLAUDE.md`;
+`docs/DESIGN.md` (the contract and the measured facts, cited from GlassMail's FOREVER-PROBE.md);
+`.pkgmeta` (never packaged alone; the ignore list consumers repeat under `Libs/LibMailbox-1.0/`);
+`Tools/deploy.ps1` (copies the XML, what it loads and LICENSE into `AddOns\<Addon>\Libs\LibMailbox-1.0`,
+as LibGlass's does); tests on WowTestKit (`tests/kit.pin`, the current pin); CI `check.yml` (luac,
+tests) like LibGlass's. Tagged `r1` once merged; consumers pin the tag.
+
+**The API: functions, dot-called, no state, no frames, no events.** Within `LibMailbox-1.0` the API
+only grows (LibShowcase's contract). Every function is looked up on `lib` when called: a consumer
+keeps `local LM = LibStub("LibMailbox-1.0")` and calls `LM.ScanInbox()`, never a captured
+function, so the newest copy loaded runs (LibStub). `lib.ready = MINOR` is the last line.
+- `LM.ScanInbox() → scan`: today's `Scan.Inbox()`: `{ loaded, total, mails, resolved }`, each mail
+  `{ index, sender, subject, money, cod, daysLeft, itemCount, wasRead, wasReturned, canReply, isGM,
+  type, items = { { slot, itemID, link, count, isCurrency } }, resolved, fp }`. Two additions:
+  - a mail whose **header** was withheld (a secret header field) is `{ index, secret = true,
+    resolved = false, items = {} }` (today: the same without `secret`). A secret *attachment* field
+    leaves the header readable and only stops the fingerprint, as today: no `secret` flag;
+  - `scan.headers` is true only when the counts were readable, every index up to `loaded` returned
+    a header (today a missing one is skipped silently; Memory.lua:31 already rejects that
+    mismatch) and none was withheld. A secret count gives `{ loaded = 0, total = 0, mails = {},
+    resolved = false, headers = false }`: unreadable, never "empty".
+  `resolved` is unchanged: a missing attachment link makes a scan unresolved but leaves its headers
+  good. Never `GetInboxText`. Read-only: no call that changes the inbox or marks mail read.
+- `LM.Fingerprint(mail)`, `LM.Count(scan)`, `LM.Residual(mail, kind, slot)`: today's, unchanged.
+- `LM.Summary(mails, now) → { count, money, soonest } | nil`: the rule both addons share, over two
+  disjoint shapes; a mail with an `expires` field is a saved one, any other a live one:
+
+  | Shape | Counts when | Its expiry |
+  |---|---|---|
+  | live (a `ScanInbox` mail) | (`itemCount > 0` or `money > 0`) and `daysLeft > 0`: the header, AltStable's rule exactly (Core.lua:2936); `items` is never read | `LM.Expires(daysLeft, now)`, never compared with `now` |
+  | saved (a snapshot mail, Memory.lua) | (`#items > 0` or `money > 0`) and `expires > now` | `expires` |
+
+  `money` is summed, `soonest` is the smallest expiry; nil when none counts (the caller clears its
+  fields). A missing `daysLeft` doesn't count (never `nil > now`); a withheld mail counts for nothing.
+  Parity cases (tests): one second left (`daysLeft = 1/86400` at `now = 100000`) counts, its
+  expiry rounded to 99960; zero, negative or absent `daysLeft` doesn't; `itemCount = 1` with
+  `items = {}` counts; `itemCount = 0`, no money, a non-empty `items` doesn't (the header decides);
+  a plain letter doesn't, money with a nil `itemCount` does; an inbox of only non-counting mail is nil.
+- `LM.Expires(daysLeft, now)`: `math.floor((now + daysLeft * 86400) / 60) * 60`, AltStable's
+  rounding (stable across re-scans), which GlassMail's Memory.lua already uses.
+- `LM.NameKey(name)`, `LM.NameDisplay(name)`: today's `Names.Key` / `Names.Display`.
+- Secrecy: the library's own `issecretvalue` test (absent function: nothing is secret), before any
+  other use of a value, as today.
+- `LM.Ready() → bool`: `lib.ready ==` LibStub's current minor for `LibMailbox-1.0`. A newer copy
+  that failed half-way has claimed its minor and replaced some functions while `ready` still holds
+  the old one: then false. Consumers call it at each entry (GlassMail's adapters, AltStable's
+  `ScanMail`) and read nothing when false (a scan is unreadable, a summary nil).
+- Fingerprints are opaque session identifiers; their encoding doesn't change within the major
+  version without a reason a consumer can live with (none saves one).
+- Private helpers stay per-copy locals: nothing escapes into a callback, so no `lib.impl` layer.
+
+**Upgrade.** Stateless, so an upgrade is the newer copy's functions replacing the older's on the
+same `lib` table. The AH patterns are cached per copy (rebuilt by the newer copy). `test_upgrade.lua`
+(EMBEDDED-LIBRARIES.md's first-release pattern: a synthetic newer copy, since LibStub skips an
+equal minor): current then MINOR+1 with observably changed functions: a held `LM` and an adapter
+made before reach the new ones, the table keeps its identity, a scan returned by the old copy goes
+through the new `Summary` / `Residual`; the reverse order changes nothing; an equal copy changes
+nothing; a MINOR+1 that errors after replacing some functions makes `LM.Ready()` false. The real
+`r1` file is frozen as a fixture once tagged, for later upgrades. Each consumer's tests go through a failed
+upgrade too: GlassMail's adapters still serve their callers (`Scan.Inbox` then `Scan.Count`, as
+Inbox.lua's refresh does: an unreadable scan, an empty count), AltStable's seeded `mail_*` fields,
+`lastUpdate` and refresh stay untouched.
+
+**Tests** moved from GlassMail (`test_scan`, `test_summary`, `test_names`, unchanged in substance,
+on the library's own stubs: `GetInboxNumItems`, `GetInboxHeaderInfo`, `GetInboxItem`,
+`GetInboxItemLink`, the six `AUCTION_*_MAIL_SUBJECT` globals), plus `Summary`'s two shapes and its
+parity cases, `Expires`, `secret`, `headers` (a secret count, a missing header row), `Ready`, and the
+upgrade. Mutation-tested.
+
+### GlassMail (one PR, after `r1` is tagged)
+
+- `.pkgmeta`: the `Libs/LibMailbox-1.0` external at `tag: r1`, its ignore entries.
+- TOC: `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` after LibGlass, before `Compat.lua`.
+- `Core/Scan.lua`, `Core/Summary.lua`, `Core/Names.lua` become one thin `Core/Mailbox.lua`: `GM.Scan`,
+  `GM.Summary`, `GM.Names` keep their names and signatures and call `LM` at call time
+  (`Summary.Of(snapshot, now)` keeps its guard: nil for a snapshot that isn't a table with a `mails`
+  table, else `LM.Summary(snapshot.mails, now)`; `Scan.Inbox()` is an unreadable scan when
+  `LM.Ready()` is false). No call site changes.
+- Tests: GlassMail's `test_scan` / `test_summary` / `test_names` shrink to the adapters (the logic is
+  tested in the library); the harness loads LibMailbox the way it loads LibGlass (`$LIBMAILBOX`,
+  else `..\LibMailbox`); CI fetches both externals (`tests/fetch_external.sh`) and the zip
+  allowlist and the "packaged library is the pinned commit" step cover both; `tests/run.ps1` and
+  `Tools/deploy.ps1` report each library's pin status and deploy LibMailbox through its own
+  `Tools/deploy.ps1` (`Tools/LibGlassPin.ps1` already takes the library path). The allowlist lists
+  LibMailbox's XML, what it loads and LICENSE (no `Media`).
+- Docs: CLAUDE.md (layout, the library), FEATURES/PLAN status, LICENSE's third-party section.
+
+### AltStable (one PR, in a worktree off `origin/main`: the owner's checkout has work in progress)
+
+- Embeds LibMailbox as it embeds LibShowcase (`.pkgmeta` external `tag: r1` + its repeated ignore
+  entries, TOC line, `tests/fetch_libmailbox.sh` + `tests/libmailbox.lua` like `libshowcase`'s, CI,
+  deploy), with `test_packaging`'s ignore and TOC checks extended to it. Every test that loads
+  `Core.lua` directly (`test_comm` first) loads the library too, and its mail fixture stubs
+  `GetInboxItem` / `GetInboxItemLink` for the scan.
+- `Core.lua` `ScanMail`: if `LM.Ready()` is false or `scan.headers` isn't true, nothing is written:
+  the three fields, `lastUpdate` and the refresh stay as they were (an unreadable inbox is not an
+  empty one). A deliberate change: the old code had no secret guard. Else `LM.Summary(scan.mails,
+  now)` sets or clears `mail_count` / `mail_expiry` / `mail_money` exactly as today. The fields, the
+  sync payload and `CheckMailAlerts` are unchanged; `test_comm`'s existing mail assertions pass
+  unchanged, and the parity cases join them.
+- **Cost:** AltStable reads headers only today; `ScanInbox` also reads each attachment slot (16
+  `GetInboxItem` per mail with a truthy `itemCount`, a link per occupied slot) on every
+  `MAIL_INBOX_UPDATE`. A known call-count increase, not a measured problem: the in-game check
+  watches for it, and a header-only scan is an additive API for a later round if it shows.
+- **Not** the Warband plugin's `ReadInbox` in this round: it ignores currencies, refuses a read when
+  a count is missing or not positive and scans the slots even with a nil `itemCount`, where
+  `ScanInbox` keeps currencies, takes a missing count as 1, skips a mail with a nil `itemCount` and
+  calls a mail unresolved when its link is missing. Adopting it changes when a Warband read is
+  recorded: an AltStable issue for a later round, with a narrow secret guard meanwhile.
+- AltStable's version bump and release are the owner's.
+
+### Order
+
+1. LibMailbox repo: the scaffold on `main` (README, LICENSE, `.gitignore`: a new repo has no other
+   branch to start from), then the library in a PR.
+2. Both consumers' changes on their branches, tested against the library's checkout
+   (`$LIBMAILBOX`, LibShowcase's discipline) before `r1` is frozen.
+3. The library PR merged, `r1` tagged; the consumer PRs pin `r1` and their CI tests it.
+
+**In game:** GlassMail's Open All, the selection, the grid and a snapshot behave as before (the
+debug line's scans); AltStable's sheet shows the same mail column after a mailbox visit with both
+addons loaded, and with only AltStable; no hitch opening a full mailbox (the scan's cost).
 
 ## The mail core (M1)
 

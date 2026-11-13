@@ -17,10 +17,12 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
-# The tests load the LibGlass checkout as it is; CI loads the .pkgmeta pin.
+# The tests load the library checkouts as they are; CI loads the .pkgmeta pins.
 $libGlass = if ($env:LIBGLASS) { $env:LIBGLASS } else { Join-Path (Split-Path -Parent $RepoRoot) "LibGlass" }
+$libMailbox = if ($env:LIBMAILBOX) { $env:LIBMAILBOX } else { Join-Path (Split-Path -Parent $RepoRoot) "LibMailbox" }
 . (Join-Path $RepoRoot "Tools\LibGlassPin.ps1")
 if (Test-Path -LiteralPath $libGlass) { Write-LibGlassPinStatus $RepoRoot $libGlass "CI tests the pin" }
+if (Test-Path -LiteralPath $libMailbox) { Write-LibGlassPinStatus $RepoRoot $libMailbox "CI tests the pin" "Libs/LibMailbox-1.0" }
 
 . (Join-Path $PSScriptRoot "kit.ps1")
 $kit = Get-WowTestKit -RepoRoot $RepoRoot -KitDev:$KitDev

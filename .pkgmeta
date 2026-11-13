@@ -12,6 +12,9 @@ externals:
   Libs/LibGlass-1.0:
     url: https://github.com/Spotnick2/LibGlass
     tag: r11
+  Libs/LibMailbox-1.0:
+    url: https://github.com/Spotnick2/LibMailbox
+    tag: r1
 
 manual-changelog:
   filename: CHANGELOG.md
@@ -38,3 +41,9 @@ ignore:
   - Libs/LibGlass-1.0/AGENTS.md
   - Libs/LibGlass-1.0/CLAUDE.md
   - Libs/LibGlass-1.0/README.md
+  - Libs/LibMailbox-1.0/tests
+  - Libs/LibMailbox-1.0/docs
+  - Libs/LibMailbox-1.0/Tools
+  - Libs/LibMailbox-1.0/AGENTS.md
+  - Libs/LibMailbox-1.0/CLAUDE.md
+  - Libs/LibMailbox-1.0/README.md
