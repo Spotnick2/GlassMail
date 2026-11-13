@@ -1527,7 +1527,8 @@ Loads after `Core/Recall.lua`.
   prepare** (below), into an empty general bag slot, one per item, only while empty slots are free.
   Up to 12 attachments. Returns the stacks and how many items would
   still be movable after this batch. Simple over optimal: stacks of 6 and 10 with keep 6 send the 6.
-- **`Bank.Ready()`**: what the algorithm can actually move in all (the chat line, the button).
+- **`Bank.Available()`**: what the algorithm can actually move in all, and the mails it takes (the
+  chat line).
 
 Categories offered (ItemSubClass, build 70938, `References\Forever\db`; session 7's bag scan
 confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7.5), Leather
@@ -1540,7 +1541,7 @@ confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7
 - **The button**: ours, on the mailbox's title bar left of the address book's, shown on the Send tab
   only; its tooltip says "Fill for <Bank>: n items (m mails)" or why it is off. Its place is
   checked with a screenshot.
-- **Enabled when** a bank is set for this group and reachable, `Bank.Ready()` has something, the
+- **Enabled when** a bank is set for this group and reachable, `Bank.Plan()` has something, the
   cursor is empty, not in combat (`API.InCombat`), no Ops run, and **the draft is empty**: no
   attachment, the subject and the body empty, `MoneyInputFrame_GetCopper(SendMailMoney) == 0`
   (the widget: `GetSendMailMoney()` stays 0 until the Send click copies it, session 6) and COD

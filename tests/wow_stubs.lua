@@ -664,3 +664,117 @@ EventRegistry = {
         for _, c in ipairs(WoW.callbacks[event] or {}) do c.fn(c.owner, ...) end
     end,
 }
+
+-- N1 (Bank.lua): the bags, the cursor and the draft's attachment slots, as
+-- session 7 measured them (FOREVER-PROBE.md). A bag item may carry `bound`
+-- and `locked`; WoW.itemInfo[id].class / .sub give GetItemInfoInstant's class.
+-- - A pickup with something on the cursor SWAPS it with the slot's item.
+-- - A drop on the draft attaches the WHOLE source stack, a split's included;
+--   a bound item (or one in WoW.refuse) is refused and stays on the cursor.
+-- - A split dropped on an empty bag slot shows only when the test serves it
+--   (WoW.serveSplits, or its two halves for the staggered updates of 7b).
+-- - Attachments stay in the bags, locked, until the send.
+WoW.cursor, WoW.refuse, WoW.pendingSplits, WoW.moneyInput = nil, {}, {}, 0
+WoW.subclassNames = {}
+local function bagItem(b, s) return WoW.bags[b] and WoW.bags[b].items[s] end
+C_Container.GetContainerItemInfo = function(b, s)
+    local it = bagItem(b, s)
+    if it then
+        return { itemID = it.id, stackCount = it.count, isLocked = it.locked == true, isBound = it.bound == true }
+    end
+end
+function GetCursorInfo() if WoW.cursor then return "item", WoW.cursor.id end end
+function CursorHasItem() return WoW.cursor ~= nil end
+function ClearCursor()
+    local c = WoW.cursor
+    if not c then return end
+    local it = bagItem(c.b, c.s)
+    if it then it.locked = nil end
+    WoW.cursor = nil
+end
+C_Container.PickupContainerItem = function(b, s)
+    local it, c = bagItem(b, s), WoW.cursor
+    if not it and not c then return end
+    if not it then   -- a drop on an empty slot
+        if c.split then
+            table.insert(WoW.pendingSplits, { b = c.b, s = c.s, n = c.count, id = c.id, db = b, ds = s })
+        else
+            WoW.bags[b].items[s] = WoW.bags[c.b].items[c.s]
+            WoW.bags[c.b].items[c.s] = nil
+            WoW.bags[b].items[s].locked = nil
+        end
+        WoW.cursor = nil
+        return
+    end
+    if c then   -- the swap
+        local held = bagItem(c.b, c.s)
+        WoW.bags[b].items[s], WoW.bags[c.b].items[c.s] = held, it
+        if held then held.locked = nil end
+        WoW.cursor = { b = c.b, s = c.s, id = it.id, count = it.count, bound = it.bound }
+        it.locked = true
+        return
+    end
+    WoW.cursor = { b = b, s = s, id = it.id, count = it.count, bound = it.bound }
+    it.locked = true
+end
+C_Container.SplitContainerItem = function(b, s, n)
+    local it = bagItem(b, s)
+    if WoW.cursor or not it or n >= it.count then return end
+    WoW.cursor = { b = b, s = s, id = it.id, count = n, split = true }
+    it.locked = true
+end
+-- The server's answer to every pending split, or half of it: "source" (the
+-- old stack shrinks, unlocks) or "dest" (the new stack shows).
+function WoW.serveSplits(half)
+    for _, p in ipairs(WoW.pendingSplits) do
+        if half ~= "dest" and not p.sourceDone then
+            local src = bagItem(p.b, p.s)
+            src.count, src.locked, p.sourceDone = src.count - p.n, nil, true
+        end
+        if half ~= "source" and not p.destDone then
+            WoW.bags[p.db].items[p.ds] = { id = p.id, count = p.n }
+            p.destDone = true
+        end
+    end
+    local left = {}
+    for _, p in ipairs(WoW.pendingSplits) do if not (p.sourceDone and p.destDone) then left[#left + 1] = p end end
+    WoW.pendingSplits = left
+    WoW.fire("ITEM_LOCK_CHANGED", 0, 1)
+    WoW.fire("BAG_UPDATE_DELAYED")
+end
+function HasSendMailItem(a) return WoW.draft.items ~= nil and WoW.draft.items[a] ~= nil end
+WoW.attachCalls = {}
+function ClickSendMailItemButton(a, clear)
+    table.insert(WoW.attachCalls, { a = a, clear = clear })
+    WoW.draft.items = WoW.draft.items or {}
+    if clear then
+        local x = WoW.draft.items[a]
+        if x then
+            local it = bagItem(x.b, x.s)
+            if it then it.locked = nil end
+            WoW.draft.items[a] = nil
+        end
+    elseif WoW.cursor and not WoW.draft.items[a] then
+        local c = WoW.cursor
+        if c.bound or WoW.refuse[c.id] then
+            WoW.fire("UI_ERROR_MESSAGE", 460, "You can't mail soulbound items.")
+            return
+        end
+        local src = bagItem(c.b, c.s)   -- the whole source stack, a split's included
+        WoW.draft.items[a] = { id = c.id, count = src and src.count or c.count, b = c.b, s = c.s }
+        WoW.cursor = nil
+    else
+        return
+    end
+    WoW.fire("MAIL_SEND_INFO_UPDATE")
+end
+CreateFrame("EditBox", "SendMailSubjectEditBox", SendMailFrame)
+function MoneyInputFrame_GetCopper() return WoW.moneyInput end
+C_Item.GetItemInfoInstant = function(id)
+    local i = WoW.itemInfo[id]
+    if i and i.class then return id, "", "", "", 134, i.class, i.sub end
+    return id, "", "", "", 134, 15, 0
+end
+C_Item.GetItemSubClassInfo = function(class, sub) return WoW.subclassNames[class .. "." .. sub] or ("Sub " .. sub) end
+C_Item.GetItemClassInfo = function(class) return "Class " .. class end
+Enum.PlayerInteractionType = Enum.PlayerInteractionType or { MailInfo = 17 }
