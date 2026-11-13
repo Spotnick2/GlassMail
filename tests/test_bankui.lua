@@ -74,6 +74,9 @@ GM.Settings.SetBankNotice(true)
 
 -- Fill: the 3, the 5 and the 7 (15 = 35 - keep 20); the 20 stays.
 eq(mode(), "fill", "an empty draft and something to send: Fill")
+eq(select(2, UI.State()), "Fill for " .. BANK .. ": 15 items in 3 stacks. Then check the draft and press Send.",
+    "  its tooltip says how much")
+eq(UI.Count(1, "item") .. " in " .. UI.Count(1, "stack"), "1 item in 1 stack", "  one of each: no plural")
 check(button:IsEnabled(), "  the button is on")
 click()
 eq(SendMailNameEditBox:GetText(), BANK, "Fill: the bank in the To box")
@@ -287,11 +290,39 @@ eq(#Bank.Rules(), rows + 2, "  two rules more")
 local row
 for _, r in ipairs(pui.rows) do if r.rule and r.rule.item == HERB then row = r end end
 check(row and row.name:GetText() == "Peacebloom", "a row per rule, with the item's name")
+local function focus(box) box:SetFocus(); box._scripts.OnEditFocusGained(box) end
+focus(row.keep)
 row.keep:SetText("12")
 row.keep._scripts.OnEnterPressed(row.keep)
 eq(Bank.Rule(HERB).keep, 12, "  its keep box saves")
+focus(row.keep)
+row.keep:SetText("40")
+row.keep._scripts.OnEscapePressed(row.keep)
+eq(Bank.Rule(HERB).keep, 12, "  Escape cancels the edit")
+eq(row.keep:GetText(), "12", "  and shows the saved keep again")
 row.remove._scripts.OnClick(row.remove)
 eq(Bank.Rule(HERB), nil, "  its x removes it")
+
+-- PR #53's review: a scroll while a keep box has focus. The row is reused for
+-- another rule; the edit goes to the rule it was typed for, never the next one.
+for id = 3001, 3009 do Bank.AddItem(id, 20) end
+GM.BankUI.RefreshPage()
+local first = pui.rows[1]
+local typedFor = first.rule
+local nextKeep = Bank.Rules()[2].keep
+check(typedFor.keep ~= 5 and nextKeep ~= 5, "(neither keep is 5 yet)")
+focus(first.keep)
+first.keep:SetText("5")
+local list = first:GetParent()
+list._scripts.OnMouseWheel(list, -1)            -- scroll down one: row 1 shows the next rule
+local next = first.rule
+check(next ~= typedFor, "(row 1 now shows another rule)")
+eq(typedFor.keep, 5, "the edit was saved to the rule it was typed for")
+eq(next.keep, nextKeep, "  the rule now in that row keeps its own keep")
+eq(first.keep:GetText(), tostring(next.keep), "  the row shows the new rule's keep")
+first.keep._scripts.OnEnterPressed(first.keep)  -- a late Enter: nothing to commit
+first.keep._scripts.OnEditFocusLost(first.keep)
+eq(next.keep, nextKeep, "  a late Enter or focus loss changes nothing")
 
 -- /gmail banknotice
 SlashCmdList.GLASSMAIL("banknotice off")

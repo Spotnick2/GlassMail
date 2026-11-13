@@ -107,6 +107,10 @@ end
 -- The state: what a click would do, or why not
 --------------------------------------------------------------------------------
 
+-- "1 item", "3 items".
+local function count(n, word) return n .. " " .. word .. (n == 1 and "" or "s") end
+BankUI.Count = count
+
 local function sum(list)
     local n = 0
     for _, s in ipairs(list) do n = n + (s.count or s.n) end
@@ -128,16 +132,16 @@ function BankUI.State()
     local empty, w = draftEmpty()
     if not empty then return "off", w, bank end
     if prepared and prepared.state == "ready" then
-        return "fill", "Fill for " .. bank.name .. ": " .. sum(prepared.batch) .. " items, prepared. Then check the "
+        return "fill", "Fill for " .. bank.name .. ": " .. count(sum(prepared.batch), "item") .. ", prepared. Then check the "
             .. "draft and press Send.", bank, prepared.batch, true
     end
     local plan = Bank.Plan()
     if #plan.splits > 0 then
-        return "prepare", "Prepare for " .. bank.name .. ": split " .. #plan.splits .. " stack(s) into empty bag "
+        return "prepare", "Prepare for " .. bank.name .. ": split " .. count(#plan.splits, "stack") .. " into empty bag "
             .. "slots, so the rest stays as you set it. Then click again to fill.", bank, plan
     end
     if #plan.attach > 0 then
-        return "fill", "Fill for " .. bank.name .. ": " .. plan.units .. " items in " .. #plan.attach .. " stack(s)"
+        return "fill", "Fill for " .. bank.name .. ": " .. count(plan.units, "item") .. " in " .. count(#plan.attach, "stack")
             .. (plan.left > 0 and (", " .. plan.left .. " more after this mail") or "")
             .. ". Then check the draft and press Send.", bank, plan.attach, false
     end
@@ -341,7 +345,7 @@ local function notice()
     local bank = Bank.For()
     if not bank then return end
     local units = Bank.Available()
-    if units > 0 then say(units .. " items ready for " .. bank.name .. " (Fill on the Send tab).") end
+    if units > 0 then say(count(units, "item") .. " ready for " .. bank.name .. " (Fill on the Send tab).") end
 end
 
 --------------------------------------------------------------------------------
@@ -447,13 +451,23 @@ local function newRow(parent, i)
     row.keep:SetAutoFocus(false)
     row.keep:SetNumeric(true)
     row.keep:SetMaxLetters(4)
-    local function save(self)
-        if row.rule then Bank.SetKeep(row.rule, tonumber(self:GetText()) or 0) end
-        self:ClearFocus()
+    -- An edit belongs to the rule the box showed when it took focus
+    -- (row.editing), not to whatever the recycled row shows after a scroll
+    -- (PR #53's review: a scroll mid-edit saved one rule's keep onto another).
+    local function commit(self)
+        local r = row.editing
+        row.editing = nil
+        if r then Bank.SetKeep(r, tonumber(self:GetText()) or 0) end
     end
-    row.keep:SetScript("OnEnterPressed", save)
-    row.keep:SetScript("OnEditFocusLost", function(self) if row.rule then Bank.SetKeep(row.rule, tonumber(self:GetText()) or 0) end end)
-    row.keep:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    row.keep:SetScript("OnEditFocusGained", function() row.editing = row.rule end)
+    row.keep:SetScript("OnEnterPressed", function(self) commit(self); self:ClearFocus() end)
+    row.keep:SetScript("OnEditFocusLost", commit)
+    row.keep:SetScript("OnEscapePressed", function(self)   -- cancel: back to the saved keep
+        local r = row.editing
+        row.editing = nil
+        if r then self:SetText(tostring(r.keep)) end
+        self:ClearFocus()
+    end)
     local label = Glass.Font(row, 11, "RIGHT")
     label:SetPoint("RIGHT", row.keep, "LEFT", -10, 0)
     label:SetText(GREY .. "keep|r")
@@ -488,6 +502,16 @@ function BankUI.RefreshPage()
     -- The rules.
     local rules = Bank.Rules()
     offset = math.max(0, math.min(offset, #rules - ROWS))
+    -- A row about to show another rule commits its edit to the rule it was
+    -- for first, then lets the box go (after the loop: SetKeep refreshes again).
+    local pending = {}
+    for i, row in ipairs(pui.rows) do
+        if row.editing and row.editing ~= rules[offset + i] then
+            pending[#pending + 1] = { rule = row.editing, keep = tonumber(row.keep:GetText()) or 0 }
+            row.editing = nil
+            row.keep:ClearFocus()
+        end
+    end
     for i, row in ipairs(pui.rows) do
         local rule = rules[offset + i]
         row.rule = rule
@@ -495,9 +519,10 @@ function BankUI.RefreshPage()
         if rule then
             row.icon:SetTexture(rule.item and C_Item.GetItemIconByID(rule.item) or "Interface\\Icons\\INV_Misc_Bag_10")
             row.name:SetText(ruleText(rule))
-            if not row.keep:HasFocus() then row.keep:SetText(tostring(rule.keep)) end
+            if not (row.editing == rule and row.keep:HasFocus()) then row.keep:SetText(tostring(rule.keep)) end
         end
     end
+    for _, p in ipairs(pending) do Bank.SetKeep(p.rule, p.keep) end
     pui.empty:SetText(#rules == 0 and "No rules yet: drop an item on the slot, or add a category." or "")
 end
 
