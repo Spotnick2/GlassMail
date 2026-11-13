@@ -21,11 +21,12 @@ review's main corrections are listed at the end.
   "The grid PR in detail")*: S1 (picker and last-recipient fill; registry from local characters and AltStable), local X1, I4, the X2 history UI,
   and `Core/Summary.lua` / `Core/Names.lua`, which have their first consumers here. After it, the
   To box's completion ("S1: completing a name as you type").
-- **M3, reuse** *(in progress, #46)*: `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
+- **M3, reuse** *(done, #46; LibMailbox r1, GlassMail #47, AltStable #329)*: `Scan` / `Summary` / `Names` move out into `C:\Projects\WoW\LibMailbox`
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
   addon needs them.
-- **M4:** N1 bank character (`Core/Send.lua`, one Send click per batch), N2 local return assistance.
+- **M4** *(in progress, #50)*: N2 local return assistance first ("N2: recall", below), then N1
+  bank character (`Core/Send.lua`, one Send click per batch; a probe session and its own plan first).
 - **Later:** cross-account N2 over LibAccountSync, shared-settings sync, Forward.
 
 ## M1 (reviewed with Codex, 4 rounds, consensus)
@@ -1282,6 +1283,172 @@ upgrade. Mutation-tested.
 **In game:** GlassMail's Open All, the selection, the grid and a snapshot behave as before (the
 debug line's scans); AltStable's sheet shows the same mail column after a mailbox visit with both
 addons loaded, and with only AltStable; no hitch opening a full mailbox (the scan's cost).
+
+## N2: recall (M4, #50; owner, 2026-11-12; Codex gpt-6-astra, high, 2 rounds, consensus; built)
+
+FEATURES.md's N2: a mail sent to the wrong one of your characters goes back in one deliberate
+click. From the Sent folder, the player marks a send **recall**; when the character it went to
+opens a mailbox, the mails that could be it are highlighted, and a sure one gets a Return button.
+v1 is local: both characters on this WoW account, so both read the same `GlassMailDB`.
+Cross-account recall stays "Later" (LibAccountSync).
+
+**Why it can stay small.** Both ends are the player's own characters, and a return only sends
+the mail back to its sender. So a wrong match costs one mail travelling back to another character
+of yours, never a loss. The return itself, its confirmation and its record already exist:
+`Ops.Act("return", fp)` (one match, no twin), and Trash's confirmed return (`Sent.AddReturn`),
+which also sees returns made by hand with the letter's button.
+
+### What is saved
+
+Two optional fields on a `sent` record (`Store` SPECS; `Store.VERSION` stays 1, and an older Glass
+Mail drops them on load, so a downgrade forgets recalls and nothing else):
+- `recall = true` while marked;
+- `fromName`: the sending character's name, copied from `chars[from]` when it is marked (a
+  record has only the sender's GUID, and its `chars` entry can age out before the mail is found).
+
+`Store.SetRecall(rec, on)` takes the saved record itself, as the forget calls do, sets (or
+clears) both fields, then calls the watchers. A record must stay comparable on its own: the Store
+cleans each optional field separately, so `recall = true` can survive a `fromName`, `items`,
+`money` or `cod` that was dropped. `Matches` therefore checks the record too (below), and such a
+record matches nothing, can still be unmarked, and never throws. Nothing else is saved: where the
+mail is now is worked out each time (below). A recall ends with its record (play-day expiry, the
+1000 cap), when it is unmarked, or when its mail is returned.
+
+### `Core/Recall.lua` (no frames)
+
+Loads after `Core/Sent.lua`, before `Core/Trash.lua`.
+- **`Recall.CanMark(rec)`**, and why not (for the tooltip): a `send` (not a return); its `subject`,
+  `money`, `cod` and `items` all saved (a field that was secret at capture is missing, and then
+  nothing can be compared); items or money in it (a letter alone isn't worth a recall, and
+  Blizzard may only offer Delete for it); `chars[from]` known (its name becomes `fromName`); the
+  recipient one of `Store.Chars()`, by `Names.Key`, whose GUID isn't `rec.from` (the record's
+  sender, not whoever is browsing Sent): a character that has logged in with Glass Mail on this
+  account. Not AltStable's list: a character of another account, or one that never ran Glass
+  Mail, would never see the recall. The tooltip says so ("Log in to it once with Glass Mail").
+  And mail can reach it from the sender: `Registry.Reachable`'s rule applied to the two saved
+  characters (same faction, same known ruleset), not to the current one, since a recall can be
+  marked from another character's history. A send across factions can still be saved
+  `unconfirmed`.
+- **`Recall.Matches(rec, m)`**: `m` is a scanned mail (live shape, items `{ itemID, count }`) or a
+  snapshot's (saved shape, `{ id, count }`). False unless the record is comparable: a non-empty
+  `Names.Key(rec.fromName)`, and `subject`, `money`, `cod` and `items` all present (a missing
+  money is unknown, never 0). True when: not `wasReturned`; `Names.Key(m.sender) ==
+  Names.Key(rec.fromName)`; `m.subject == rec.subject` (the `SendMail` argument: Blizzard puts an
+  item's name in an empty subject box before Send, MailFrame.lua:1302-1306, so it is what was
+  sent); money and COD equal; the attachments equal as a multiset of (itemID, count), whatever
+  their slots, and, on a live mail, `#m.items == (m.itemCount or 0)` over the full list, currencies
+  included (`itemCount` counts occupied slots; a secret field stops LibMailbox's attachment list
+  part way, and a partial list must not match a smaller send). Memory.lua checks the same before
+  it leaves currencies out of a snapshot.
+  **No test of the mail's type:** LibMailbox classifies by the AH subject templates before
+  `canReply`, so an alt's mail titled like an AH one is `ah`; the sender's name (one of your
+  characters) already rules out real AH and system mail. Header values and item IDs only, so a
+  mail still loading its links can match (it can't be returned until it resolves). That the
+  received mail carries exactly the sent subject, money and items is unmeasured: the in-game check.
+- **`Recall.Mine()`**: the marked records whose `to` is the current character (`Names.Key` of
+  `API.PlayerFullName()`), oldest first. Read from `Store.Sent()` on each call (a thousand records
+  at most, on an inbox refresh: cheap).
+- **`Recall.Inbox(snap, counts)`**: for the inbox the player sees. Each recall's matching mails,
+  and each mail's state:
+  - **sure**: the recall's only matching mail, unique (`counts[fp] == 1`), and Blizzard would return
+    it (`Ops.RowAction(m) == "return"`);
+  - **possible**: anything else that matches: two or more mails, twins, a mail still loading (no
+    `fp`), or one Blizzard won't return.
+  Two identical recalls (the same send made twice) share their mails: one matching mail is still
+  sure, and returning it ends the oldest recall. No one-to-one assignment. **Sure means one
+  actionable candidate, not proven identity:** an older identical mail, or an unconfirmed send
+  that never arrived, can make some other mail the only match. Within the premise that costs a
+  mail going back to your other character. No arrival-time test (`daysLeft`): no measured formula
+  covers every send (COD included), and a wrong one would hide the real mail.
+- **`Recall.OnReturned(m)`**: Trash calls it after `Sent.AddReturn`, for a confirmed return, ours
+  or by hand. The oldest of `Recall.Mine()` that matches `m` loses its mark, and chat says
+  "Glass Mail: sent back to <sender>: <subject>". Trash hands over the mail as it was before the
+  return, so `wasReturned` is still false there. These leave the mark, and the player unmarks it
+  (the Sent row shows no matching mail): a return Trash can't confirm (its "left out" cases),
+  a mail whose money or some items were taken before its return (the rest no longer matches; no
+  fuzzy matching), and the game's own return at expiry.
+- **`Recall.Seen(rec)`**, for the Sent row: the recipient's snapshot (Core/Memory.lua) against
+  `Matches`: "matching mail in <To>'s mailbox (<ago>)" (a match in a partial snapshot counts too),
+  "no matching mail in what Glass Mail saved of <To>'s mailbox (read <ago>)" (only from a complete
+  one, and worded as memory: a mail forgotten in the window or pruned at its expiry leaves the
+  snapshot without it, and a partly taken one no longer matches, while the mailbox may still hold
+  it), "<To>'s mailbox not read whole" (incomplete, no match), "<To>'s mailbox not seen since" (no
+  snapshot, or one older than the send).
+
+### The inbox (`Inbox.lua`)
+
+On every refresh (it already runs on each `InboxFrame:Update`, inbox update, letter, combat and
+Ops change), `Recall.Inbox(snap, counts)`, over the refresh's own scan and counts. **The refresh
+also subscribes to `Store.OnChange`:** marking, unmarking or forgetting a recall in the window
+while the mailbox is open, and `OnReturned`, must repaint at once (else an unmarked recall keeps
+an enabled Return button: Ops checks the mail, not the recall).
+- **Rows:** a tint on each matching row, our own texture on our own frame over `MailItemN`, under
+  our checkbox and icon, mouse disabled (the stock row keeps its clicks): the accent for sure,
+  amber for possible. Shown under glass and stock alike. The row tooltip adds "Glass Mail: you
+  asked to send this back" (sure) or "Could be a mail you asked to send back: check it"
+  (possible); the tooltip hook's early return (no attachment lines, no truncated subject) must let
+  a recall line through.
+- **The notice:** one line in a glass strip under the mail window, below Blizzard's Inbox / Send
+  Mail tabs (their bottom is 30 px under the window's, MailFrame.xml:870; the strip's top is 34)
+  (a child of `InboxFrame`, like the item grid beside it; every band inside is taken: the message
+  count and the bar above the rows, Prev / Open All / Next in the footer, and a button over Next
+  would take its click; PR #51's review, twice), whatever the page: "Recall: <subject>,
+  from <sender>" and a **Return** button for a sure match; for possible ones, "N mails could be
+  <subject>: check the highlighted rows" and no button (twins: "open one and use its Return
+  button"). Several recalls: the first sure one, then "+N more".
+- **Return** calls `Ops.Act("return", fp, ...)` with the same guards as the row icon: not in combat,
+  no run, no open letter, the inbox resolved, the mail unique, its tooltip saying why when
+  disabled. The click is the only thing that acts; nothing returns by itself, on any event.
+
+### The Sent folder (`Window.lua`)
+
+- A recall toggle on each send row, left of the forget ×; none on a return. Enabled for a marked
+  record (to unmark it) or one `CanMark` accepts; otherwise disabled, its tooltip giving
+  `CanMark`'s reason (a send to someone else, a secret field, nothing attached), with motion
+  scripts while disabled as the inbox's controls have. The faction and ruleset test fails when
+  either character's faction or realm is missing: two unknowns don't agree.
+- A marked row's top line gets an amber "recall", and its right-hand text `Recall.Seen(rec)`
+  instead of the date.
+- The search and the forget × work as before; forgetting a record forgets its recall with it.
+
+### Tests
+
+`tests/test_recall.lua`, each case mutation-tested:
+- `Matches`: each criterion alone (sender, subject, money, COD, a count, an extra or missing item,
+  a returned mail), slot order ignored, repeated item IDs, both item shapes; an alt's mail with an
+  AH-shaped subject matches, a real AH mail (its sender) doesn't; a partial attachment list
+  (fewer read than `itemCount`) doesn't; a record missing `fromName`, `items`, `money` or `cod`
+  matches nothing;
+- `CanMark`: each reason (a return, a field missing, nothing attached, an unknown sender, the
+  recipient not in `chars`, the recipient the sender, another faction, another ruleset), judged
+  from the record's sender while another character browses; AltStable's characters not counted;
+- the Store: the two fields kept on load, junk dropped field by field, `SetRecall` on a record not
+  in the list refused, both fields set before the watchers run;
+- the inbox: sure, two matches, twins, loading, a mail Blizzard won't return, two identical recalls,
+  a recall for another character ignored; the Return button calls `Ops.Act` with that fingerprint
+  and nothing else does; disabled in combat, during a run, with a letter open; unmarking with the
+  mailbox open repaints (no button left); a recall-only row tooltip shows;
+- `OnReturned`: our return and one by hand (through Trash's confirm path) end the oldest matching
+  recall and say so; an unconfirmed return ends nothing;
+- the window: the toggle's shown / hidden / reason, the "recall" tag and each `Seen` line; a
+  matching snapshot mail forgotten in the window gives the saved-memory wording, never "not in
+  the mailbox".
+
+### In game
+
+1. Send an item and some gold to an alt that has logged in with Glass Mail; mark it in Sent; check
+   the row says "<To>'s mailbox not seen since".
+2. Log in to the alt, open the mailbox: the row is tinted, the notice names it, Return sends it
+   back, chat says so, the Sent row (on either character) no longer says recall. Before the
+   return, the Sent row says "in <To>'s mailbox": the received subject, money and items equal the
+   sent ones (the unmeasured assumption; if not, the row says "no matching mail", and the notice is absent).
+3. Two identical sends: both rows possible, no button.
+4. A send to a character that never ran Glass Mail: the toggle disabled, its tooltip says why.
+5. The shapes: a money-only send, a COD send, several attachments with a repeated item, a subject
+   shaped like an AH one ("Auction won: ..."): each matches.
+6. With the alt's mailbox open, mark and unmark from `/gmail mail`: the tint and the notice follow.
+7. One return with Blizzard's letter button: the recall ends too.
+8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
 
 ## The mail core (M1)
 
