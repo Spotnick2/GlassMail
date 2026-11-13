@@ -179,7 +179,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   another run or a letter is open. `GlassMail.Selection` (`Get`, `OnChange`) is the selection's
   public read API, for Shatter (`docs/PUBLIC-API.md`): keep its contract when changing the selection.
   N2's recalls: a tint per matching row (our frame, mouse off; the accent sure, amber possible), a
-  tooltip line, and a notice under the rows with a Return button for a sure one (`Ops.Act`, the row
+  tooltip line, and a notice in a glass strip under the mail window (inside, every band is taken) with a Return button for a sure one (`Ops.Act`, the row
   icon's guards; the only thing that acts). The refresh also follows `Store.OnChange`.
 - **`Comforts.lua`**: X3. The gold Ops confirmed this visit (`Ops.TakeVisitMoney`), said at close;
   the trade block (the `blockTrades` CVar while the mailbox is open; only our own block is undone,

@@ -5,7 +5,7 @@
 - **Recall a mail sent to the wrong alt.** In the Glass Mail window's Sent folder, the new arrow
   on a send marks it "recall" (for mail with items or gold to your characters on this WoW
   account that have logged in with Glass Mail). When that character opens a mailbox, the mail is
-  highlighted and a Return button under the rows sends it back in one click. When two mails could
+  highlighted and a Return button just under the mail window sends it back in one click. When two mails could
   be it, both are highlighted for you to check. The Sent row says whether the mail was last seen
   in that character's mailbox.
 - Glass Mail reads the mailbox through LibMailbox, a small library it now shares with AltStable,

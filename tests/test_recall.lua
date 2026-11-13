@@ -227,6 +227,24 @@ check(c and c[1] == accent[1] and c[2] == accent[2], "  in the accent: sure")
 check(notice.frame:IsShown(), "the notice shows")
 check(has(notice.text:GetText(), '"ore"') and has(notice.text:GetText(), MY_NAME), "  naming the mail and its sender")
 check(notice.ret:IsShown() and notice.ret:IsEnabled(), "  with an enabled Return button")
+-- Its place: a strip under the mail window, never inside it, where the footer's
+-- Prev / Open All / Next are (PR #51's review: a Return over Next took its click).
+local function anchoredBelow(f)
+    local top = {}
+    for _, p in ipairs(f._points) do top[p[1]] = p end
+    local l, r = top.TOPLEFT, top.TOPRIGHT
+    return l and r and l[2] == MailFrame and l[3] == "BOTTOMLEFT" and r[2] == MailFrame and r[3] == "BOTTOMRIGHT"
+        and l[5] < 0 and r[5] < 0 and #f._points == 2
+end
+check(anchoredBelow(notice.frame), "the notice hangs under the mail window, its top below the window's bottom")
+eq(notice.frame:GetParent(), InboxFrame, "  InboxFrame's child: it goes with the inbox tab")
+check(notice.frame:IsMouseEnabled(), "  it takes its own clicks (none fall through)")
+local inside = notice.ret
+while inside and inside ~= notice.frame do inside = inside:GetParent() end
+eq(inside, notice.frame, "  the Return button is inside it")
+for _, p in ipairs(notice.ret._points) do
+    check(p[2] ~= InboxFrame and p[2] ~= MailFrame, "  and anchored to the strip, not the inbox")
+end
 
 -- The tooltip: a recall line even with no attachment lines or truncated subject.
 WoW.inbox = { hello(), arrived({ items = { [1] = { id = ORE, count = 3 } } }) }

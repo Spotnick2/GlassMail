@@ -19,8 +19,9 @@
 --
 -- N2's recalls (Core/Recall.lua) show here too: a tint on each row that could
 -- be a recalled mail (the accent when sure, amber when only possible), a line
--- in its tooltip, and a notice under the rows, whatever the page, with a
--- Return button for a sure one. The button is the only thing that acts.
+-- in its tooltip, and a notice in a glass strip under the mail window, whatever
+-- the page, with a Return button for a sure one. The button is the only thing
+-- that acts.
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
@@ -42,6 +43,7 @@ local TWIN = "Identical to another mail: use the row itself"
 local WAITING = "Waiting for mail to load"
 local AMBER = { 1, 0.7, 0.28 }
 local TINT_ALPHA = 0.16
+local NOTICE_H = 32
 Inbox.RECALL_SURE = "Glass Mail: you asked to send this back"
 Inbox.RECALL_POSSIBLE = "Glass Mail: this could be a mail you asked to send back. Check it before returning it."
 
@@ -50,7 +52,7 @@ local rowOf = {}             -- Blizzard's MailItemNButton -> i (our table, noth
 local selected = {}          -- fingerprint -> true
 local anchor                 -- the last plainly clicked fingerprint, for shift ranges
 local bar                    -- { frame, open, ret, clear }
-local notice                 -- { frame, text, ret, fp }: N2's line under the rows
+local notice                 -- { frame, text, ret, fp }: N2's strip under the mail window
 local itemLines = {}         -- [inbox index] = the tooltip's attachment lines, until the next update
 local snap, counts = { mails = {} }, {}
 local listeners = {}         -- Selection.OnChange callbacks
@@ -429,13 +431,24 @@ function Inbox.Start()
     bar.ret:SetPoint("RIGHT", bar.clear, "LEFT", -2, 0)
     bar.open = API.Button(frame, "Open", 66, onOpen)
     bar.open:SetPoint("RIGHT", bar.ret, "LEFT", -2, 0)
+    -- The notice: a glass strip under the mail window, like the item grid
+    -- beside it. Inside, every band is taken (the message count and the bar
+    -- above the rows, Prev / Open All / Next in the footer: PR #51's review),
+    -- and a button over Next would take its click. InboxFrame's child, so it
+    -- goes with the inbox tab.
+    local mail = rawget(_G, "MailFrame")
     local nf = CreateFrame("Frame", nil, inbox)
-    nf:SetHeight(22)
-    nf:SetPoint("TOPLEFT", rawget(_G, "MailItem" .. ROWS), "BOTTOMLEFT", 4, -2)
-    nf:SetPoint("RIGHT", inbox, "RIGHT", -12, 0)
+    nf:SetHeight(NOTICE_H)
+    nf:SetPoint("TOPLEFT", mail, "BOTTOMLEFT", 0, -2)
+    nf:SetPoint("TOPRIGHT", mail, "BOTTOMRIGHT", 0, -2)
+    nf:EnableMouse(true)
+    GM.Skin.AddWindow(nf, true)
+    local content = CreateFrame("Frame", nil, nf)
+    content:SetAllPoints(nf)
+    content:SetFrameLevel(GM.Glass.ContentLevel(nf))
     notice = { frame = nf }
-    notice.ret = API.Button(nf, "Return", 70, onRecallReturn)
-    notice.ret:SetPoint("RIGHT", nf, "RIGHT", 0, 0)
+    notice.ret = API.Button(content, "Return", 70, onRecallReturn)
+    notice.ret:SetPoint("RIGHT", content, "RIGHT", -8, 0)
     notice.ret:SetMotionScriptsWhileDisabled(true)
     notice.ret:SetScript("OnEnter", function(self)
         local w = (API.InCombat() and "Not in combat") or (Ops.Running() and "Busy: wait for the current action")
@@ -443,10 +456,9 @@ function Inbox.Start()
         tip(self, w and ("Return to sender\n" .. w) or "Return to sender")
     end)
     notice.ret:SetScript("OnLeave", hideTip)
-    notice.text = nf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    notice.text:SetPoint("LEFT", nf, "LEFT", 0, 0)
+    notice.text = GM.Glass.Font(content, 12, "LEFT")
+    notice.text:SetPoint("LEFT", content, "LEFT", 10, 0)
     notice.text:SetPoint("RIGHT", notice.ret, "LEFT", -6, 0)
-    notice.text:SetJustifyH("LEFT")
     nf:Hide()
     if rawget(_G, "InboxFrameItem_OnEnter") then
         hooksecurefunc("InboxFrameItem_OnEnter", function(button)

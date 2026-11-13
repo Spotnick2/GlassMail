@@ -1388,11 +1388,13 @@ an enabled Return button: Ops checks the mail, not the recall).
   asked to send this back" (sure) or "Could be a mail you asked to send back: check it"
   (possible); the tooltip hook's early return (no attachment lines, no truncated subject) must let
   a recall line through.
-- **The notice:** one line on `InboxFrame`, our own frame, whatever the page: "Recall: <subject>,
+- **The notice:** one line in a glass strip under the mail window (a child of `InboxFrame`, like the
+  item grid beside it; every band inside is taken: the message count and the bar above the rows,
+  Prev / Open All / Next in the footer, and a button over Next would take its click; PR #51's
+  review), whatever the page: "Recall: <subject>,
   from <sender>" and a **Return** button for a sure match; for possible ones, "N mails could be
   <subject>: check the highlighted rows" and no button (twins: "open one and use its Return
-  button"). Several recalls: the first sure one, then "+N more". Its place (between the rows and the
-  page buttons, or beside the bar) is settled against a screenshot in the build.
+  button"). Several recalls: the first sure one, then "+N more".
 - **Return** calls `Ops.Act("return", fp, ...)` with the same guards as the row icon: not in combat,
   no run, no open letter, the inbox resolved, the mail unique, its tooltip saying why when
   disabled. The click is the only thing that acts; nothing returns by itself, on any event.
