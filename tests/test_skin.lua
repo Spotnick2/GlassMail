@@ -149,31 +149,32 @@ check(pane and pane.frame:IsShown(), "the reading pane shows")
 eq(pane.frame:GetParent(), InboxFrame, "the pane lives in the inbox")
 check(pane.frame:GetFrameLevel() < MailItem1:GetFrameLevel(), "the pane sits under the rows")
 
--- The clean material has no grain, and a repaint must not put it back.
-for _, name in ipairs({ "clear", "smoked" }) do
-    eq(GM.Skin.PRESETS[name].grain, GM.Glass.STYLE.grain, name .. ": the clean material's grain (none)")
-end
+-- The material is Pearl, Glass Mail's own (no Glass UI here): no grain.
+eq(GM.GlassBuild().preset, "pearl", "the material: Pearl, our own")
+eq(GM.Glass.STYLE.grain, 0, "  no grain")
+local BASE = GM.BaseWash()
+eq(BASE, 0.10, "  its own wash, the base of every body's")
 
--- A surface painted in a preset: the body's tint, grain and wash, and the pane.
+-- A surface painted in a look: the body's tint and its wash (a factor of the
+-- material's), and the pane.
 local function painted(name)
-    local p = GM.Skin.PRESETS[name]
+    local b, pn = GM.Skin.BODIES[name], GM.Skin.PANES[name]
     local ok = true
     for _, window in ipairs({ MailFrame, OpenMailFrame }) do
         local g = T.skinned[window].g
         local c = g.tint._color
-        ok = ok and c and close(c[1], p.tint[1]) and close(c[2], p.tint[2]) and close(c[3], p.tint[3])
-            and close(c[4], p.tint[4])
-        ok = ok and close(g.grain:GetAlpha(), p.grain)
+        ok = ok and c and close(c[1], b.tint[1]) and close(c[2], b.tint[2]) and close(c[3], b.tint[3])
+            and close(c[4], b.tint[4])
         local wash = g.wash._gradient
-        ok = ok and wash and close(wash[3].a, p.wash)
+        ok = ok and wash and close(wash[3].a, BASE * b.wash)
     end
     local pc = pane.tex._color
-    ok = ok and pc and close(pc[4], p.pane[4]) and close(pc[1], p.pane[1])
+    ok = ok and pc and close(pc[4], pn.pane[4]) and close(pc[1], pn.pane[1])
     return ok
 end
 check(painted("clear"), "clear: the body and the pane carry the clear numbers")
 local function lettersPainted(name)
-    local pc = GM.Skin.PRESETS[name].pane
+    local pc = GM.Skin.PANES[name].pane
     for _, letter in pairs(T.letters) do local lp = letter.pane
         local c = lp.tex._color
         if not (c and close(c[4], pc[4]) and close(c[1], pc[1])) then return false end
@@ -182,7 +183,7 @@ local function lettersPainted(name)
 end
 check(lettersPainted("clear"), "  and the letter panes")
 local function sectionsPainted(name)
-    local pc, n = GM.Skin.PRESETS[name].section, 0
+    local pc, n = GM.Skin.PANES[name].section, 0
     for _, sp in pairs(T.sections) do
         local c = sp.tex._color
         if not (c and close(c[4], pc[4]) and close(c[1], pc[1])) then return false end
@@ -199,17 +200,22 @@ check(painted("smoked"), "smoked: the same surfaces repainted, no reload")
 check(lettersPainted("smoked"), "  the letter panes too")
 check(sectionsPainted("smoked"), "  and the sections")
 check(light(SendMailBodyEditBox:GetTextColor()), "  the letter text stays light")
-check(GM.Skin.PRESETS.smoked.tint[4] > GM.Skin.PRESETS.clear.tint[4], "smoked is denser than clear")
-check(GM.Skin.PRESETS.smoked.tint[1] < GM.Skin.PRESETS.clear.tint[1], "  and darker")
+check(GM.Skin.BODIES.smoked.tint[4] > GM.Skin.BODIES.clear.tint[4], "smoked is denser than clear")
+check(GM.Skin.BODIES.smoked.tint[1] < GM.Skin.BODIES.clear.tint[1], "  and darker")
+check(close(T.skinned[MailFrame].g.wash._gradient[3].a, 0.10 * 0.14 / 0.18), "  its wash clean's old ratio of the material's")
 local rim = T.skinned[MailFrame].g.rim:GetAlpha()
 check(GM.Settings.SetSkin("clear"), "back to clear")
 eq(T.skinned[MailFrame].g.rim:GetAlpha(), rim, "the rim never changes with the preset")
 check(painted("clear"), "clear again: repainted back")
 
--- The preset goes into LibGlass's STYLE for later surfaces, as a COPY.
+-- Nothing is pushed into LibGlass's STYLE: the material stays as New made it,
+-- however often the look changes (no compounding wash, no build-order alpha).
+local style = { GM.Glass.STYLE.wash, GM.Glass.STYLE.tint[4] }
 GM.Settings.SetSkin("smoked")
-GM.Glass.STYLE.tint[4] = 0.99
-eq(GM.Skin.PRESETS.smoked.tint[4], 0.62, "writing STYLE's tint never edits the preset (copied, not aliased)")
+GM.Settings.SetSkin("clear")
+GM.Settings.SetSkin("smoked")
+eq(GM.Glass.STYLE.wash, style[1], "a look change never writes STYLE's wash")
+eq(GM.Glass.STYLE.tint[4], style[2], "  nor its tint")
 GM.Settings.SetSkin("clear")
 
 -- Stock: Blizzard's own art back, our panels and pane gone.

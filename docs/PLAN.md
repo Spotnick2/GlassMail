@@ -1344,3 +1344,174 @@ measured; no promise of stable mail IDs; N2 reduced to local return assistance; 
 local characters plus live AltStable, keyed by GUID, with reachability data; snapshots carry
 completeness; queue success is matched to our own attempt; a Send click, and Blizzard's confirmation whenever it shows,
 are always required; a wider probe; milestones reordered; no code copied from the references.
+
+## Following Glass UI's suite (owner, 2026-11-12; Codex gpt-6-astra, high, 3 rounds, consensus; built)
+
+**Why.** Glass UI's roster lists Glass Mail (GlassUI Suite.lua:36), but Glass Mail speaks none of
+its suite API: its windows don't take the suite's material, tint or accent. The contract is Glass
+UI's (`docs/SUITE.md`, `docs/SUITE-LOOK.md`, `Suite.API == 1`, checked with its session against
+GlassUI main 54b84fb). Glass UI needs no change. The model is GlassChat's `Suite.lua` (GlassChat
+#121: Body, Accent, overrides); GlassMiniMap's is the Theme/Report plumbing.
+
+**Owner decisions (2026-11-12):**
+- **Pearl is Glass Mail's own material** too, followed or not (as GUF, GRF and GAB decided).
+- **A look chosen in Glass Mail overrides the suite's tint** while following (GAB's model).
+- **No carry-over:** a saved `skin = "smoked"` isn't moved into an override; everyone follows the
+  suite's tint after the update. `skin` keeps its meaning when not following.
+- **The accent colours Glass Mail's own text only**, never Blizzard's labels on the mail windows.
+
+### The material: one instance, built when we know
+
+- `Glass.lua` stops building at file scope. `GM.Glass` becomes a stable forwarding table
+  (`__index` to the instance), so the files that capture `GM.Glass` at load (Address, Bag, Skin,
+  Window) keep working unchanged: none captures a function or reads `STYLE` at file scope. It is
+  built in our own `ADDON_LOADED` handler right after the settings exist, before anything that
+  builds a surface (Skin.Start runs at `PLAYER_LOGIN` and at `Blizzard_MailFrame`'s
+  `ADDON_LOADED` once `GM.db` exists, GlassMail.lua:249; the windows on first open).
+- **When:** our own `ADDON_LOADED`, with `## OptionalDeps: GlassUI` added (Glass UI's
+  `ADDON_LOADED` then runs first and `Ready()` is true: GlassMiniMap's S.2, measured on 70450).
+  Once per session; no rebuild later (LibGlass never restyles a built instance).
+- **Which:** following, `Theme(ADDON).preset` (a name, not hard-coded "pearl"); not following,
+  `"pearl"`. A build that errors falls back to `"clean"`, then to the library defaults (classic).
+  "No Theme answer" (not following) and "the followed preset failed" stay distinct: the latter is
+  reported with `reason = "library-too-old"` only for Pearl under LibGlass MINOR 11, else
+  `"build-failed"`, and `minor` = the winning LibStub MINOR at the attempt. The build is never
+  reinterpreted after a library upgrade.
+- **The material baseline is fixed:** surfaces are built from the material as `New` made it; the
+  body (tint, wash) is no longer pushed into `STYLE` before `Apply` (today's `pushStyle`,
+  Skin.lua:130, which compounds and makes a surface's construction alpha depend on which tint was
+  current when it was built). The material's own wash is captured right after `New`
+  (`baseWash`), and every surface is painted after building through `SetSurfaceTint` and
+  `SetWash(g, baseWash * factor)`: under Pearl, clear and class 0.10, smoked ≈ 0.078; under clean,
+  0.18 and 0.14, as today.
+
+### The look: effective tint and body
+
+- **Glass Mail's choices:** `skin` = `clear` | `smoked` | `stock` (unchanged; saved sparse, default
+  clear) is the look when not following. While following, an override in its own sparse table,
+  `GlassMailDB.suiteOwn = { skin = "clear" | "smoked" | "stock" }`, read with `rawget`, never pruned
+  against the defaults (an override equal to the default must survive a reload).
+- **The effective look:** following, the override if set, else the suite look's `tint` (`clear`,
+  `smoked` or `class`, live); not following, `skin`.
+- **The body numbers** come from `Suite.Body(effectiveTint)` while following (tint or `classShade`,
+  `wash` as a factor of our instance's `STYLE.wash`, `backing`), checked like GlassChat's
+  `validBody`, else our own copy in Body's shape (`Skin.BODIES`: clear and smoked as today's tints,
+  wash ×1 and ×0.14/0.18, backing 0.35 and 0.92; class `classShade = 0.6`, wash ×1, backing 0.35;
+  backing RGB {0.04, 0.05, 0.07}), also used when `Body` is missing, throws or answers junk.
+  **Valid** means the whole answer, checked before painting: every colour component a finite
+  number in 0..1 (NaN fails), `classShade` finite in 0..1 when there is no `tint`, and a finite
+  `wash` factor whose `baseWash * factor` is within 0..1 (LibGlass's setters return false on
+  anything else, which `pcall` can't see). Not valid: the whole local body, never a mix. Accent
+  colours are checked the same way. Not
+  following, our copy. Resolved once per refresh and shared by every surface: no caches. The
+  panes and sections (`pane`, `section`) stay Glass Mail's own; class uses clear's full RGBA (a
+  neutral, dense reading fill, no class-coloured panes).
+- **When the suite can't say:** `Look` missing or throwing, or a tint we don't know: the local
+  `skin` is the look, exactly as when not following, and no override is made from it.
+- **Class:** its own paint branch (a class Body has no `tint`): `classShade` × the player's class
+  colour (`C_ClassColor` / `RAID_CLASS_COLORS` by the class token), `SetSurfaceTint` with three
+  values, so the construction alpha (the material's, now the same for every surface) is kept. An
+  unreadable colour resets the surface to its built tint (`SetSurfaceTint(g)`, as Glass UI's Theme,
+  GlassUI Theme.lua:66), not a previous smoked one, and repaints at `PLAYER_ENTERING_WORLD`.
+- **Stock** (`skin` or the override): Blizzard's own art, no glass on the mail windows, as today.
+  Glass Mail's own windows stay glass (smoked, as today). Reported as `declined = "Blizzard's
+  own"`, `built = nil`: Glass UI shows "its own look by its choice", not a failure.
+
+### The accent
+
+- Our own text that is Blizzard's gold today takes the accent: the picker's section headers
+  (Address.lua:241, `GOLD`). Text only, as decided: the Glass Mail window's selected-folder
+  highlight (a background texture, Window.lua:416) stays gold, and no new targets are added.
+  Following: `Suite.Accent(name)` with the validated effective name (the suite's `accent` when we
+  know it, else gold); when it is missing, throws or answers a bad colour, our own copy of that
+  name (`ACCENTS = { gold = {1, 0.82, 0}, ice = {0.65, 0.835, 0.905} }`, GlassChat's), so what is
+  painted and what is reported agree; not following: gold. No accent override in Glass Mail, so no `own.accent`. Blizzard's labels on
+  MailFrame are never recoloured. A repaint touches the existing rows only (no roster rebuild); a
+  picker built later reads the current colour.
+
+### Live
+
+- **Start order** (SUITE-LOOK): freeze participation at our `ADDON_LOADED`; register for
+  `GlassUI.Suite.LookChanged`; pull `Suite.Look()` at once, before any surface is built.
+- `LookChanged(owner, look)`: copy the `tint` and `accent` we know (a value we don't know keeps
+  ours), `Skin.Refresh()` and the accent repaint, then `Report`. Idempotent.
+- **Combat:** a tint or accent change only repaints colours and alphas (ours, and `SetAlpha` on the
+  faded Blizzard art, as every skin switch does today); it never calls Blizzard's letter refresh
+  (`OpenMailFrame:Update`, Skin.lua:417), which only runs when the letter turns light or dark, and
+  a tint change never does (`letter.light` stays true: kept and tested). A **stock ↔ glass**
+  change does turn the letter, whatever caused it: a Glass Mail setting, or a suite event (with a
+  local `stock` and no override, a valid suite tint shows glass and an unknown one falls back to
+  stock). So Skin keeps the **applied** look: every paint path (Refresh, the inbox guides' hook,
+  a window built later) paints from it, never from the settings directly. A refresh computes the
+  requested look; if it crosses the stock boundary in combat, the applied one stays, and at
+  `PLAYER_REGEN_ENABLED` the latest requested look is resolved and applied whole (stationery,
+  pane, text). A change back before combat ends cancels it. Settings save at once and the options
+  page shows the saved request; the report says what is applied. No general combat queue.
+- Everything read from Glass UI goes through `rawget`; every call through `pcall`; a junk or
+  throwing suite means our own look, never an error.
+
+### Report
+
+`{ api = 1, built, reason, minor, declined, look = { tint = effective, accent = name }, own = {
+tint = true } (an override of clear or smoked), options = GM.Options.Open }`, plain values, sent
+after the build and after every change (a look change, an override set or cleared, stock to glass
+and back). Derived each time from the frozen participation, the build result and the stock state
+(no report state of its own): `built` is the built preset only while participating and not stock,
+nil otherwise (else Glass UI would show us as following); stock to glass clears `declined` and
+reports the original build result again, an earlier failure included. No `live` (we repaint
+live), no `own.backing` (our backing is Body's).
+
+### Settings
+
+- The options page's look radios: while following, a first choice "Glass UI (<current tint>)"
+  that clears the override, then Clear glass, Smoked glass, Blizzard's own as overrides; the
+  selection goes by source (an override equal to the suite's value still shows as ours). Not
+  following: today's three radios. A status line under them: "Follows Glass UI" / "Glass UI isn't
+  loaded" / "Not following Glass UI (set in Glass UI)" / "Glass UI's theme integration isn't
+  available" (an API other than 1), plus a material build failure when there was one, with Glass
+  UI's `Open()` behind a button when it exists.
+- **Live:** a suite event or a slash command while the page is open re-runs its refreshers (the
+  selection and the "Glass UI (<tint>)" label), through one `Options.Refresh()`.
+- `/gmail skin clear|smoked|stock` sets the override while following, `skin` otherwise; `/gmail
+  skin suite` clears the override.
+
+### Tests
+
+A fake `GlassUI.Suite` in the stubs (API 1; Theme, Report, Look, Body, Accent, Open, each
+removable or throwing). Cases: no Glass UI (Pearl, our look, no report); following (the preset
+built is Theme's; the body is Body's; a LookChanged repaints and reports; a tint we don't know is
+ignored; class with the colour unreadable, then painted at PLAYER_ENTERING_WORLD); not following
+(our look, a report saying so); an override (set, survives a reload, cleared by "Glass UI");
+stock while following (declined, mail windows unglassed, our windows glass); a failed build
+(`clean`, reported); the accent on the picker headers (the folder highlight stays gold), never on a
+Blizzard label; `Look`, `Body` or `Accent` missing or throwing; API 2 counts as absent; the
+options page by source. Plus (Codex round 1):
+- the TOC loads without touching the forwarding instance; it is built once, after the settings,
+  on both start paths (our `ADDON_LOADED`, then `Blizzard_MailFrame`'s);
+- repeated tint changes and windows opened later don't compound the wash; surfaces built before
+  and after a smoked change agree under class;
+- class with `Body` missing or throwing; an unreadable class colour after smoked resets to the
+  built tint, then paints at `PLAYER_ENTERING_WORLD`;
+- following switched either way stays frozen until a reload; an old local smoked or stock is kept
+  for not-following and never becomes an override;
+- stock → glass clears `declined` and reports the original build result, a failure included;
+- unknown tint or accent values, malformed answers and a throwing metatable stay inside the suite
+  boundary, and what is reported matches what is painted;
+- the open options page updates after `/gmail skin` and after a suite event; a picker built after
+  an accent change uses the current colour; the folder highlight stays gold;
+- a known `ice` with `Accent` missing, throwing or answering a bad colour: our ice, on headers
+  already built and on reused rows; a Body with NaN, an out-of-range component or a wash factor
+  out of range: the local body whole;
+- the applied look: local stock with no override, then a valid suite tint, an unknown one, a valid
+  one again, in combat: stock ↔ glass waits, a later `/gmail guides`, suite event or window opened
+  meanwhile paints the applied look; a change back before combat ends cancels it; glass-to-glass
+  changes repaint at once without `OpenMailFrame:Update`;
+- in combat, a tint or accent change never calls `OpenMailFrame:Update`; a stock ↔ glass switch
+  waits for combat's end and then applies whole.
+Mutation-tested.
+
+**In game:** with Glass UI following: change the suite tint (clear, smoked, class) and the accent
+on its "Suite look" page and watch the mail windows, the letter, the Glass Mail window, the picker
+and the grid repaint live, in and out of combat (no `ADDON_ACTION_BLOCKED` / `_FORBIDDEN`); stock
+↔ glass in combat waits for its end; override Smoked in Glass Mail, reload, see it
+kept; Blizzard's own, see Glass UI's page say so; switch following off in Glass UI and reload.

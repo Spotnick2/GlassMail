@@ -50,6 +50,13 @@ local function ensureDefaults()
     if db.autofill ~= nil and type(db.autofill) ~= "boolean" then db.autofill = nil end
     if db.inboxGuides ~= nil and type(db.inboxGuides) ~= "boolean" then db.inboxGuides = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
+    -- The look's override while following Glass UI (Suite.lua): read raw and
+    -- never pruned against the defaults; junk is dropped.
+    local own = rawget(db, "suiteOwn")
+    if own ~= nil then
+        local v = type(own) == "table" and rawget(own, "skin")
+        if GM.Suite.ValidOwn(v) then db.suiteOwn = { skin = v } else db.suiteOwn = nil end
+    end
     setmetatable(db, { __index = DEFAULTS })
     if type(GlassMailCharDB) ~= "table" then GlassMailCharDB = {} end
     return db, GlassMailCharDB
@@ -59,11 +66,14 @@ end
 local Settings = {}
 GM.Settings = Settings
 
--- False for a name that isn't a skin; the setting is left as it was.
+-- False for a name that isn't a skin; the setting is left as it was. While
+-- following Glass UI it sets Glass Mail's override ("suite" clears it), else
+-- the `skin` setting.
 function Settings.SetSkin(name)
+    if GM.Suite.Following() then return GM.Suite.SetOwn(name) end
     if not GM.Skin.IsValid(name) then return false end
     GM.db.skin = name
-    GM.Skin.Refresh()
+    GM.Suite.Changed()
     return true
 end
 
@@ -104,6 +114,7 @@ end
 function Settings.SetInboxGuides(on)
     GM.db.inboxGuides = on == true
     GM.Skin.Refresh()
+    if GM.Options.Refresh then GM.Options.Refresh() end
     return true
 end
 
@@ -149,7 +160,10 @@ end
 -- The command list: /gmail help prints it, the options page can show it.
 local function helpLines()
     return {
-        "/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")",
+        GM.Suite.Following()
+            and ("/gmail skin clear/smoked/stock/suite - the mailbox's look, over Glass UI's ("
+                .. (GM.Suite.Own() or ("Glass UI: " .. GM.Suite.Requested())) .. ")")
+            or ("/gmail skin clear/smoked/stock - the mailbox's look (" .. GM.db.skin .. ")"),
         "/gmail guides on/off - the inbox's empty slots, lines and \"No mail\" under glass ("
             .. (GM.db.inboxGuides and "on" or "off") .. ")",
         "/gmail tradeblock on/off - block trades while the mailbox is open (" .. (GM.db.tradeBlock and "on" or "off") .. ")",
@@ -175,7 +189,7 @@ local function setSkin(name)
     if Settings.SetSkin(name) then
         say("skin " .. name)
     else
-        say("/gmail skin " .. table.concat(GM.Skin.NAMES, "/"))
+        say("/gmail skin " .. table.concat(GM.Skin.NAMES, "/") .. (GM.Suite.Following() and "/suite" or ""))
     end
 end
 
@@ -249,6 +263,9 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" then
         if arg1 == ADDON then
             GM.db, GM.charDB = ensureDefaults()
+            -- Glass UI first (OptionalDeps: its ADDON_LOADED has run), then the
+            -- glass, before anything builds a surface.
+            start("suite", GM.Suite.Start)
             start("store", GM.Store.Load)
         elseif arg1 == "Blizzard_MailFrame" and GM.db then
             start("skin", GM.Skin.Start)
@@ -256,6 +273,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
     elseif event == "PLAYER_LOGIN" then
         -- SavedVariables are read here at the latest (porting guide: not at file scope).
         if not GM.db then GM.db, GM.charDB = ensureDefaults() end
+        if not GM.GlassBuilt() then start("suite", GM.Suite.Start) end
         if not GM.Store.Ready() then start("store", GM.Store.Load) end
         -- The clock first: before any record is written or pruned.
         start("clock", GM.Store.Tick)
@@ -271,6 +289,8 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("address", GM.Address.Start)
         start("bag", GM.Bag.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
+        -- The class colour can be read by now (a class tint painted its built one).
+        start("skin retry", GM.Skin.Retry)
         -- arg1 = isInitialLogin. The build warning asks the developer to
         -- re-measure; a player can't act on it, and /reload never repeats it.
         if arg1 and GM.IsDev() and API.ClientBuild() ~= GM.MEASURED_ON_BUILD then

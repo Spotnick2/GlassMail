@@ -51,7 +51,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 
 ## Layout
 
-TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` → `Compat.lua` → `Glass.lua` → `Skin.lua` →
+TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` → `Compat.lua` → `Glass.lua` → `Suite.lua` → `Skin.lua` →
 `Core\Mailbox.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Store.lua` → `Core\Registry.lua` →
 `Core\Sent.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
 `Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
@@ -62,11 +62,30 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   read by `/gmail failures`), `PlayerFullName`, `AddOnVersion`, `SafeFrame`, `Button`;
   `MEASURED_ON_BUILD`; `Debug` (the in-game checks' line, `/gmail debug on`, this session only). A
   subset of GlassChat's; lift more from there.
-- **`Glass.lua`**: `GlassMail.Glass = LibStub("LibGlass-1.0"):New({ preset = "clean" })` (LibGlass r11's
-  clean material: thin rims, no grain), this addon's instance of
-  the material. Material changes are LibGlass PRs.
-- **`Skin.lua`**: the look, `GM.db.skin` = `clear` / `smoked` (glass presets, AltStable's
-  numbers) or `stock`. A glass panel under each mail window and a reading pane under the inbox
+- **`Glass.lua`**: this addon's instance of the LibGlass material, built once at our
+  `ADDON_LOADED` (`GM.BuildGlass`, from `Suite.Start`): Glass UI's preset while following, else
+  Pearl, our own (owner, 2026-11-12), falling back to clean, then the defaults (`GM.GlassBuild()`
+  says what was built and why). `GlassMail.Glass` is a stable table forwarding to it, so files
+  that capture it at load work; nothing reads it before the build. `GM.BaseWash()` is the
+  material's own wash. Material changes are LibGlass PRs.
+- **`Suite.lua`**: following Glass UI's suite (Glass UI's `docs/SUITE.md` / `SUITE-LOOK.md`, API 1;
+  docs/PLAN.md, "Following Glass UI's suite"). Decided once at our `ADDON_LOADED`
+  (`## OptionalDeps: GlassUI`). While following: the suite look's tint (clear, smoked, class),
+  live through `GlassUI.Suite.LookChanged`, unless Glass Mail's own choice overrides it
+  (`GlassMailDB.suiteOwn = { skin }`, never pruned against the defaults); `Suite.Body` /
+  `Suite.Accent` checked whole (finite, in range), else our copies; Blizzard's own reported as
+  `declined`; `Report` derived from the frozen participation, the build and the applied look.
+  The accent colours our own gold text only (the picker's headers). Everything read through
+  `rawget`, every call under `pcall`.
+- **`Skin.lua`**: the look Suite asks for (`Suite.Requested()`: clear, smoked, class or stock;
+  `GM.db.skin` when not following), kept as the **applied** look that every paint path uses. A
+  body is Glass UI's `Suite.Body` shape (`Skin.BODIES`, our copy: tint or class shade, a wash
+  factor of the material's own, a backing); surfaces are built from the material untouched and
+  painted after (nothing pushed into `STYLE`). A change that crosses the stock boundary in combat
+  waits for `PLAYER_REGEN_ENABLED` (it turns the letter, and an open one is re-shown through
+  `OpenMailFrame:Update`); glass-to-glass changes apply at once. Class: the class colour times
+  the shade at the built alpha, the built tint while unreadable, repainted at
+  `PLAYER_ENTERING_WORLD`. A glass panel under each mail window and a reading pane under the inbox
   rows, repainted live by `Skin.Refresh()`. Our floating panels (the picker, the item grid) have
   an opaque backing under their glass, Glass UI's tracker body (`Skin.AddWindow(frame, true)`:
   0.35 in clear, 0.92 in smoked). The stock art (template parentKeys, the inset,

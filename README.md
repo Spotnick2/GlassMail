@@ -39,7 +39,8 @@ includes the characters AltStable knows are yours, including those on your other
 once AltStable has synced them, and typing the start of one of their names in the To box
 completes it, the way the game completes the names it knows.
 
-**Make yourself at home.** Choose clear glass, smoked glass or Blizzard's original look; the
+**Make yourself at home.** Choose clear glass, smoked glass or Blizzard's original look, or let
+**Glass UI** set it for all your Glass addons (its tint and accent, changed live); the
 mailbox keeps its familiar layout either way, empty or not: under glass, each row has a faint slot
 for its icon, and an empty inbox says "No mail". Each row gets a tooltip listing its attachments,
 a Return shortcut, and a Delete shortcut on empty mail only, so nothing with money or items is
@@ -77,7 +78,7 @@ browse your records, or `/gmail help` for every command.
 | `/gmail help` | List the commands |
 | `/gmail mail` | The Glass Mail window: Sent, Inbox, Trash |
 | `/gmail options` | Open the options page (Esc > Options > AddOns > Glass Mail) |
-| `/gmail skin clear` / `smoked` / `stock` | The mailbox's look |
+| `/gmail skin clear` / `smoked` / `stock` | The mailbox's look (with Glass UI, `/gmail skin suite` follows its look again) |
 | `/gmail guides on` / `off` | Under glass, the inbox's empty slots, row lines and "No mail" (on by default) |
 | `/gmail autofill on` / `off` | Start the To box with the last name this character mailed (on by default) |
 | `/gmail alert on` / `off` | A chat line when new mail comes (on by default) |

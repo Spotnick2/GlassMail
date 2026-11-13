@@ -189,7 +189,6 @@ end
 
 local PICK_W, PICK_H = 240, 330
 local ROWS, ROW_H = 15, 18
-local GOLD = { 1, 0.82, 0 }
 Address.ROWS = ROWS
 
 local panel, ui
@@ -238,7 +237,9 @@ local function paint()
         if e then
             r.label:SetText(e.title or e.name)
             if e.title then
-                r.label:SetTextColor(GOLD[1], GOLD[2], GOLD[3])
+                -- The suite's accent (Suite.lua; gold unless Glass UI says ice).
+                local a = GM.Suite.AccentColor()
+                r.label:SetTextColor(a[1], a[2], a[3])
             else
                 -- A name in its class colour when its class is known, else white.
                 local cr, cg, cb = classColor(e.class)
@@ -256,6 +257,12 @@ local function paint()
     local empty = ""
     if #rows == 0 then empty = (query == "" and "No names yet" or "No match") end
     ui.empty:SetText(empty)
+end
+
+-- The suite's accent changed: repaint the rows on show (the headers take the
+-- new colour; a picker opened later paints it anyway).
+function Address.RepaintAccent()
+    if ui and panel and panel:IsShown() then paint() end
 end
 
 local function setOffset(n)

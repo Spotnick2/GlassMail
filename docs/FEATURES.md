@@ -29,6 +29,11 @@ guides on the reading pane (owner, 2026-11-12: an empty inbox read as one bare p
 each row's icon, a line between rows, and an empty inbox's envelope with "No mail"; a setting
 (`inboxGuides`, `/gmail guides`) turns them off.
 
+With Glass UI installed, Glass Mail follows its suite (owner, 2026-11-12; docs/PLAN.md, "Following
+Glass UI's suite"): Glass UI's material, its tint (clear, smoked, class) live, and its accent on our
+own gold text; a look chosen in Glass Mail overrides the tint, and Blizzard's own is reported as
+Glass Mail's choice. Pearl is Glass Mail's own material too.
+
 ## Features
 
 | # | Feature | Notes that shape the design |

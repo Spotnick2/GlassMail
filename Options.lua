@@ -37,6 +37,7 @@ local function radioButton(parent, text)
     if templated then
         rb.text:SetFontObject("GameFontHighlight")
         rb.text:SetText(text)
+        rb.label = rb.text
         return rb
     end
     rb:SetSize(16, 16)
@@ -49,6 +50,7 @@ local function radioButton(parent, text)
     rb:GetHighlightTexture():SetBlendMode("ADD")   -- as the template's (CheckButtonTemplates.xml:18)
     local fs = label(parent, text)
     fs:SetPoint("LEFT", rb, "RIGHT", 4, 0)
+    rb.label = fs
     return rb
 end
 
@@ -97,11 +99,37 @@ local function build()
     end
     local look = label(panel, "The mailbox windows' look", "GameFontNormal")
     look:SetPoint("TOPLEFT", version, "BOTTOMLEFT", 0, -16)
+    -- Following Glass UI (frozen for the session): its tint first, then ours as
+    -- overrides, selected by source (an override equal to the suite's tint is ours).
+    local S = GM.Suite
+    local following = S.Following()
     local options = {}
+    if following then options[1] = { "suite", "Glass UI" } end
     for _, name in ipairs(GM.Skin.NAMES) do options[#options + 1] = { name, GM.Skin.LABELS[name] } end
-    local last, group = radios(panel, look, options, function() return GM.db.skin end, GM.Settings.SetSkin)
+    local get = following and function() return S.Own() or "suite" end or function() return GM.db.skin end
+    local last, group = radios(panel, look, options, get, GM.Settings.SetSkin)
     Options._test.skinRadios = group
-    local guides = checkbox(panel, last, "Under glass, show the inbox's empty slots and lines, and \"No mail\"",
+    if following then
+        refreshers[#refreshers + 1] = function()
+            local tint = S.SuiteTint()
+            group[1].label:SetText(tint and ("Glass UI (" .. GM.Skin.LABELS[tint] .. ")") or "Glass UI")
+        end
+    end
+    local status = label(panel, "", "GameFontDisableSmall")
+    status:SetPoint("TOPLEFT", last, "BOTTOMLEFT", 0, -6)
+    refreshers[#refreshers + 1] = function() status:SetText(Options.SuiteStatus()) end
+    Options._test.status = status
+    local below = status
+    if S.CanOpen() then
+        local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        open:SetSize(140, 22)
+        open:SetText("Set in Glass UI")
+        open:SetPoint("TOPLEFT", status, "BOTTOMLEFT", 0, -4)
+        open:SetScript("OnClick", function() S.Open() end)
+        Options._test.openSuite = open
+        below = open
+    end
+    local guides = checkbox(panel, below, "Under glass, show the inbox's empty slots and lines, and \"No mail\"",
         function() return GM.db.inboxGuides end, GM.Settings.SetInboxGuides)
     Options._test.guides = guides
     local comforts = label(panel, "At the mailbox", "GameFontNormal")
@@ -147,6 +175,29 @@ function Options.Register()
     if category or not (Settings and Settings.RegisterCanvasLayoutCategory) then return end
     category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
     Settings.RegisterAddOnCategory(category)
+end
+
+-- The line under the look: where it comes from, and a material that couldn't be built.
+function Options.SuiteStatus()
+    local S, build = GM.Suite, GM.GlassBuild() or {}
+    local status = S.Status()
+    local text
+    if status == "following" then text = "Follows Glass UI's appearance."
+    elseif status == "not-following" then text = "Not following Glass UI's appearance (set in Glass UI)."
+    elseif status == "incompatible" then text = "Glass UI's theme integration isn't available."
+    else text = "Glass UI isn't loaded: Glass Mail's own look." end
+    if build.failed then
+        text = text .. " The " .. tostring(build.wanted) .. " material couldn't be built ("
+            .. build.failed .. "): " .. tostring(build.preset) .. " instead."
+    end
+    if GM.Skin.Pending() then text = text .. " The change applies after combat." end
+    return text
+end
+
+-- Re-read every control while the page is open (a suite event, a slash command).
+function Options.Refresh()
+    if not (Options.built and panel:IsShown()) then return end
+    for _, refresh in ipairs(refreshers) do refresh() end
 end
 
 -- Open the page; false when the Settings framework can't.

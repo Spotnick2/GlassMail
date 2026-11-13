@@ -9,14 +9,23 @@
 -- replaced. Fading uses SetAlpha, never Hide, so Blizzard's own Show/Hide logic
 -- for those regions keeps working.
 --
--- Two glass presets, clear and smoked, plus "stock" (Blizzard's own art). The
--- presets are AltStable's tint, wash and pane numbers (AltStable/Skin.lua), on
--- LibGlass's clean material (Glass.lua), which has no grain: their grain is 0,
--- or a repaint would put it back. They differ only in the body (tint, wash) and the pane, never
--- in the rim: GLASS-MATERIAL.md, a darkened rim reads as smoked plastic.
--- Unlike AltStable, the switch is live: we own a handful of surfaces and
--- repaint them (LibGlass SetSurfaceTint, the grain's alpha, SetWash: a
--- gradient ignores SetAlpha, LibGlass #47), where AltStable has too many to repaint and asks for a /reload.
+-- The looks: clear and smoked glass, class (from Glass UI's suite only), and
+-- "stock" (Blizzard's own art). Which one is Suite.lua's answer (the suite's
+-- tint, an override, or the `skin` setting); Skin keeps the one APPLIED, and
+-- every paint path paints from it. A body is Glass UI's Suite.Body shape (a
+-- tint or a class shade, a wash factor, a backing): Glass UI's numbers while
+-- following, else our copy (Skin.BODIES, the same numbers). Surfaces are built
+-- from the material as Glass.lua made it (nothing pushed into STYLE) and the
+-- body is painted on after building: SetSurfaceTint, and SetWash at the
+-- material's own wash times the body's factor. The looks differ in the body
+-- and the panes, never in the rim: GLASS-MATERIAL.md, a darkened rim reads as
+-- smoked plastic. The switch is live: we own a handful of surfaces and repaint
+-- them (SetWash: a gradient ignores SetAlpha, LibGlass #47).
+--
+-- In combat a change that crosses the stock boundary (it turns the letter, and
+-- an open letter is re-shown through Blizzard's OpenMailFrame:Update) waits
+-- for PLAYER_REGEN_ENABLED, the applied look kept meanwhile; glass-to-glass
+-- changes only repaint colours and alphas, and apply at once.
 --
 -- The letter (the send tab's body and the open letter) goes dark under glass,
 -- as in docs/mockups/inbox-and-send.png (owner, 2026-10-10): the stationery is
@@ -47,23 +56,25 @@ GM.Skin = Skin
 -- the item grid), clipped by its mask: Glass UI's body over the world, as its
 -- quest tracker wears it (GlassUI Suite.BODY and Suite.BACKING; the owner,
 -- 2026-11-12: the picker's bare tint let Shatter's window read through).
-Skin.PRESETS = {
-    clear = {
-        tint = { 0.13, 0.16, 0.22, 0.24 }, grain = 0, wash = 0.18,
-        pane = { 0.04, 0.05, 0.07, 0.62 },
-        section = { 0.04, 0.05, 0.07, 0.94 },
-        backing = { 0.04, 0.05, 0.07, 0.35 },
-    },
-    smoked = {
-        tint = { 0.05, 0.06, 0.08, 0.62 }, grain = 0, wash = 0.14,
-        pane = { 0.03, 0.03, 0.04, 0.80 },
-        section = { 0.03, 0.03, 0.04, 0.94 },
-        backing = { 0.04, 0.05, 0.07, 0.92 },
-    },
+-- The bodies, in Glass UI's Suite.Body shape (GlassUI Suite.lua, the numbers it
+-- moved from its Theme.PRESETS, which are AltStable's): used when not
+-- following, and when Glass UI's answer is missing or bad. `wash` is a factor
+-- of the material's own wash (smoked's 0.14 / 0.18 keeps clean's old ratio);
+-- `backing` the alpha of the opaque layer under a floating panel's tint.
+Skin.BODIES = {
+    clear = { tint = { 0.13, 0.16, 0.22, 0.24 }, wash = 1, backing = 0.35 },
+    smoked = { tint = { 0.05, 0.06, 0.08, 0.62 }, wash = 0.14 / 0.18, backing = 0.92 },
+    class = { classShade = 0.6, wash = 1, backing = 0.35 },
+}
+Skin.BACKING = { 0.04, 0.05, 0.07 }
+-- The panes, Glass Mail's own; class reads on clear's (neutral, dense).
+Skin.PANES = {
+    clear = { pane = { 0.04, 0.05, 0.07, 0.62 }, section = { 0.04, 0.05, 0.07, 0.94 } },
+    smoked = { pane = { 0.03, 0.03, 0.04, 0.80 }, section = { 0.03, 0.03, 0.04, 0.94 } },
 }
 -- Every value of the setting, in the order the options page lists them.
 Skin.NAMES = { "clear", "smoked", "stock" }
-Skin.LABELS = { clear = "Clear glass", smoked = "Smoked glass", stock = "Blizzard's own" }
+Skin.LABELS = { clear = "Clear glass", smoked = "Smoked glass", stock = "Blizzard's own", class = "Class colour" }
 
 -- The stock frame art of ButtonFrameTemplate (SharedUIPanelTemplates.xml:566-711).
 local ART = { "NineSlice", "Bg", "TopTileStreaks" }
@@ -119,24 +130,54 @@ local sections = {}
 -- is recorded once and not retried on every later ADDON_LOADED.
 local tried = {}
 
--- The current preset, or nil under "stock".
-local function preset()
-    return Skin.PRESETS[GM.db.skin]
+-- The applied look's name ("clear" | "smoked" | "class" | "stock"), its
+-- resolved paint (nil under stock), and whether a stock-boundary change waits
+-- for combat's end.
+local applied, current, pending
+
+-- A look's paint: { name, body, pane, section, backing }, nil for stock. The
+-- body is Suite.Body's (Glass UI's, checked, or ours), resolved once here and
+-- shared by every surface.
+local function resolve(name)
+    if name == "stock" or name == nil then return nil end
+    local body = GM.Suite.Body(name) or GM.Suite.Body("clear")
+    local panes = Skin.PANES[name] or Skin.PANES.clear
+    return { name = name, body = body, pane = panes.pane, section = panes.section, backing = body.backing }
 end
 
--- The preset's body into this addon's LibGlass STYLE, before an Apply: COPIED,
--- never aliased (AltStable #184: the library fills STYLE in place, and an
--- alias would let that edit the preset itself).
-local function pushStyle(p)
-    local st = Glass.STYLE
-    st.tint = { p.tint[1], p.tint[2], p.tint[3], p.tint[4] }
-    st.grain, st.wash = p.grain, p.wash
+-- The applied look's paint, or nil under stock.
+local function preset() return current end
+
+-- The player's class colour, or nil while it can't be read (early in a login).
+local function classColour()
+    local _, token = UnitClass("player")
+    if API.IsSecret(token) or type(token) ~= "string" then return nil end
+    local colours = rawget(_G, "RAID_CLASS_COLORS")
+    local c = type(colours) == "table" and colours[token]
+    if type(c) ~= "table" then return nil end
+    local r, g, b = c.r, c.g, c.b
+    if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number" then return nil end
+    return r, g, b
 end
 
+-- The body on one surface: its tint (the class colour times the shade, at the
+-- surface's built alpha; the built tint while the colour can't be read) and
+-- its wash, a factor of the material's own.
 local function paintBody(g, p)
-    Glass.SetSurfaceTint(g, p.tint[1], p.tint[2], p.tint[3], p.tint[4])
-    g.grain:SetAlpha(p.grain)
-    Glass.SetWash(g, p.wash)
+    local body = p.body
+    if body.tint then
+        local t = body.tint
+        Glass.SetSurfaceTint(g, t[1], t[2], t[3], t[4])
+    else
+        local r, gg, b = classColour()
+        if r then
+            local s = body.classShade
+            Glass.SetSurfaceTint(g, r * s, gg * s, b * s)
+        else
+            Glass.SetSurfaceTint(g)
+        end
+    end
+    Glass.SetWash(g, GM.BaseWash() * body.wash)
 end
 
 local function add(list, region)
@@ -197,7 +238,6 @@ local function addPanel(window, name)
     local panel = CreateFrame("Frame", nil, window)
     panel:SetAllPoints(window)
     panel:SetFrameLevel(math.max(0, window:GetFrameLevel() - 1))
-    pushStyle(preset() or Skin.PRESETS.clear)
     local g = Glass.Apply(panel, "large")
     skinned[window] = { panel = panel, g = g, art = art }
 end
@@ -445,7 +485,12 @@ end
 -- Glass Mail's own window (Window.lua): always glass, with no Blizzard art to
 -- fall back on, so `stock` shows it smoked. Its body and panes repaint here.
 local own = {}   -- { g = surface } or { tex = texture, key = "pane" | "section" }
-local function ownPreset() return preset() or Skin.PRESETS.smoked end
+local ownStock   -- the smoked paint our own windows wear under stock
+local function ownPreset()
+    if current then return current end
+    if not ownStock then ownStock = resolve("smoked") end
+    return ownStock
+end
 local function paintOwn(o, p)
     if o.g then paintBody(o.g, p) else
         local c = p[o.key]
@@ -509,9 +554,19 @@ function Skin.Start()
     Skin.Refresh()
 end
 
--- Repaint everything we built in the current preset, live. STYLE is only read
--- when a surface is built (addPanel pushes the preset there), so it isn't
--- touched here.
+-- PLAYER_REGEN_ENABLED, while a stock-boundary change waits: apply the latest
+-- request whole, and report it (Suite.Changed).
+local regen = CreateFrame("Frame")
+regen:SetScript("OnEvent", function(_, event)
+    API.NoteCombat(event)
+    if event == "PLAYER_REGEN_ENABLED" and pending then
+        local ok, err = pcall(GM.Suite.Changed)
+        if not ok then API.Fail("skin after combat", err) end
+    end
+end)
+API.RegisterEvents(regen, { "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" })
+
+-- Repaint everything we built in the applied look, live.
 local function paintPane(pn, p, key)
     if not pn then return end
     pn.frame:SetShown(p ~= nil)
@@ -519,8 +574,19 @@ local function paintPane(pn, p, key)
     if c then pn.tex:SetColorTexture(c[1], c[2], c[3], c[4]) end
 end
 
+-- The look Suite asks for, applied: at once, unless it crosses the stock
+-- boundary in combat (then the applied look stays, and PLAYER_REGEN_ENABLED
+-- brings the latest request; a request back cancels it).
 function Skin.Refresh()
-    local p = preset()
+    local want = GM.Suite.Requested()
+    if applied ~= nil and (applied == "stock") ~= (want == "stock") and API.InCombat() then
+        pending, want = true, applied
+    else
+        pending = false
+    end
+    applied = want
+    current, ownStock = resolve(applied), nil
+    local p = current
     for window in pairs(skinned) do applyOne(window, p) end
     paintPane(pane, p)
     paintGuides(p)
@@ -542,7 +608,6 @@ end
 -- floating panel's, as Glass UI's tracker: the preset's `backing`).
 function Skin.AddWindow(frame, backing)
     local p = ownPreset()
-    pushStyle(p)
     local o = { g = Glass.Apply(frame, "large") }
     own[#own + 1] = o
     paintOwn(o, p)
@@ -567,8 +632,19 @@ end
 
 function Skin.IsSkinned(window) return skinned[window] ~= nil end
 
-function Skin.IsValid(name) return name == "stock" or Skin.PRESETS[name] ~= nil end
+-- A value of the `skin` setting (the local look): clear, smoked or stock.
+function Skin.IsValid(name) return name == "stock" or Skin.PANES[name] ~= nil end
+
+-- The look on screen: "clear" | "smoked" | "class" | "stock" (nil before the first refresh).
+function Skin.Applied() return applied end
+function Skin.Pending() return pending == true end
+
+-- PLAYER_ENTERING_WORLD: the class colour can be read by now.
+function Skin.Retry()
+    if applied == "class" then Skin.Refresh() end
+end
 
 GM._test = GM._test or {}
 GM._test.skin = { skinned = skinned, ART = ART, pane = function() return pane end, letters = letters,
-    sections = sections, portraits = portraits, own = own, guides = function() return guides end }
+    sections = sections, portraits = portraits, own = own, guides = function() return guides end,
+    current = function() return current end }
