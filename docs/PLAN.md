@@ -1451,7 +1451,7 @@ an enabled Return button: Ops checks the mail, not the recall).
 7. One return with Blizzard's letter button: the recall ends too.
 8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
 
-## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex review pending)
+## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, in review)
 
 FEATURES.md's N1: name a bank character and simple rules, and one click fills a draft of what
 should go there; the player still presses Send. The owner's choices (2026-11-13):
@@ -1464,84 +1464,109 @@ should go there; the player still presses Send. The owner's choices (2026-11-13)
 
 **Why it can stay small.** We never send: Blizzard's Send button and its confirmation do, as for
 every mail. Our code only puts items from the bags on the cursor and drops them on the draft's
-attachment slots, which is what the player's own clicks do. A wrong fill costs a look at the draft
-and a right-click on an attachment. Sent already records the send (`Core/Sent.lua`, at the
-`SendMail` post-hook), so nothing about sending changes.
+attachment slots, which is what the player's own clicks do. Sent already records the send
+(`Core/Sent.lua`, at the `SendMail` post-hook). What we promise is narrower than FEATURES' first
+wording ("checks everything again before sending"): the bags are read again at the click, the
+draft is verified after filling, and the player reviews it and sends. A `SendMail` post-hook is too
+late to veto a send, and nothing here pretends to.
 
-### Measured first (session 7, `/fp steps mail bank`)
+### Measured (session 7, 2026-11-13, FOREVER-PROBE.md)
 
-The plan has a branch for each answer; the probe procedure measures them on the live client, and
-the plan is fixed to the results before code.
-1. `C_Container.PickupContainerItem` + `ClickSendMailItemButton(slot)` from our button's click:
-   the stack lands in the draft (at once, a frame later, or only after `MAIL_SEND_INFO_UPDATE`).
-2. `C_Container.SplitContainerItem(bag, slot, n)` + the drop, in the same frame and a frame later:
-   the attachment holds `n`, the bag keeps the rest. **If the split fails**, N1 sends whole stacks
-   only and "keep N" keeps at least N (it never sends a stack that would leave fewer).
-3. The same from a timer, 1 s after a click (no key press behind it). **If it fails**, the whole
-   fill runs inside the click; if (4) also fails, one click attaches one stack (the button says
-   "Fill (n left)").
-4. Several stacks in one click, each pickup and drop in the same frame.
-5. A soulbound item: refused (an error, the item still on the cursor), and
-   `ContainerItemInfo.isBound` / `C_Item.IsBound` say so beforehand. Logged for every bag item
-   (`bagscan`), with each item's class and subclass (the categories below).
-6. Blizzard's own subject fill (`SendMailFrame_Update` names the first attachment when the
-   subject is empty), the attachment counts, and Blizzard's right-click clear done by code.
-7. Whether closing the mailbox empties the draft (attachments back to the bags, unlocked).
+- **A whole stack attaches by code**: `C_Container.PickupContainerItem` then
+  `ClickSendMailItemButton(slot)`, from a click, a frame later, and **from a timer** (no key
+  press). It is in the draft at once (`MAIL_SEND_INFO_UPDATE` fires inside the drop). Three stacks
+  in one frame all landed.
+- **Attachments stay in the bags**, locked, at their full count, until the send succeeds; a close
+  of the mailbox empties the draft and unlocks them.
+- **A split dropped on the draft attaches the whole source stack**: "split 2" of a 10-stack put all
+  10 in the draft (and they were sent). So keep N needs the split put in an empty bag slot first,
+  then that new stack attached: **session 7b measures it** (`splitfree`, `attachplaced`). Until it
+  passes, N1 sends whole stacks only and keeps **at least** N.
+- **A soulbound item is refused**: `UI_ERROR_MESSAGE` 460, the item stays on the cursor, and
+  `ClearCursor` puts it back unlocked. `ContainerItemInfo.isBound` and `C_Item.IsBound` agreed on
+  every item (a heirloom too).
+- Blizzard fills an empty subject with the first attachment ("Windstone (5)"); our right-click
+  clear by code works; a send to the player's own alt showed no confirmation, success 0.22 s later.
+- Still open for 7b: the split into an empty slot; a split put straight back (`ClearCursor`);
+  a close during a delayed action; a send through the secure-transfer confirmation.
 
 ### What is saved
 
-A new `bank` subtree in `GlassMailDB` (`Store` SPECS; `Store.VERSION` stays 1: an older Glass Mail
-leaves an unknown subtree alone):
+A new `bank` table in `GlassMailDB`, loaded and checked by `Core/Bank.lua` itself (a small
+loader, not Store's generic one; `Store.VERSION` stays 1; an older Glass Mail ignores it):
 - `bank.banks[group] = { name, guid? }`: the bank's mail address ("First Surname") and its GUID
-  when it is one of `Registry.Characters()`. `group` is `faction .. ":" .. ruleset`
-  (`Registry.RulesetOf`); "Unknown" rulesets get no bank.
-- `bank.rules = { { item = itemID, keep = n } | { class = c, sub = s, keep = n } }`: account-wide,
-  the same for every group. `keep` is 0 to 9999, per itemID (a category rule keeps `keep` of each
-  of its items). An item rule beats a category rule for its item.
+  when it was picked from your characters. `group` is `faction .. ":" .. ruleset`
+  (`Registry.RulesetOf`); an "Unknown" ruleset gets no bank.
+- `bank.rules`: a list, each exactly one of `{ item = itemID, keep = n }` or
+  `{ class = c, sub = s?, keep = n }` (`sub` absent: the whole class, for Recipes). IDs are
+  positive integers, `keep` an integer 0-9999, a category one of the offered ones (below). Adding a
+  rule that exists (same item, same class and sub) updates its keep. An entry that fails is
+  dropped alone.
 
-Not expired: the owner set them (the "no stale characters" rule is about lists that grow by
-themselves). A bank that is no longer one of your characters still works as an address; the page
-shows it as "not seen" (no `chars` entry). Each part is shape-checked on load and dropped alone if
-it fails, as the other subtrees.
+Not expired: the owner set them, unlike the lists that grow by themselves (the "no stale
+characters" rule). The bank is resolved live: by its GUID in `Registry.Characters()` (AltStable's
+list included, so a bank on another account resolves too) for its current name and reachability;
+the saved name is the fallback for one no list knows. It is "this character" by GUID, or by name
+key (`Names.Key`) when the GUID is unknown.
 
 ### `Core/Bank.lua` (no frames)
 
 Loads after `Core/Recall.lua`.
 - **`Bank.Group(c)`**: a character's group, nil when its faction or ruleset is unknown.
 - **`Bank.For()`**: the current character's bank `{ name, guid }`, or nil and why (none set; the
-  bank is this character; not reachable, `Registry.Reachable` when the bank is a known character).
-- **`Bank.Rule(itemID)`**: the rule for an item: the item rule, else the category rule for its
+  bank is this character; not reachable, when the bank resolves to a known character).
+- **`Bank.Rule(itemID)`**: the item rule, else the category rule for its
   `C_Item.GetItemInfoInstant` class and subclass (no cache needed), else nil.
-- **`Bank.Plan()`**: what one mail should carry, from a fresh read of bags 0-4 (never cached):
-  for each itemID with a rule, `excess = total in the bags - keep`; skip bound
-  (`info.isBound`), locked, and the session's refused items; whole stacks smallest first while they
-  fit in the excess, then one split of the rest (if measured to work), up to
-  `ATTACHMENTS_MAX_SEND` (12) attachments. Returns the list of `{ bag, slot, itemID, n }` and the
-  total still waiting after this batch (the button's count).
-- **`Bank.Ready()`**: the stacks and items waiting in all (the chat line), the same rules.
+- **`Bank.Plan()`**: one mail's worth, from a fresh read of bags 0-4 (never cached). Per itemID
+  with a rule: `total` counts every unit in bags 0-4 (bound, locked and refused ones too: they
+  stay, so they count toward keep), `excess = total - keep`; then **movable** stacks (unbound,
+  unlocked, not refused this session) are taken whole, smallest first, while each fits in what is
+  left of the excess. With 7b passed, the rest of the excess is one split into an empty general bag
+  slot (only when one is free). Up to 12 attachments. Returns the stacks and how many items would
+  still be movable after this batch. Simple over optimal: stacks of 6 and 10 with keep 6 send the 6.
+- **`Bank.Ready()`**: what the algorithm can actually move in all (the chat line, the button).
 
-Categories offered (ItemSubClass, build 70938, `References\Forever\db`): Trade Goods' Cloth (7.5),
-Leather (7.6), Metal & Stone (7.7), Cooking (7.8), Herb (7.9), Elemental (7.10), Enchanting (7.12),
-Parts (7.1) and Other (7.11), and Recipes (class 9, every subclass). Names come from
-`C_Item.GetItemSubClassInfo` / `GetItemClassInfo` at run time (localized), never saved. Session 7's
-`bagscan` confirms real items carry these IDs.
+Categories offered (ItemSubClass, build 70938, `References\Forever\db`; session 7's bag scan
+confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7.5), Leather
+(7.6), Metal & Stone (7.7), Cooking (7.8), Herb (7.9), Elemental (7.10), Enchanting (7.12), Parts
+(7.1) and Other (7.11), and Recipes (class 9). Names from `C_Item.GetItemSubClassInfo` /
+`GetItemClassInfo` at run time, never saved.
 
 ### The Send tab (`Bank.lua`)
 
 - **The button**: ours, on the mailbox's title bar beside the window's, shown on the Send tab
   only; its tooltip says "Fill for <Bank>: n items (m mails)" or why it is off. Its place is
   checked with a screenshot.
-- **Enabled when** a bank is set for this group and reachable, `Bank.Plan()` has something, the
-  draft is empty (no attachment, no money, COD off, the subject empty), the cursor is empty, not in
-  combat, no Ops run, no send in flight (between our Send-button capture and its result).
-- **A click** re-reads everything (`Bank.Plan()` again, at the click), puts the bank's name in the
-  To box (`SetText`, as the picker does; it replaces what was there: the click says so), and
-  attaches each planned stack: check the cursor is empty, pick up (or split), drop on the next free
-  slot, check it landed (the measured way); a refused drop goes back to its bag (`ClearCursor`) and
-  its itemID is skipped for the session. Our code never presses Send and never fills money or COD.
-- **Afterwards** it checks the draft against the plan (each attachment's itemID and count) and
-  prints one line if anything differs. On the next `MAIL_SEND_SUCCESS` the button recounts; the
-  player clicks again for the next batch.
+- **Enabled when** a bank is set for this group and reachable, `Bank.Ready()` has something, the
+  cursor is empty, not in combat (`API.InCombat`), no Ops run, and **the draft is empty**: no
+  attachment, the subject and the body empty, `MoneyInputFrame_GetCopper(SendMailMoney) == 0`
+  (the widget: `GetSendMailMoney()` stays 0 until the Send click copies it, session 6) and COD
+  unchecked; any of them unreadable disables it.
+- **No send in flight.** Blizzard keeps a sent draft (subject, attachments) until
+  `MAIL_SEND_SUCCESS` resets it, so an empty draft already rules out its own pending send. On top:
+  a send is pending from the `SendMail` post-hook (or `SECURE_TRANSFER_CONFIRM_SEND_MAIL`) until
+  `MAIL_SEND_SUCCESS`, `MAIL_FAILED`, `SECURE_TRANSFER_CANCEL`, the mailbox closing (interaction
+  HIDE 17), or 60 s; Fill is off meanwhile. This is not Sent's 120 s attribution window.
+- **A fill** runs inside the click (measured: several stacks in one frame), so nothing is left
+  scheduled. It re-plans from the bags at the click, puts the bank's name in the To box (`SetText`,
+  as the picker does; it replaces what was there), then for each planned stack: the source slot
+  still holds that item and count, unlocked; the cursor is empty (a pickup with something held
+  swaps); the attachment slot is free; pick up; the cursor holds that itemID (`GetCursorInfo`);
+  drop; the slot now holds that item and count. Any check failing stops the fill. A refused drop
+  (our item still on the cursor) goes back with `ClearCursor`, checked; if the cursor holds anything
+  else, it is left alone and chat says so. A refused itemID is skipped for the session.
+  `MAIL_LOCK_SEND_ITEMS` (Blizzard's refund confirmation) stops the fill and leaves the dialog to
+  the player. We never call `SendMailFrame_Update` (Blizzard's update runs on its own event), never
+  press Send, never fill money or COD.
+- **With a split (7b passed)** the fill has two phases: the click splits the partial stacks into
+  empty slots, then, from `BAG_UPDATE_DELAYED` (or a frame timer, as measured), attaches
+  everything. Before each step it checks again the mailbox visit (no interaction HIDE 17 since),
+  the Send tab shown, no combat, no Send click since (the pending flag), the draft holding exactly
+  what the fill put there, and the cursor; any change cancels. Combat, a tab change, the mailbox
+  closing and a Send click cancel it at once. The split stacks stay in the bags (nothing lost).
+- **Afterwards** it compares the draft with the plan (each attachment's itemID and count) and
+  prints one line if anything differs. After `MAIL_SEND_SUCCESS` the button recounts; the player
+  clicks again for the next batch.
 - **At the mailbox**: one chat line per visit, "Glass Mail: n items ready for <Bank> (Fill on the
   Send tab)", only when something is ready (a setting, on by default: `bankNotice`).
 
@@ -1553,31 +1578,37 @@ A fourth entry in the window's sidebar, **Bank**, below the folders. The page re
   listed below, each with a Clear.
 - **Rules**: one row per rule, its item (icon and name, loaded on demand) or category name, a keep
   box (digits, 0-9999) and a ×. **Add**: drop an item from the bags on the add slot (the cursor's
-  item, `GetCursorInfo`, then `ClearCursor` puts it back), or pick a category from a menu.
+  item, `GetCursorInfo`; then `ClearCursor`, which session 7 measured puts it back), or pick a
+  category from a menu.
 - Nothing on the page acts on mail; it only edits `bank`.
 
 ### Tests
 
-- `test_bank.lua` (core): groups; `Bank.For`'s reasons; rule precedence; `Plan` over fake bags:
-  keep N with whole stacks and a split, smallest stacks first, the 12 cap and the count left, bound
-  / locked / refused skipped, a category rule, nothing for items without a rule; Store's shape
-  checks for `bank`.
-- `test_bankui.lua`: the button's enable rules (each one off alone), a fill attaches the plan in
-  order and fills To, a refused drop is put back and skipped, a busy cursor attaches nothing, the
-  verification line, the next batch after a send, the chat line once per visit; the page's add,
-  keep and remove, and the bank menu.
+- `test_bank.lua` (core): groups; `Bank.For`'s reasons, the bank resolved through AltStable's list;
+  rule precedence and the loader (bad entries dropped alone, duplicates update); `Plan` over fake
+  bags: keep N with whole stacks, smallest first, bound / locked / refused units counted but not
+  moved, keep at or above the total, the 12 cap and the count left, a category rule, nothing for
+  items without a rule.
+- `test_bankui.lua`: the button's enable rules (each one off alone: body, the money widget, COD,
+  subject, an attachment, the cursor, combat, a run, a pending send); a fill attaches the plan in
+  order and fills To; each per-stack check stops it (source changed, cursor busy, slot taken, the
+  wrong item picked up); a refused drop is put back, a foreign cursor item left alone;
+  `MAIL_LOCK_SEND_ITEMS` stops it; the verification line; the next batch after a send; the chat
+  line once per visit; the page's add, keep and remove, and the bank menu. The fake cursor swaps
+  on a pickup, as the client does.
 - Mutation-test each.
 
 ### In game
 
 1. Set a bank on the Bank page; add an item rule (keep 20) and a category (Herb).
 2. On another character of the group: the chat line at the mailbox; Fill on the Send tab; the draft
-   holds the right stacks, keep N left in the bags; press Send; the next batch.
+   holds the right stacks, at least keep N left in the bags; press Send; the next batch.
 3. A soulbound item under a category rule: never attached.
 4. More than 12 stacks: two mails.
 5. The bank itself, and a character of the other faction: the button is off and says why.
-6. Close the mailbox with a filled draft: everything back in the bags.
-7. A full client exit: the bank and rules persist.
+6. A body typed first, or gold in the money box: the button is off.
+7. Close the mailbox with a filled draft: everything back in the bags.
+8. A full client exit: the bank and rules persist.
 
 ## The mail core (M1)
 

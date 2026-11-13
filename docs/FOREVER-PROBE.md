@@ -260,6 +260,42 @@ Send then sent the mail normally, with nothing blocked.
 610150.70 R MAIL_SUCCESS (nil)
 ```
 
+## Session 7 findings (2026-11-13, build 70938, N1: filling a draft from the bags)
+
+`/fp steps mail bank` (MailProbe session 7, first version), at a mailbox on the Send tab.
+
+- **A whole stack attaches by code.** `C_Container.PickupContainerItem(bag, slot)` then
+  `ClickSendMailItemButton(n)`: the stack is in the draft at once (`MAIL_SEND_INFO_UPDATE` fires
+  inside the drop, twice), from a click, with the drop a frame later, and **from a timer** 1 s
+  after the click (no key press behind it). Three stacks picked up and dropped in one frame all
+  landed. Nothing was blocked.
+- **Attachments stay in the bags**: the bag slot keeps its full count, locked, until the send
+  succeeds (`ITEM_LOCK_CHANGED` for each slot just before `MAIL_SEND_SUCCESS`).
+- **A split dropped on the draft attaches the whole source stack.**
+  `SplitContainerItem(0, 3, 2)` on a stack of 10, then the drop: the draft held all 10
+  (`2:1251x10`), and all 10 were sent. A split of 2 off a stack of 3 attached 3. The draft takes
+  the bag slot, not the cursor's count. Splitting into an empty bag slot first is measured next
+  (session 7b: `splitfree`, `attachplaced`).
+- **A soulbound item is refused**: `UI_ERROR_MESSAGE (460, "You can't mail soulbound items.")`,
+  the item stays on the cursor, the slot locked; `ClearCursor` puts it back, unlocked.
+  `ContainerItemInfo.isBound` and `C_Item.IsBound` agreed on all 22 items (a Hearthstone, a quest
+  item, a heirloom: bound; `C_Item.IsBoundToAccountUntilEquip` false everywhere).
+- **Blizzard's subject fill**: an empty subject becomes the first attachment's name and count
+  ("Windstone (5)"); each attachment shows its count (screenshot).
+- **Blizzard's right-click clear by code**, `ClickSendMailItemButton(n, true)`: the attachment
+  leaves the draft at once, its bag slot unlocked.
+- **A send to the player's own alt**: no confirmation dialog; `MAIL_SEND_SUCCESS` 0.22 s after
+  `SendMail`; the draft is reset in the same frame; the bags update 0.26 s later
+  (`BAG_UPDATE_DELAYED`), so a bag read in the success handler still shows the sent stacks.
+- **Closing the mailbox empties the draft**: after a close and reopen, no attachment, the stack
+  back in its slot, unlocked.
+- Item classes as `GetItemInfoInstant` gives them: a herb 7.9, a trade good 7.11, potions 0.1,
+  bandages 0.7, food 0.5 (ItemSubClass, build 70938).
+
+Still to measure (session 7b, the procedure's rev 3): a split into an empty bag slot and that
+stack attached alone; a split put straight back; a close during a delayed action; a send through
+the secure-transfer confirmation.
+
 ## Still open, and when it gets measured
 
 M0 and session 5 measured what M1 depends on, session 6 what M2 does. These items stay open; each feature that needs one
@@ -278,7 +314,7 @@ ships with a safe fallback until it is measured:
 | 6 | Postage failure; bind/refund prompts; a send to another ruleset | when convenient | nothing: Sent records what `SendMail` was called with, and its result if one comes |
 | 8 | Friends' name formats; names from another realm | when a friend or another realm is at hand | S1 keeps a realm suffix in its keys and offers no other-realm character |
 | Trash | An AH mail with items deleted through its confirmation popup (no pre-call point) | when convenient | nothing: the post-hook still sees the mail when no update came that frame |
-| 6 | Splitting a stack into an attachment; `SendMail` from a timer (measured only, never used) | M4 | N1 |
+| 6 | A split into an empty bag slot, then attached (a split dropped on the draft attaches the whole stack: session 7); `SendMail` from a timer (never used) | session 7b | N1 keep N exactly (until then, at least N) |
 | 5 | Open All from a gamepad | never (no gamepad) | none: our engine checks its own state at every step |
 
 ## Session 3 findings (2026-10-09, same inbox)

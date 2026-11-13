@@ -20,11 +20,15 @@ WoW.bags[1] = { size = 4, items = {
     [3] = { id = 2772, count = 8 },
     [4] = { id = 2771, count = 6 },
 } }
-WoW.bags[2] = { size = 1, items = { [1] = { id = 2840, count = 3 } } }
+WoW.bags[2] = { size = 6, items = { [1] = { id = 2840, count = 3 }, [2] = { id = 2841, count = 4 },
+    [3] = { id = 2842, count = 5 }, [4] = { id = 2843, count = 6 }, [5] = { id = 2844, count = 7 },
+    [6] = { id = 2845, count = 8 } } }
 local function item(b, s) return WoW.bags[b] and WoW.bags[b].items[s] end
 
--- The cursor and the draft: a bound item, or any while `refuse`, stays on the cursor.
+-- The cursor and the draft: a bound item, or any while `refuse`, stays on the
+-- cursor. A pickup while the cursor holds something swaps, as the client does.
 local cursor, sendItems, refuse, calls = nil, {}, false, {}
+local swapped = false
 local function call(s) calls[#calls + 1] = s end
 local function called(s) for _, c in ipairs(calls) do if c == s then return true end end return false end
 C_Container.GetContainerItemInfo = function(b, s)
@@ -34,7 +38,20 @@ end
 C_Container.PickupContainerItem = function(b, s)
     call("pickup " .. b .. "." .. s)
     local it = item(b, s)
-    if cursor or not it then return end
+    if not it then   -- an empty slot: the held item goes there (a split leaves the rest in its source)
+        if cursor then
+            WoW.bags[b].items[s] = { id = cursor.id, count = cursor.count }
+            local src = item(cursor.b, cursor.s)
+            if cursor.split and src then src.count = src.count - cursor.count end
+            if src then src.locked = nil end
+            cursor = nil
+        end
+        return
+    end
+    if cursor then   -- the swap: the held item goes in the slot, the slot's item on the cursor
+        WoW.bags[b].items[s] = { id = cursor.id, count = cursor.count }
+        swapped = true
+    end
     cursor = { b = b, s = s, id = it.id, count = it.count, bound = it.bound }
     it.locked = true
 end
@@ -42,7 +59,7 @@ C_Container.SplitContainerItem = function(b, s, n)
     call("split " .. b .. "." .. s .. " " .. n)
     local it = item(b, s)
     if cursor or not it then return end
-    cursor = { b = b, s = s, id = it.id, count = n }
+    cursor = { b = b, s = s, id = it.id, count = n, split = true }
     it.locked = true
 end
 local function unlock(x) local it = item(x.b, x.s); if it then it.locked = nil end end
@@ -63,6 +80,7 @@ rawset(_G, "GetSendMailItem", function(a)
     if x then return "item " .. x.id, x.id, 134, x.count end
 end)
 rawset(_G, "CursorHasItem", function() return cursor ~= nil end)
+rawset(_G, "GetCursorInfo", function() if cursor then return "item", cursor.id end end)
 rawset(_G, "ClearCursor", function() call("clearcursor"); if cursor then unlock(cursor); cursor = nil end end)
 C_Item.GetItemInfoInstant = function(id) return id, "Trade Goods", "Parts", "", 134, 7, 0 end
 C_Item.IsBound = function(loc) local it = item(loc.b, loc.s); return it and it.bound == true end
@@ -84,7 +102,8 @@ end
 local function fp(cmd) SlashCmdList.FOREVERPROBE(cmd) end
 
 loadForeverProbe()
-assert(loadfile("Tools/MailProbe/MailProbe.lua"))("MailProbe", {})
+local NS = {}
+assert(loadfile("Tools/MailProbe/MailProbe.lua"))("MailProbe", NS)
 WoW.fire("ADDON_LOADED", "MailProbe")
 WoW.fire("PLAYER_LOGIN")
 
@@ -95,7 +114,7 @@ check(saw("bag 0.1 id=6948 x1 isBound=true C_Item.IsBound=true accountUntilEquip
     "bagscan: a bound item, both ways")
 check(saw("bag 1.2 id=4338 x4 isBound=false C_Item.IsBound=false accountUntilEquip=false locked=true"),
     "  a locked one")
-check(saw("bagscan: 9 item(s) in bags 0-4"), "  every item")
+check(saw("bagscan: 14 item(s) in bags 0-4"), "  every item")
 
 -- attach: the first unbound, unlocked stack, whole, into attachment 1.
 mark()
@@ -126,9 +145,10 @@ cursor = nil
 refuse = true
 n = #calls
 fp("mail attachmany 3")
-eq(#calls - n, 2, "attachmany: a refused drop stops it (one pickup, one click)")
+eq(#calls - n, 3, "attachmany: a refused drop stops it (one pickup, one click)")
+eq(calls[#calls], "clearcursor", "  and puts the refused stack back")
+check(cursor == nil, "  the cursor is empty")
 refuse = false
-ClearCursor()
 
 -- attachmany 3: three more stacks, each once, the locked one skipped.
 fp("mail attachmany 3")
@@ -143,18 +163,128 @@ check(called("pickup 0.1"), "attachbound: the bound item")
 check(cursor ~= nil, "  refused: still on the cursor")
 WoW.advance(0.7)
 check(cursor == nil and called("clearcursor"), "  put back")
-check(saw("attachbound: still on the cursor; ClearCursor"), "  and logged")
+check(saw("attachbound (refused): put back with ClearCursor"), "  and logged")
 
 -- unattach: the last attachment back, Blizzard's right-click.
 fp("mail unattach")
 check(called("click 5 clear") and sendItems[5] == nil, "unattach: the last attachment back")
+
+-- landed (the wait steps): exactly the item and count meant, nothing else.
+fp("mail attach split 2")
+local slot = 5
+check(sendItems[slot] and sendItems[slot].count == 2, "(a split of 2 in attachment 5)")
+check(NS._test.landed7(), "landed: the split as meant")
+sendItems[slot].count = 3
+check(not NS._test.landed7(), "landed: a different count fails")
+sendItems[slot].count = 2
+
+-- A refused drop goes back to its bag 0.6 s later, while the cursor holds it.
+refuse = true
+mark()
+fp("mail attach")
+check(cursor ~= nil, "a refused drop: still on the cursor")
+WoW.advance(0.7)
+check(cursor == nil and saw("(refused): put back with ClearCursor"), "  put back")
+refuse = false
+
+-- Only stack (b, s) can be picked: every other item locked for the test.
+local function only(b, s)
+    local was = {}
+    for bag, def in pairs(WoW.bags) do
+        for slot, it in pairs(def.items) do
+            if not (bag == b and slot == s) then was[it] = it.locked or false; it.locked = true end
+        end
+    end
+    return function() for it, l in pairs(was) do it.locked = l or nil end end
+end
+WoW.bags[3] = { size = 6, items = { [1] = { id = 6949, count = 1, bound = true }, [2] = { id = 3001, count = 4 },
+    [3] = { id = 3002, count = 4 }, [4] = { id = 3003, count = 4 }, [5] = { id = 3004, count = 4 },
+    [6] = { id = 3005, count = 4 } } }
+for k in pairs(sendItems) do sendItems[k] = nil end
+
+-- Never clear a cursor that holds something else by then.
+local restore = only(3, 1)
+mark()
+fp("mail attachbound")
+check(called("pickup 3.1"), "(the second bound item picked up)")
+cursor = { b = 9, s = 9, id = 77, count = 1 }   -- the player swapped in their own item
+WoW.advance(0.7)
+eq(cursor and cursor.id, 77, "a cursor that changed hands: not cleared, the player's item stays")
+check(saw("the cursor holds something else now; left alone"), "  and it says so")
+cursor = nil
+restore()
+
+-- attachtimer: every check again when the timer runs.
+restore = only(3, 2)
+n = #calls
+mark()
+fp("mail attachtimer")
+cursor = { b = 9, s = 9, id = 77, count = 1 }   -- the player picks something up meanwhile
+WoW.advance(1.1)
+eq(#calls, n, "attachtimer: a cursor busy by then: no pickup (it would swap)")
+check(not swapped and saw("STOPPED, the cursor holds something"), "  stopped, nothing swapped")
+cursor = nil
+restore()
+restore = only(3, 3)
+mark()
+fp("mail attachtimer")
+item(3, 3).count = 1                             -- the source changed meanwhile
+WoW.advance(1.1)
+check(not called("pickup 3.3") and saw("STOPPED, bag 3.3 changed"), "  a changed source: stopped")
+restore()
+restore = only(3, 4)
+mark()
+fp("mail attachtimer")
+WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 17)   -- the mailbox closes meanwhile
+WoW.advance(1.1)
+check(not called("pickup 3.4") and saw("STOPPED, the mailbox closed"), "  a mailbox close: stopped")
+restore()
+restore = only(3, 5)
+mark()
+fp("mail attachtimer")
+WoW.fire("PLAYER_REGEN_DISABLED")
+WoW.advance(1.1)
+check(not called("pickup 3.5") and saw("STOPPED, the mailbox closed or combat began"), "  combat: stopped")
+restore()
+
+-- splitback: a split put straight back leaves the stack whole.
+restore = only(3, 6)
+fp("mail splitback 2")
+check(called("split 3.6 2") and cursor == nil and not item(3, 6).locked, "splitback: the stack is whole again")
+check(NS._test.landed7(), "  and landed says so")
+restore()
+
+-- splitfree: 2 split off into an empty general bag slot, the rest left; then
+-- attachplaced attaches just those 2.
+WoW.bags[4] = { size = 3, items = { [1] = { id = 4001, count = 7 } } }
+for k in pairs(sendItems) do sendItems[k] = nil end
+restore = only(4, 1)
+fp("mail splitfree 2")
+check(called("split 4.1 2") and called("pickup 4.2"), "splitfree: split, then dropped on the first empty slot")
+eq(item(4, 2) and item(4, 2).count, 2, "  the new stack holds 2")
+eq(item(4, 1).count, 5, "  the old one the rest")
+check(NS._test.landed7(), "  and landed says so")
+restore()
+fp("mail attachplaced")
+eq(sendItems[1] and sendItems[1].count, 2, "attachplaced: just the 2 in the draft")
+check(NS._test.landed7(), "  as meant")
+WoW.bags[4].items[2] = nil
+WoW.bags[4].items[3] = { id = 4002, count = 6 }
+for k in pairs(sendItems) do sendItems[k] = nil end
+restore = only(4, 3)
+fp("mail splitfree 2")
+check(called("split 4.3 2") and item(4, 2) and item(4, 2).count == 2, "(a second split, into 4.2)")
+item(4, 3).count = 3    -- one more gone from the source meanwhile: not as meant
+check(not NS._test.landed7(), "  a source left with the wrong count fails")
+restore()
 
 -- attachtimer: nothing at the click, all of it a second later.
 n = #calls
 fp("mail attachtimer")
 eq(#calls, n, "attachtimer: nothing at the click")
 WoW.advance(1.1)
-check(called("pickup 2.1") and sendItems[5] and sendItems[5].id == 2840, "  the stack a second later")
+check(#calls > n and cursor == nil and count() == 1, "  the stack a second later")
+check(not swapped, "nothing was ever swapped")
 
 -- The procedure: Start refuses until the Send Mail tab shows.
 local FPS = ForeverProbe.Steps
@@ -167,7 +297,7 @@ check(saw("open the Send Mail tab first"), "the bank procedure: Start needs the 
 SendMailFrame:Show()
 for k in pairs(sendItems) do sendItems[k] = nil end
 FPS.Run()
-check(saw("bagscan: 9 item(s)"), "  then logs the bags")
+check(saw("item(s) in bags 0-4"), "  then logs the bags")
 fp("steps stop")
 
 done("test_probe7")
