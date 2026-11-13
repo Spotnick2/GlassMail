@@ -21,8 +21,8 @@ docs/PLAN.md): the look, the mail core with Open All, selection with row extras,
 (#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); v0.2.0 is released (2026-11-12),
 and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as they play. After it:
 the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (#43),
-released as v0.2.1. **M3 done** (#46: LibMailbox-1.0). **M4** (#50): N2, recall, first ("N2:
-recall" in docs/PLAN.md), then N1 after a probe session.
+released as v0.2.1. **M3 done** (#46: LibMailbox-1.0). **M4** (#50): N2, recall ("N2:
+recall" in docs/PLAN.md, #51), released in v0.3.0; N1 next, after a probe session.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
 
 - **Recall a mail sent to the wrong alt.** In the Glass Mail window's Sent folder, the new arrow
   on a send marks it "recall" (for mail with items or gold to your characters on this WoW
