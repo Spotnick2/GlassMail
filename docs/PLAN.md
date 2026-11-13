@@ -1451,7 +1451,7 @@ an enabled Return button: Ops checks the mail, not the recall).
 7. One return with Blizzard's letter button: the recall ends too.
 8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
 
-## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, 4 rounds so far)
+## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, 5 rounds so far)
 
 FEATURES.md's N1: name a bank character and simple rules, and one click fills a draft of what
 should go there; the player still presses Send. The owner's choices (2026-11-13):
@@ -1582,7 +1582,10 @@ confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7
   plans again. The first `BAG_UPDATE_DELAYED` is never taken to mean done.
 - **Fill after Prepare.** Once every split is complete, the button reads "Fill for <Bank>". That
   click attaches **exactly the remembered batch** while every stack of it is still there as
-  remembered (same item, same count, unlocked); otherwise it forgets the batch and plans again
+  remembered (same item, same count, unlocked) **and the keep still holds**: re-read at the click,
+  each item's units in bags 0-4 outside the batch are at least its keep (Codex's round 5: stacks
+  of 5 and 6, keep 2, prepared 5 + 4; if the kept 2 is destroyed meanwhile, the batch would leave
+  none). Otherwise it forgets the batch and plans again
   (which may offer Prepare again). A fresh plan is not used after Prepare: smallest-first could
   pick other stacks (Codex's round 3: stacks of 5 and 6, keep 2, prepare 5 + a split of 4; a fresh
   plan over 2, 4, 5 takes 2 + 4 and leaves 5). Nothing is scheduled between the clicks, so no
@@ -1623,7 +1626,8 @@ A fourth entry in the window's sidebar, **Bank**, below the folders. The page re
   first, the new stack later): "Preparing..." through each partial state, done only when every
   source and destination shows its count unlocked, forgotten on an unexpected slot content or
   after 5 s; then Fill attaches exactly the remembered batch (stacks of 5 and 6 with keep 2: 5 and
-  the prepared 4, leaving 2), and plans afresh when a remembered stack changed; the
+  the prepared 4, leaving 2), and plans afresh when a remembered stack changed or when the kept
+  units fell below keep after Prepare completed (the kept 2 destroyed: nothing attached); the
   verification line; the next batch after a send; the chat
   line once per visit; the page's add, keep and remove, and the bank menu. The fake cursor swaps
   on a pickup, as the client does.
