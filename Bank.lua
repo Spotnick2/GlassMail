@@ -16,7 +16,7 @@
 GlassMail = GlassMail or {}
 local GM = GlassMail
 local API, Bank, Ops, Registry, Names = GM.API, GM.Bank, GM.Ops, GM.Registry, GM.Names
-local Glass, Skin = GM.Glass, GM.Skin
+local Glass = GM.Glass
 local BankUI = {}
 GM.BankUI = BankUI
 
@@ -439,15 +439,14 @@ local function newRow(parent, i)
     row.remove:SetPoint("RIGHT", row, "RIGHT", -6, 0)
     row.remove:SetNormalTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
     row.remove:SetScript("OnClick", function() if row.rule then Bank.Remove(row.rule) end end)
-    row.keep = CreateFrame("EditBox", nil, row)
-    row.keep:SetSize(52, 20)
-    row.keep:SetPoint("RIGHT", row.remove, "LEFT", -10, 0)
+    -- Blizzard's input box art: a glass pane here is the page's own shade
+    -- and the box vanished (owner's screenshot, 2026-11-13).
+    row.keep = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+    row.keep:SetSize(46, 20)
+    row.keep:SetPoint("RIGHT", row.remove, "LEFT", -12, 0)
     row.keep:SetAutoFocus(false)
     row.keep:SetNumeric(true)
     row.keep:SetMaxLetters(4)
-    row.keep:SetFontObject("ChatFontNormal")
-    row.keep:SetTextInsets(6, 6, 0, 0)
-    Skin.AddPane(row.keep, "pane")
     local function save(self)
         if row.rule then Bank.SetKeep(row.rule, tonumber(self:GetText()) or 0) end
         self:ClearFocus()
@@ -456,7 +455,7 @@ local function newRow(parent, i)
     row.keep:SetScript("OnEditFocusLost", function(self) if row.rule then Bank.SetKeep(row.rule, tonumber(self:GetText()) or 0) end end)
     row.keep:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
     local label = Glass.Font(row, 11, "RIGHT")
-    label:SetPoint("RIGHT", row.keep, "LEFT", -6, 0)
+    label:SetPoint("RIGHT", row.keep, "LEFT", -10, 0)
     label:SetText(GREY .. "keep|r")
     return row
 end
@@ -558,8 +557,9 @@ function BankUI.BuildPage(parent)
     local foot = Glass.Font(page, 11, "LEFT")
     foot:SetPoint("BOTTOMLEFT", page, "BOTTOMLEFT", 10, 8)
     foot:SetPoint("RIGHT", page, "RIGHT", -10, 0)
-    foot:SetText(GREY .. "On another character, Fill on the Send tab's title bar puts what is above each keep in the "
-        .. "draft; you press Send. Soulbound items stay.|r")
+    foot:SetWordWrap(true)
+    foot:SetText(GREY .. "On your other characters, the bank button on the Send tab's title bar fills a mail with "
+        .. "what is above each keep; you press Send. Soulbound items stay.|r")
     page:SetScript("OnShow", BankUI.RefreshPage)
     page:Hide()
     return page
