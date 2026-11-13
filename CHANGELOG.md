@@ -4,8 +4,14 @@
 
 - Glass Mail reads the mailbox through LibMailbox, a small library it now shares with AltStable,
   so both read your mail the same way. Nothing looks different.
-- The embedded glass library is LibGlass r11. Glass Mail's material is unchanged, so nothing looks
-  different.
+- **Glass UI's look.** With Glass UI installed, Glass Mail follows its appearance: its material,
+  its tint (clear, smoked or your class colour), changed live from Glass UI's "Suite look" page,
+  and its accent colour on the address book's headings. A look you pick in Glass Mail's options
+  wins over Glass UI's; "Glass UI" there goes back to following. Blizzard's own look shows on
+  Glass UI's page as Glass Mail's choice. Switching to or from Blizzard's own look in combat
+  waits for the fight to end.
+- The glass is the softer Pearl material now, with or without Glass UI.
+- The embedded glass library is LibGlass r11.
 
 ## v0.2.1
 

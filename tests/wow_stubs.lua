@@ -642,3 +642,17 @@ InputUtil = { IsGamepadUIEnabled = function() return WoW.gamepad end }
 -- AltStable: an optional dependency, absent unless a test sets it.
 Kit.strict({ GlassMail = true, GlassMailDB = true, GlassMailCharDB = true, MailProbeDB = true,
     LibStub = true, AltStable = true })
+
+-- EventRegistry, Blizzard's callback registry (the client has it; the kit
+-- doesn't): what Suite.lua uses to hear Glass UI's LookChanged. The callback
+-- gets its owner first, then the event's arguments, as on the client.
+WoW.callbacks = {}
+EventRegistry = {
+    RegisterCallback = function(_, event, fn, owner)
+        WoW.callbacks[event] = WoW.callbacks[event] or {}
+        table.insert(WoW.callbacks[event], { fn = fn, owner = owner })
+    end,
+    TriggerEvent = function(_, event, ...)
+        for _, c in ipairs(WoW.callbacks[event] or {}) do c.fn(c.owner, ...) end
+    end,
+}

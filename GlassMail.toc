@@ -8,12 +8,13 @@
 ## X-Wago-ID: b6XybbKp
 ## SavedVariables: GlassMailDB
 ## SavedVariablesPerCharacter: GlassMailCharDB
-## OptionalDeps: AltStable
+## OptionalDeps: AltStable, GlassUI
 
 Libs\LibGlass-1.0\LibGlass-1.0.xml
 Libs\LibMailbox-1.0\LibMailbox-1.0.xml
 Compat.lua
 Glass.lua
+Suite.lua
 Skin.lua
 Core\Mailbox.lua
 Core\Loot.lua

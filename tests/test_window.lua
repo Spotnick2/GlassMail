@@ -292,9 +292,9 @@ eq(T.offset(), 10, "the scroll bar moves the list")
 local pane
 for _, o in ipairs(GM._test.skin.own) do if o.key == "pane" then pane = o.tex; break end end
 GM.Settings.SetSkin("clear")
-eq(pane._color[4], GM.Skin.PRESETS.clear.pane[4], "the window's panes take the clear preset")
+eq(pane._color[4], GM.Skin.PANES.clear.pane[4], "the window's panes take the clear look")
 GM.Settings.SetSkin("stock")
-eq(pane._color[4], GM.Skin.PRESETS.smoked.pane[4], "  and smoked under the stock look")
+eq(pane._color[4], GM.Skin.PANES.smoked.pane[4], "  and smoked under the stock look")
 GM.Settings.SetSkin("clear")
 
 -- The store not ready.
