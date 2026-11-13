@@ -228,15 +228,21 @@ check(notice.frame:IsShown(), "the notice shows")
 check(has(notice.text:GetText(), '"ore"') and has(notice.text:GetText(), MY_NAME), "  naming the mail and its sender")
 check(notice.ret:IsShown() and notice.ret:IsEnabled(), "  with an enabled Return button")
 -- Its place: a strip under the mail window, never inside it, where the footer's
--- Prev / Open All / Next are (PR #51's review: a Return over Next took its click).
+-- Prev / Open All / Next are (PR #51's review: a Return over Next took its click),
+-- and below Blizzard's tabs, which hang under the window (the second review).
+local tabBottom
+for _, p in ipairs(MailFrameTab1._points) do
+    if p[1] == "BOTTOMLEFT" and p[2] == MailFrame and p[3] == "BOTTOMLEFT" then tabBottom = p[5] end
+end
+check(tabBottom and tabBottom < 0, "(the stub's Inbox tab hangs below the window, as in MailFrame.xml)")
 local function anchoredBelow(f)
     local top = {}
     for _, p in ipairs(f._points) do top[p[1]] = p end
     local l, r = top.TOPLEFT, top.TOPRIGHT
     return l and r and l[2] == MailFrame and l[3] == "BOTTOMLEFT" and r[2] == MailFrame and r[3] == "BOTTOMRIGHT"
-        and l[5] < 0 and r[5] < 0 and #f._points == 2
+        and l[5] == r[5] and l[5] < tabBottom and #f._points == 2
 end
-check(anchoredBelow(notice.frame), "the notice hangs under the mail window, its top below the window's bottom")
+check(anchoredBelow(notice.frame), "the notice hangs under the mail window, its top below the tabs' bottom")
 eq(notice.frame:GetParent(), InboxFrame, "  InboxFrame's child: it goes with the inbox tab")
 check(notice.frame:IsMouseEnabled(), "  it takes its own clicks (none fall through)")
 local inside = notice.ret

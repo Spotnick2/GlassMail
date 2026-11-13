@@ -405,8 +405,13 @@ function Methods.HasFocus(e) return WoW.focus == e end
 function Methods.ClearFocus(e) if WoW.focus == e then WoW.focus = nil end end
 -- The frame under the mouse (a test sets WoW.mouseOver).
 function Methods.IsMouseOver(w) return WoW.mouseOver == w end
-CreateFrame("Button", "MailFrameTab1", mail):SetID(1)
-CreateFrame("Button", "MailFrameTab2", mail):SetID(2)
+-- The tabs hang below the window as in MailFrame.xml:868-881 (PanelTabButtonTemplate: 32 high).
+do
+    local t1 = CreateFrame("Button", "MailFrameTab1", mail)
+    t1:SetID(1); t1:SetHeight(32); t1:SetPoint("BOTTOMLEFT", mail, "BOTTOMLEFT", 14, -30)
+    local t2 = CreateFrame("Button", "MailFrameTab2", mail)
+    t2:SetID(2); t2:SetHeight(32); t2:SetPoint("LEFT", t1, "RIGHT", -8, 0)
+end
 function MailFrameTab_OnClick(self, tabID)
     if not tabID then tabID = self:GetID() end
     if tabID == 1 then SendMailFrame:Hide() else
