@@ -341,7 +341,7 @@ for _, l in ipairs(WoW.chat) do if l:find("MailProbe", 1, true) then leaked[#lea
 eq(#leaked, 0, "no probe line in chat")
 
 -- The session 6 procedures are defined: /fp steps mail <name> starts each.
-for _, name in ipairs({ "send", "timing", "capture", "picker", "names", "release" }) do
+for _, name in ipairs({ "send", "timing", "capture", "picker", "names", "release", "bank" }) do
     SlashCmdList.FOREVERPROBE("steps stop")
     SlashCmdList.FOREVERPROBE("steps mail " .. name)
     local rec = ForeverProbeDB.steps.records["MailProbe/" .. name]

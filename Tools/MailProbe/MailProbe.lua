@@ -55,10 +55,17 @@
 --                    mail still at its index, and do the next updates show it gone (5 s)?
 --   names            (session 6) your own name and realm, friends' and guild members' name
 --                    formats (realm suffix, secrets), in or out of an instance
+--   bagscan          (session 7) every bag item: isBound, C_Item.IsBound, locked, class
+--   attach [split N] (session 7) a stack, or N split off one, into the draft by code
+--   attachtimer      (session 7) the same from a timer, 1 s later
+--   attachmany N     (session 7) N stacks into the draft in one go
+--   attachbound      (session 7) a bound item into the draft (it goes back if refused)
+--   unattach [A]     (session 7) take attachment A (else the last) back, Blizzard's right-click
 --   clear            empty the saved log (the console shows it: /fp)
 --
 -- Procedures (/fp steps mail <name>; /fp steps lists them): session 6 as panels
--- of buttons, every outcome saved: send, timing, capture, picker, names, release.
+-- of buttons, every outcome saved: send, timing, capture, picker, names, release;
+-- session 7 (M4, N1): bank.
 --
 -- Every client call that may be missing or throw goes through try() (the
 -- host's Probe:Try), so one refusal cannot stop the rest of the probe.
@@ -268,10 +275,10 @@ local EVENTS = {
     "MAIL_SEND_INFO_UPDATE", "CLOSE_INBOX_ITEM", "MAIL_LOCK_SEND_ITEMS", "MAIL_UNLOCK_SEND_ITEMS",
     "SEND_MAIL_MONEY_CHANGED", "SEND_MAIL_COD_CHANGED", "UPDATE_PENDING_MAIL", "UI_ERROR_MESSAGE",
     "SECURE_TRANSFER_CONFIRM_SEND_MAIL", "SECURE_TRANSFER_CANCEL", "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED",
-    "BAG_UPDATE_DELAYED",
+    "BAG_UPDATE_DELAYED", "ITEM_LOCK_CHANGED",
 }
 
-local QUIET = { MAIL_SEND_INFO_UPDATE = true, BAG_UPDATE_DELAYED = true }   -- logged only while a test runs
+local QUIET = { MAIL_SEND_INFO_UPDATE = true, BAG_UPDATE_DELAYED = true, ITEM_LOCK_CHANGED = true }   -- logged only while a test runs
 local busy = false   -- a timed test is running: log the quiet events too
 
 local frame = CreateFrame("Frame")
@@ -1066,6 +1073,202 @@ function C.split(arg)
     say("split: no free attachment slot")
 end
 
+--------------------------------------------------------------------------------
+-- Session 7 (M4, N1): filling the send draft from the bags by code. Our code
+-- only attaches; the owner presses Send. Never a bound item, except in its own
+-- step, which puts it back. Bags 0-4.
+--------------------------------------------------------------------------------
+
+local used7 = {}      -- "bag.slot" already attached or split this session: the next pick is another stack
+local expect7         -- what the last attach should lead to: { slot = a, count = n } (attachments)
+
+local function bagSlots()
+    local c = global("C_Container")
+    local out = {}
+    for bag = 0, 4 do
+        local okN, n = try("GetContainerNumSlots", c and c.GetContainerNumSlots, bag)
+        for slot = 1, (okN and type(plain(n)) == "number") and n or 0 do
+            local ok, info = try("GetContainerItemInfo", c.GetContainerItemInfo, bag, slot)
+            if ok and type(info) == "table" then out[#out + 1] = { bag = bag, slot = slot, info = info } end
+        end
+    end
+    return out
+end
+
+-- One bag item as N1 would judge it: bound (two ways), locked, class.
+local function slotLine(s)
+    local i, ii, IL = s.info, global("C_Item"), global("ItemLocation")
+    local okI, _, _, _, _, _, classID, subID = try("GetItemInfoInstant", ii and ii.GetItemInfoInstant, i.itemID)
+    local okL, loc = try("ItemLocation:CreateFromBagAndSlot", IL and IL.CreateFromBagAndSlot, IL, s.bag, s.slot)
+    local okB, bound = try("C_Item.IsBound", ii and ii.IsBound, okL and loc or nil)
+    local okA, acct = try("C_Item.IsBoundToAccountUntilEquip", ii and ii.IsBoundToAccountUntilEquip, okL and loc or nil)
+    return string.format("%d.%d id=%s x%s isBound=%s C_Item.IsBound=%s accountUntilEquip=%s locked=%s class=%s.%s "
+        .. "quality=%s", s.bag, s.slot, show(i.itemID), show(i.stackCount), show(i.isBound),
+        okB and show(bound) or "ERROR", okA and show(acct) or "ERROR", show(i.isLocked),
+        okI and show(classID) or "?", okI and show(subID) or "?", show(i.quality))
+end
+
+function C.bagscan()
+    local all = bagSlots()
+    for _, s in ipairs(all) do say("bag " .. slotLine(s)) end
+    say("bagscan: " .. #all .. " item(s) in bags 0-4")
+    return #all
+end
+
+local function key(s) return s.bag .. "." .. s.slot end
+
+-- The first stack not used yet, unlocked, that want() accepts.
+local function pick(want)
+    for _, s in ipairs(bagSlots()) do
+        local i = s.info
+        if not used7[key(s)] and plain(i.isLocked) == false and type(plain(i.stackCount)) == "number" and want(i) then
+            return s
+        end
+    end
+end
+local function unbound(min) return function(i) return plain(i.isBound) == false and i.stackCount >= (min or 1) end end
+local function bound(i) return plain(i.isBound) == true end
+
+local function attachments()
+    local n = 0
+    for a = 1, global("ATTACHMENTS_MAX_SEND") or 12 do
+        local ok, has = try("HasSendMailItem", global("HasSendMailItem"), a)
+        if ok and has then n = n + 1 end
+    end
+    return n
+end
+local function freeAttachment()
+    for a = 1, global("ATTACHMENTS_MAX_SEND") or 12 do
+        local ok, has = try("HasSendMailItem", global("HasSendMailItem"), a)
+        if ok and not has then return a end
+    end
+end
+local function cursorHas()
+    local ok, has = try("CursorHasItem", global("CursorHasItem"))
+    return ok and plain(has) == true
+end
+local function draftLine(label)
+    local d = draft()
+    return label .. ": attachments=" .. (#d.items > 0 and table.concat(d.items, " ") or "none") .. " subject="
+        .. show(d.subject) .. " postage=" .. show(d.price) .. " cursor=" .. show(cursorHas())
+end
+local function slotNow(s)
+    local c = global("C_Container")
+    local ok, info = try("GetContainerItemInfo", c and c.GetContainerItemInfo, s.bag, s.slot)
+    if not ok then return "ERROR" end
+    if type(info) ~= "table" then return "empty" end
+    return "x" .. show(info.stackCount) .. " locked=" .. show(info.isLocked)
+end
+
+-- The draft and the bag slot at once, a frame later and 0.5 s later.
+local function follow(label, s)
+    say(draftLine(label .. ", at once") .. "; bag " .. key(s) .. " " .. slotNow(s))
+    C_Timer.After(0, function() say(draftLine(label .. ", next frame") .. "; bag " .. key(s) .. " " .. slotNow(s)) end)
+    C_Timer.After(0.5, function() say(draftLine(label .. ", 0.5 s later") .. "; bag " .. key(s) .. " " .. slotNow(s)) end)
+end
+
+-- Put s (all of it, or n split off) on the cursor and drop it on the first
+-- free attachment slot. how: nil = both now, "frame" = the drop a frame
+-- later, "timer" = both from a timer 1 s later (no key press behind it).
+local function attach(label, s, n, how)
+    if not s then error("no suitable stack in bags 0-4 (see the bag lines)") end
+    if cursorHas() then error("the cursor holds something: put it down first") end
+    local a = freeAttachment()
+    if not a then error("no free attachment slot") end
+    used7[key(s)] = true
+    expect7 = { slot = a, count = attachments() + 1 }
+    local what = string.format("%s %s id=%s x%s -> attachment %d", n and ("split " .. n .. " off") or "the stack",
+        key(s), show(s.info.itemID), show(s.info.stackCount), a)
+    local c = global("C_Container")
+    local function drop()
+        try("ClickSendMailItemButton", global("ClickSendMailItemButton"), a)
+        follow(label .. ": " .. what, s)
+    end
+    local function lift()
+        if n then try("SplitContainerItem", c.SplitContainerItem, s.bag, s.slot, n)
+        else try("PickupContainerItem", c.PickupContainerItem, s.bag, s.slot) end
+        say(label .. ": cursor after the pickup=" .. show(cursorHas()))
+        if how == "frame" then C_Timer.After(0, drop) else drop() end
+    end
+    if how == "timer" then C_Timer.After(1, lift) else lift() end
+    return label .. ": " .. what
+end
+
+function C.attach(arg)
+    local n = tonumber(arg:match("^split%s+(%d+)$") or "")
+    return attach("attach", pick(unbound(n and n + 1 or 1)), n)
+end
+
+function C.attachtimer() return attach("attachtimer", pick(unbound(1)), nil, "timer") end
+
+-- k stacks in one go, each pickup and drop in the same frame. Stops at once if
+-- the cursor still holds something (a pickup then would swap, not lift).
+function C.attachmany(arg)
+    local k = tonumber(arg) or 3
+    if cursorHas() then error("the cursor holds something: put it down first") end
+    local before, done, last = attachments(), 0, nil
+    local c = global("C_Container")
+    for _ = 1, k do
+        local s, a = pick(unbound(1)), freeAttachment()
+        if not (s and a) or cursorHas() then break end
+        used7[key(s)] = true
+        try("PickupContainerItem", c.PickupContainerItem, s.bag, s.slot)
+        try("ClickSendMailItemButton", global("ClickSendMailItemButton"), a)
+        say("attachmany: " .. key(s) .. " id=" .. show(s.info.itemID) .. " -> attachment " .. a .. "; cursor="
+            .. show(cursorHas()))
+        done, last = done + 1, s
+    end
+    if not last then error("no suitable stack, or no free attachment slot") end
+    expect7 = { count = before + done }
+    follow("attachmany: " .. done .. " stack(s) tried", last)
+    return "attachmany: " .. done .. " stack(s) tried in one go"
+end
+
+-- A bound item: what the client does with it. It goes back to its bag 0.5 s
+-- later if the cursor still holds it.
+function C.attachbound()
+    local s = pick(bound)
+    local result = attach("attachbound", s)
+    expect7 = nil
+    C_Timer.After(0.6, function()
+        if cursorHas() then
+            try("ClearCursor", global("ClearCursor"))
+            say("attachbound: still on the cursor; ClearCursor, bag " .. key(s) .. " " .. slotNow(s) .. ", cursor="
+                .. show(cursorHas()))
+        end
+    end)
+    return result
+end
+
+-- Right-click an attachment by code: Blizzard's clear (MailFrame.lua:1493).
+function C.unattach(arg)
+    local a = tonumber(arg)
+    if not a then
+        for i = global("ATTACHMENTS_MAX_SEND") or 12, 1, -1 do
+            local ok, has = try("HasSendMailItem", global("HasSendMailItem"), i)
+            if ok and has then a = i; break end
+        end
+    end
+    if not a then error("no attachment to take back") end
+    local before = attachments()
+    try("ClickSendMailItemButton", global("ClickSendMailItemButton"), a, true)
+    expect7 = { gone = a, count = before - 1 }
+    say(draftLine("unattach " .. a .. ", at once"))
+    C_Timer.After(0.5, function() say(draftLine("unattach " .. a .. ", 0.5 s later")) end)
+    return "unattach: attachment " .. a
+end
+
+-- For the wait steps: the last attach (or unattach) shows in the draft.
+local function landed()
+    if not expect7 then return true, "nothing expected" end
+    local n = attachments()
+    if expect7.gone then
+        local ok, has = try("HasSendMailItem", global("HasSendMailItem"), expect7.gone)
+        return ok and not has and n == expect7.count, "attachments " .. n .. " of " .. expect7.count
+    end
+    return n >= expect7.count, "attachments " .. n .. " of " .. expect7.count .. ", cursor " .. show(cursorHas())
+end
+
 local function send(fromTimer)
     local d = draft()
     if type(d.to) ~= "string" or d.to == "" then say("send: fill in a recipient first"); return end
@@ -1186,6 +1389,12 @@ local COMMANDS = {
     { "sendwatch", "on/off: each send numbered, timed, and what fires inside SendMail (session 6)" },
     { "capture", "on/off: what a delete/return post-hook sees, and its confirmation (session 6)" },
     { "names", "own, friends' and guild members' name formats (session 6)" },
+    { "bagscan", "every bag item: bound (two ways), locked, class (session 7)" },
+    { "attach", "[split N]: a stack (or N off one) into the draft by code (session 7)" },
+    { "attachtimer", "a stack into the draft from a timer, 1 s later (session 7)" },
+    { "attachmany", "N: N stacks into the draft in one go (session 7)" },
+    { "attachbound", "a bound item into the draft: what the client does (session 7)" },
+    { "unattach", "[A]: take attachment A (else the last) back by code (session 7)" },
     { "clear", "empty the saved log" },
 }
 for _, c in ipairs(COMMANDS) do
@@ -1308,6 +1517,68 @@ Probe:Steps("release", {
     { text = "Was the gold Open All took said in chat when the mailbox closed?", ask = true },
     { text = "Open the mailbox again and use a row's Return or Delete icon once (a test mail). Press Next." },
     { text = "Was anything blocked (a red BLOCKED or FORBIDDEN line in /fp, or an error)?", ask = true },
+    { text = "Type /reload to save the results.", reload = true },
+})
+
+-- Session 7 (M4, N1): filling the draft from the bags. Each button attaches by
+-- code; the wait after it says whether the draft shows it.
+local function landedStep(text) return { text = text, wait = landed, timeout = 6 } end
+
+Probe:Steps("bank", {
+    title = "Session 7: filling a draft from the bags",
+    { text = "At a mailbox, open Send Mail with an empty draft (no name, no subject, no item). Have a few "
+        .. "stacks of tradeable items in your bags (one of 3 or more) and one Soulbound item. Then Start.",
+        button = "Start", run = function()
+            busy = true
+            C.sendwatch("on")
+            local sm = global("SendMailFrame")
+            if not (sm and sm:IsVisible()) then error("open the Send Mail tab first") end
+            if attachments() > 0 then error("the draft already holds an item: empty it first") end
+            return C.bagscan() .. " bag item(s) logged"
+        end },
+    { text = "Hover two items that say Soulbound and one that doesn't. Write their names in the Note box, "
+        .. "then Next." },
+    { text = "Attach a whole stack by code.", button = "Attach a stack", run = function() return C.attach("") end },
+    landedStep("Waiting for it in the draft."),
+    { text = "Split 2 off a stack of 3 or more and attach them, in the same frame.", button = "Split 2",
+        run = function() return C.attach("split 2") end },
+    landedStep("Waiting for the 2 in the draft."),
+    { text = "Split 2 off another stack, and drop them a frame later.", button = "Split 2, drop later",
+        run = function() return attach("splitlater", pick(unbound(3)), 2, "frame") end },
+    landedStep("Waiting for the 2 in the draft."),
+    { text = "Attach a stack from a timer, 1 s after the click (no key press behind it).",
+        button = "Attach from a timer", run = function() return C.attachtimer() end },
+    landedStep("Waiting for it in the draft."),
+    { text = "Attach 3 stacks in one go.", button = "Attach 3", run = function() return C.attachmany("3") end },
+    landedStep("Waiting for all 3 in the draft."),
+    { text = "Try a Soulbound item (if it stays on the cursor, it goes back to its bag).",
+        button = "Try Soulbound", run = function() return C.attachbound() end },
+    { text = "Waiting for the cursor to be empty.", wait = function() return not cursorHas(), "cursor busy" end,
+        timeout = 5 },
+    { text = "Did an error message show for the Soulbound item?", ask = true },
+    { text = "Take the last attachment back by code (Blizzard's right-click).", button = "Take one back",
+        run = function() return C.unattach("") end },
+    landedStep("Waiting for it to leave the draft."),
+    { text = "Is the subject filled in with an item's name, and does each attachment show its count?",
+        ask = true, screenshot = "draft" },
+    { text = "Type an alt's name in the To box and press Send (confirm if asked). The step completes when "
+        .. "the mail is sent; Skip if you'd rather not send these items.", event = "MAIL_SEND_SUCCESS" },
+    { text = "Reading the bags after the send (the split stacks' remainders).", auto = true,
+        run = function() return C.bagscan() .. " bag item(s) logged" end },
+    { text = "Attach a stack again, for the next step.", button = "Attach a stack",
+        run = function() return C.attach("") end },
+    landedStep("Waiting for it in the draft."),
+    { text = "Close the mailbox (Esc or walk away), open it again and click Send Mail. Then Next." },
+    { text = "Reading the draft and the bags after the mailbox closed.", auto = true, run = function()
+        say(draftLine("after the close"))
+        C.bagscan()
+        return attachments() .. " attachment(s) after the close"
+    end },
+    { text = "Done: logging off.", auto = true, run = function()
+        busy = false
+        C.sendwatch("off")
+        return "sendwatch off"
+    end },
     { text = "Type /reload to save the results.", reload = true },
 })
 
