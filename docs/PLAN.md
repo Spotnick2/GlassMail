@@ -1451,7 +1451,7 @@ an enabled Return button: Ops checks the mail, not the recall).
 7. One return with Blizzard's letter button: the recall ends too.
 8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
 
-## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, in review)
+## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, 2 rounds so far)
 
 FEATURES.md's N1: name a bank character and simple rules, and one click fills a draft of what
 should go there; the player still presses Send. The owner's choices (2026-11-13):
@@ -1487,8 +1487,11 @@ late to veto a send, and nothing here pretends to.
   every item (a heirloom too).
 - Blizzard fills an empty subject with the first attachment ("Windstone (5)"); our right-click
   clear by code works; a send to the player's own alt showed no confirmation, success 0.22 s later.
-- Still open for 7b: the split into an empty slot; a split put straight back (`ClearCursor`);
-  a close during a delayed action; a send through the secure-transfer confirmation.
+- Still open for 7b: the split into an empty slot, and that new stack attached alone (exactly N);
+  a split put straight back (`ClearCursor`); a close during a delayed action (it must stop); a
+  send through the secure-transfer confirmation. The probe's delayed actions stop on a mailbox
+  close, combat, a send, the Send tab going or any change to the draft, and every wait step checks
+  the exact item and count (a stopped action fails it).
 
 ### What is saved
 
@@ -1521,8 +1524,9 @@ Loads after `Core/Recall.lua`.
   with a rule: `total` counts every unit in bags 0-4 (bound, locked and refused ones too: they
   stay, so they count toward keep), `excess = total - keep`; then **movable** stacks (unbound,
   unlocked, not refused this session) are taken whole, smallest first, while each fits in what is
-  left of the excess. With 7b passed, the rest of the excess is one split into an empty general bag
-  slot (only when one is free). Up to 12 attachments. Returns the stacks and how many items would
+  left of the excess. With 7b passed, a remainder that no whole stack fits is a **split to
+  prepare** (below), into an empty general bag slot, one per item, only while empty slots are free.
+  Up to 12 attachments. Returns the stacks and how many items would
   still be movable after this batch. Simple over optimal: stacks of 6 and 10 with keep 6 send the 6.
 - **`Bank.Ready()`**: what the algorithm can actually move in all (the chat line, the button).
 
@@ -1558,12 +1562,14 @@ confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7
   `MAIL_LOCK_SEND_ITEMS` (Blizzard's refund confirmation) stops the fill and leaves the dialog to
   the player. We never call `SendMailFrame_Update` (Blizzard's update runs on its own event), never
   press Send, never fill money or COD.
-- **With a split (7b passed)** the fill has two phases: the click splits the partial stacks into
-  empty slots, then, from `BAG_UPDATE_DELAYED` (or a frame timer, as measured), attaches
-  everything. Before each step it checks again the mailbox visit (no interaction HIDE 17 since),
-  the Send tab shown, no combat, no Send click since (the pending flag), the draft holding exactly
-  what the fill put there, and the cursor; any change cancels. Combat, a tab change, the mailbox
-  closing and a Send click cancel it at once. The split stacks stay in the bags (nothing lost).
+- **Keep N exactly takes two clicks (7b passed; Codex's round 2).** When the plan needs splits,
+  the button first reads "Prepare for <Bank> (split n stacks)": that click splits each remainder
+  into its own empty general bag slot (split, the cursor holds that item, drop on the empty slot,
+  the slot then holds it; the same per-step checks and recovery as a fill) and attaches nothing.
+  Once the bags settle, the button reads "Fill for <Bank>", and that click re-plans from the bags
+  and attaches whole stacks only, the prepared ones among them. Nothing is scheduled between the
+  clicks, so no deferred action can act on a changed draft; a prepared stack the player doesn't
+  send just stays in the bags. Without 7b, there is no Prepare, and keep N means at least N.
 - **Afterwards** it compares the draft with the plan (each attachment's itemID and count) and
   prints one line if anything differs. After `MAIL_SEND_SUCCESS` the button recounts; the player
   clicks again for the next batch.
@@ -1593,7 +1599,8 @@ A fourth entry in the window's sidebar, **Bank**, below the folders. The page re
   subject, an attachment, the cursor, combat, a run, a pending send); a fill attaches the plan in
   order and fills To; each per-stack check stops it (source changed, cursor busy, slot taken, the
   wrong item picked up); a refused drop is put back, a foreign cursor item left alone;
-  `MAIL_LOCK_SEND_ITEMS` stops it; the verification line; the next batch after a send; the chat
+  `MAIL_LOCK_SEND_ITEMS` stops it; Prepare splits each remainder into its own empty slot and
+  attaches nothing, then Fill takes the prepared stacks whole; the verification line; the next batch after a send; the chat
   line once per visit; the page's add, keep and remove, and the bank menu. The fake cursor swaps
   on a pickup, as the client does.
 - Mutation-test each.

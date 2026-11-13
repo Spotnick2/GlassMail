@@ -101,6 +101,8 @@ local function count()
 end
 local function fp(cmd) SlashCmdList.FOREVERPROBE(cmd) end
 
+MailFrame:Show()
+SendMailFrame:Show()
 loadForeverProbe()
 local NS = {}
 assert(loadfile("Tools/MailProbe/MailProbe.lua"))("MailProbe", NS)
@@ -244,7 +246,65 @@ mark()
 fp("mail attachtimer")
 WoW.fire("PLAYER_REGEN_DISABLED")
 WoW.advance(1.1)
-check(not called("pickup 3.5") and saw("STOPPED, the mailbox closed or combat began"), "  combat: stopped")
+check(not called("pickup 3.5") and saw("STOPPED, the mailbox closed, combat began"), "  combat: stopped")
+restore()
+-- A send, the Send tab going, a changed draft: each stops it too.
+local cases = {
+    { "a send", function() SendMail("Cowruzo Banks", "x", "") end },
+    { "the Send tab hidden", function() SendMailFrame:Hide(); SendMailFrame:Show() end },
+    { "the draft changed", function() SendMailBodyEditBox:SetText("hello") end },
+}
+WoW.bags[3].size = 9
+WoW.bags[3].items[7] = { id = 3011, count = 4 }
+WoW.bags[3].items[8] = { id = 3012, count = 4 }
+WoW.bags[3].items[9] = { id = 3013, count = 4 }
+for i, c in ipairs(cases) do
+    restore = only(3, i + 6)
+    n = #calls
+    mark()
+    fp("mail attachtimer")
+    c[2]()
+    WoW.advance(1.1)
+    eq(#calls, n, "attachtimer: " .. c[1] .. " meanwhile: nothing picked up")
+    check(saw("STOPPED"), "  stopped")
+    check(not NS._test.landed7(), "  and the check after it fails (not \"nothing expected\")")
+    restore()
+end
+SendMailBodyEditBox:SetText("")
+
+-- The close-during-a-delay step reads the delayed action's outcome, once it ran.
+WoW.bags[3].size = 10
+WoW.bags[3].items[10] = { id = 3014, count = 4 }
+restore = only(3, 10)
+fp("mail attachtimer 3")
+check(not NS._test.delayed7().done, "a delayed attach: pending until it runs")
+WoW.fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 17)
+WoW.advance(3.1)
+local d7 = NS._test.delayed7()
+check(d7.done and d7.outcome:find("^stopped: the mailbox closed") ~= nil, "  then stopped by the close: " .. tostring(d7.outcome))
+restore()
+
+-- attachmany 3 with only one stack left: the check fails (only 1 of 3).
+WoW.bags[3].size = 11
+WoW.bags[3].items[11] = { id = 3015, count = 4 }
+for k in pairs(sendItems) do sendItems[k] = nil end
+restore = only(3, 11)
+fp("mail attachmany 3")
+eq(count(), 1, "attachmany 3 with one stack: one attached")
+check(not NS._test.landed7(), "  and the check fails: not all 3")
+restore()
+
+-- splitback when the split gives nothing: an error, and the check fails.
+WoW.bags[3].size = 12
+WoW.bags[3].items[12] = { id = 3016, count = 5 }
+restore = only(3, 12)
+local realSplit = C_Container.SplitContainerItem
+C_Container.SplitContainerItem = function(b, sl, k) call("split " .. b .. "." .. sl .. " " .. k) end
+mark()
+fp("mail splitback 2")
+check(saw("the split didn't put our item on the cursor"), "splitback: a split that gives nothing is an error")
+check(not NS._test.landed7(), "  and the check fails")
+C_Container.SplitContainerItem = realSplit
 restore()
 
 -- splitback: a split put straight back leaves the stack whole.
@@ -276,6 +336,11 @@ fp("mail splitfree 2")
 check(called("split 4.3 2") and item(4, 2) and item(4, 2).count == 2, "(a second split, into 4.2)")
 item(4, 3).count = 3    -- one more gone from the source meanwhile: not as meant
 check(not NS._test.landed7(), "  a source left with the wrong count fails")
+item(4, 3).count = 4
+check(NS._test.landed7(), "  (as meant again)")
+item(4, 3).id = 9999    -- another item in the source's place, same count
+check(not NS._test.landed7(), "  another item in the source's slot fails")
+item(4, 3).id = 4002
 restore()
 
 -- attachtimer: nothing at the click, all of it a second later.
