@@ -292,9 +292,29 @@ Send then sent the mail normally, with nothing blocked.
 - Item classes as `GetItemInfoInstant` gives them: a herb 7.9, a trade good 7.11, potions 0.1,
   bandages 0.7, food 0.5 (ItemSubClass, build 70938).
 
-Still to measure (session 7b, the procedure's rev 3): a split into an empty bag slot and that
-stack attached alone; a split put straight back; a close during a delayed action; a send through
-the secure-transfer confirmation.
+### Session 7b (2026-11-13, the procedure's rev 4)
+
+- **A split into an empty bag slot works, and that stack attaches alone.**
+  `SplitContainerItem(0, 8, 2)` on a stack of 3, then `PickupContainerItem` on an empty slot of a
+  general bag: the cursor empties at once, but **the bags change only when the server answers**:
+  at once and a frame later the new slot is still empty and the source still x3, locked; about
+  0.4 s later the source is x1, unlocked (`ITEM_LOCK_CHANGED`, `BAG_UPDATE_DELAYED` three times),
+  and within about a second the new slot holds x2, unlocked. Then `attachplaced` attached exactly
+  2 (`4:1205x2`), and the send carried 2. So a split is a step of its own, to wait out before
+  attaching.
+- **The same-frame split attaches the whole stack again**: "split 2" of a 17 and of a 20 attached
+  17 and 20 (confirming session 7).
+- **A split put straight back**: `ClearCursor` right after `SplitContainerItem`; the stack is
+  whole (x5) and unlocked at once.
+- **A close during a delayed attach**: the timer, due 3 s after the click, found the mailbox closed
+  and stopped; nothing moved (the source x1, unlocked; the cursor empty; the draft empty after the
+  close).
+- **A send to Karuzo Macphisto** (one of the owner's characters): no confirmation dialog;
+  `MAIL_SEND_SUCCESS` 0.55 s after `SendMail`. The secure-transfer path with a code-filled draft
+  stays unmeasured; session 6's picker step measured `SetText` before a confirmed send to a
+  stranger.
+- `isBound` again agreed with `C_Item.IsBound` on all 30 items, among them a bound Enchanting item
+  (7.12), so a category rule meets bound items too.
 
 ## Still open, and when it gets measured
 
@@ -314,7 +334,7 @@ ships with a safe fallback until it is measured:
 | 6 | Postage failure; bind/refund prompts; a send to another ruleset | when convenient | nothing: Sent records what `SendMail` was called with, and its result if one comes |
 | 8 | Friends' name formats; names from another realm | when a friend or another realm is at hand | S1 keeps a realm suffix in its keys and offers no other-realm character |
 | Trash | An AH mail with items deleted through its confirmation popup (no pre-call point) | when convenient | nothing: the post-hook still sees the mail when no update came that frame |
-| 6 | A split into an empty bag slot, then attached (a split dropped on the draft attaches the whole stack: session 7); `SendMail` from a timer (never used) | session 7b | N1 keep N exactly (until then, at least N) |
+| 6 | A code-filled draft through the secure-transfer confirmation (a stranger or another account's character) | when convenient | nothing: Blizzard's Send and dialog do the sending; session 6 measured `SetText` before a confirmed send |
 | 5 | Open All from a gamepad | never (no gamepad) | none: our engine checks its own state at every step |
 
 ## Session 3 findings (2026-10-09, same inbox)

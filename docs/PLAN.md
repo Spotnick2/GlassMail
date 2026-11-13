@@ -1479,19 +1479,18 @@ late to veto a send, and nothing here pretends to.
 - **Attachments stay in the bags**, locked, at their full count, until the send succeeds; a close
   of the mailbox empties the draft and unlocks them.
 - **A split dropped on the draft attaches the whole source stack**: "split 2" of a 10-stack put all
-  10 in the draft (and they were sent). So keep N needs the split put in an empty bag slot first,
-  then that new stack attached: **session 7b measures it** (`splitfree`, `attachplaced`). Until it
-  passes, N1 sends whole stacks only and keeps **at least** N.
+  10 in the draft (and they were sent). **Session 7b: a split into an empty bag slot works**, and
+  that stack attaches alone (exactly 2 sent). The bags change only when the server answers (the
+  new stack shows within about a second, unlocked), so a split is its own click (Prepare, below).
 - **A soulbound item is refused**: `UI_ERROR_MESSAGE` 460, the item stays on the cursor, and
   `ClearCursor` puts it back unlocked. `ContainerItemInfo.isBound` and `C_Item.IsBound` agreed on
   every item (a heirloom too).
 - Blizzard fills an empty subject with the first attachment ("Windstone (5)"); our right-click
   clear by code works; a send to the player's own alt showed no confirmation, success 0.22 s later.
-- Still open for 7b: the split into an empty slot, and that new stack attached alone (exactly N);
-  a split put straight back (`ClearCursor`); a close during a delayed action (it must stop); a
-  send through the secure-transfer confirmation. The probe's delayed actions stop on a mailbox
-  close, combat, a send, the Send tab going or any change to the draft, and every wait step checks
-  the exact item and count (a stopped action fails it).
+- Session 7b also: a split put straight back is whole again at once (`ClearCursor`); a delayed
+  attach due after a mailbox close stopped and moved nothing. Unmeasured: a code-filled draft
+  through the secure-transfer confirmation (a bank on another account); Blizzard's own dialog
+  does that send.
 
 ### What is saved
 
@@ -1524,7 +1523,7 @@ Loads after `Core/Recall.lua`.
   with a rule: `total` counts every unit in bags 0-4 (bound, locked and refused ones too: they
   stay, so they count toward keep), `excess = total - keep`; then **movable** stacks (unbound,
   unlocked, not refused this session) are taken whole, smallest first, while each fits in what is
-  left of the excess. With 7b passed, a remainder that no whole stack fits is a **split to
+  left of the excess. A remainder that no whole stack fits (session 7b measured the split) is a **split to
   prepare** (below), into an empty general bag slot, one per item, only while empty slots are free.
   Up to 12 attachments. Returns the stacks and how many items would
   still be movable after this batch. Simple over optimal: stacks of 6 and 10 with keep 6 send the 6.
@@ -1562,21 +1561,20 @@ confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7
   `MAIL_LOCK_SEND_ITEMS` (Blizzard's refund confirmation) stops the fill and leaves the dialog to
   the player. We never call `SendMailFrame_Update` (Blizzard's update runs on its own event), never
   press Send, never fill money or COD.
-- **Keep N exactly takes two clicks (7b passed; Codex's round 2).** When the plan needs splits,
+- **Keep N exactly takes two clicks (session 7b; Codex's round 2).** When the plan needs splits,
   the button first reads "Prepare for <Bank> (split n stacks)": that click splits each remainder
   into its own empty general bag slot (split, the cursor holds that item, drop on the empty slot,
   the slot then holds it; the same per-step checks and recovery as a fill) and attaches nothing.
   Prepare **remembers the batch** it prepared, for this mailbox visit: each stack to send as
-  `{ bag, slot, itemID, count }`, the new split stacks included. Once the bags settle, the button
-  reads "Fill for <Bank>", and that click attaches **exactly that batch** when every stack of it is
+  `{ bag, slot, itemID, count }`, the new split stacks included. Once the bags settle (every prepared
+  stack in its slot, unlocked, on `BAG_UPDATE_DELAYED`), the button reads "Fill for <Bank>", and that click attaches **exactly that batch** when every stack of it is
   still there as remembered (same item, same count, unlocked) and nothing else of those items moved;
   otherwise it forgets the batch and plans again from the bags (which may offer Prepare again). A
   fresh plan is not used after Prepare: smallest-first could pick other stacks (Codex's round 3:
   stacks of 5 and 6, keep 2, prepare 5 + a split of 4; a fresh plan over 2, 4, 5 takes 2 + 4 and
   leaves 5). Nothing is scheduled between the clicks, so no deferred action can act on a changed
   draft; a prepared stack the player doesn't send just stays in the bags. The batch is forgotten
-  at a send, the mailbox closing and any change to those bag slots. Without 7b, there is no Prepare,
-  and keep N means at least N.
+  at a send, the mailbox closing and any change to those bag slots.
 - **Afterwards** it compares the draft with the plan (each attachment's itemID and count) and
   prints one line if anything differs. After `MAIL_SEND_SUCCESS` the button recounts; the player
   clicks again for the next batch.
