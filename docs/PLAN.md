@@ -288,7 +288,7 @@ A send is captured as it is made and kept, in the state its outcome justifies:
 
 ### S1: the address book picker (`Address.lua`)
 
-- **Our button** to the right of `SendMailNameEditBox` (a child of SendMailFrame), opening a
+- **Our button** to the right of `SendMailNameEditBox` (a child of SendMailFrame; moved to the title bar on 2026-11-13, see CLAUDE.md), opening a
   `MenuUtil.CreateContextMenu` with sections, each skipped when empty:
   1. **My characters**: AltStable's list if loaded, else the registry; reachable ones only, not
      the current character, AltStable's hidden ones left out.
@@ -1451,7 +1451,7 @@ an enabled Return button: Ops checks the mail, not the recall).
 7. One return with Blizzard's letter button: the recall ends too.
 8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
 
-## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, 3 rounds so far)
+## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, 4 rounds so far)
 
 FEATURES.md's N1: name a bank character and simple rules, and one click fills a draft of what
 should go there; the player still presses Send. The owner's choices (2026-11-13):
@@ -1537,7 +1537,7 @@ confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7
 
 ### The Send tab (`Bank.lua`)
 
-- **The button**: ours, on the mailbox's title bar beside the window's, shown on the Send tab
+- **The button**: ours, on the mailbox's title bar left of the address book's, shown on the Send tab
   only; its tooltip says "Fill for <Bank>: n items (m mails)" or why it is off. Its place is
   checked with a screenshot.
 - **Enabled when** a bank is set for this group and reachable, `Bank.Ready()` has something, the
@@ -1561,20 +1561,34 @@ confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7
   `MAIL_LOCK_SEND_ITEMS` (Blizzard's refund confirmation) stops the fill and leaves the dialog to
   the player. We never call `SendMailFrame_Update` (Blizzard's update runs on its own event), never
   press Send, never fill money or COD.
-- **Keep N exactly takes two clicks (session 7b; Codex's round 2).** When the plan needs splits,
-  the button first reads "Prepare for <Bank> (split n stacks)": that click splits each remainder
-  into its own empty general bag slot (split, the cursor holds that item, drop on the empty slot,
-  the slot then holds it; the same per-step checks and recovery as a fill) and attaches nothing.
-  Prepare **remembers the batch** it prepared, for this mailbox visit: each stack to send as
-  `{ bag, slot, itemID, count }`, the new split stacks included. Once the bags settle (every prepared
-  stack in its slot, unlocked, on `BAG_UPDATE_DELAYED`), the button reads "Fill for <Bank>", and that click attaches **exactly that batch** when every stack of it is
-  still there as remembered (same item, same count, unlocked) and nothing else of those items moved;
-  otherwise it forgets the batch and plans again from the bags (which may offer Prepare again). A
-  fresh plan is not used after Prepare: smallest-first could pick other stacks (Codex's round 3:
-  stacks of 5 and 6, keep 2, prepare 5 + a split of 4; a fresh plan over 2, 4, 5 takes 2 + 4 and
-  leaves 5). Nothing is scheduled between the clicks, so no deferred action can act on a changed
-  draft; a prepared stack the player doesn't send just stays in the bags. The batch is forgotten
-  at a send, the mailbox closing and any change to those bag slots.
+- **Keep N exactly takes two clicks (session 7b; Codex's rounds 2-4).** When the plan needs
+  splits, the button first reads "Prepare for <Bank> (split n stacks)". That click, for each
+  remainder: the same checks before it as a fill (source as planned, cursor empty, an empty general
+  bag slot, reserved for this split only), `SplitContainerItem`, the cursor holds that itemID,
+  `PickupContainerItem` on the reserved slot, the cursor is empty (if our item is still on it,
+  `ClearCursor` puts it back, checked, and Prepare stops). It attaches nothing, and **does not
+  expect the bags to show the split yet**: session 7b measured them change only when the server
+  answers (the source about 0.4 s later, the new stack within about a second, in separate
+  updates).
+- **Preparing.** Prepare then remembers, for this mailbox visit, each split as
+  `{ source = { bag, slot, itemID, before, after }, dest = { bag, slot, itemID, n } }` and the batch
+  to send (each stack as `{ bag, slot, itemID, count }`, the new ones included). While any split is
+  incomplete the button reads "Preparing..." and is off. On every `ITEM_LOCK_CHANGED` and
+  `BAG_UPDATE_DELAYED` it re-reads those slots: a source showing `before` (locked or not) or `after`,
+  and a destination empty or showing exactly `n` of that item, are expected states; a split is
+  complete when its source shows `after` and its destination `n`, both unlocked. Anything else in
+  those slots (another item, another count), a send, combat, the mailbox closing, or 5 s without
+  completing forgets it all: the split stacks stay in the bags, nothing is lost, and the next click
+  plans again. The first `BAG_UPDATE_DELAYED` is never taken to mean done.
+- **Fill after Prepare.** Once every split is complete, the button reads "Fill for <Bank>". That
+  click attaches **exactly the remembered batch** while every stack of it is still there as
+  remembered (same item, same count, unlocked); otherwise it forgets the batch and plans again
+  (which may offer Prepare again). A fresh plan is not used after Prepare: smallest-first could
+  pick other stacks (Codex's round 3: stacks of 5 and 6, keep 2, prepare 5 + a split of 4; a fresh
+  plan over 2, 4, 5 takes 2 + 4 and leaves 5). Nothing is scheduled between the clicks, so no
+  deferred action can act on a changed draft; a prepared stack the player doesn't send just stays
+  in the bags. After completion, any change to the batch's slots, a send or the mailbox closing
+  forgets it.
 - **Afterwards** it compares the draft with the plan (each attachment's itemID and count) and
   prints one line if anything differs. After `MAIL_SEND_SUCCESS` the button recounts; the player
   clicks again for the next batch.
@@ -1605,8 +1619,11 @@ A fourth entry in the window's sidebar, **Bank**, below the folders. The page re
   order and fills To; each per-stack check stops it (source changed, cursor busy, slot taken, the
   wrong item picked up); a refused drop is put back, a foreign cursor item left alone;
   `MAIL_LOCK_SEND_ITEMS` stops it; Prepare splits each remainder into its own empty slot and
-  attaches nothing, then Fill attaches exactly the remembered batch (stacks of 5 and 6 with keep 2:
-  5 and the prepared 4, leaving 2), and plans afresh when a remembered stack changed; the
+  attaches nothing; the bags answer late and in pieces (7b: the cursor empty at once, the source
+  first, the new stack later): "Preparing..." through each partial state, done only when every
+  source and destination shows its count unlocked, forgotten on an unexpected slot content or
+  after 5 s; then Fill attaches exactly the remembered batch (stacks of 5 and 6 with keep 2: 5 and
+  the prepared 4, leaving 2), and plans afresh when a remembered stack changed; the
   verification line; the next batch after a send; the chat
   line once per visit; the page's add, keep and remove, and the bank menu. The fake cursor swaps
   on a pickup, as the client does.
