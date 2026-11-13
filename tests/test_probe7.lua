@@ -283,6 +283,18 @@ WoW.advance(3.1)
 local d7 = NS._test.delayed7()
 check(d7.done and d7.outcome:find("^stopped: the mailbox closed") ~= nil, "  then stopped by the close: " .. tostring(d7.outcome))
 restore()
+check(NS._test.closeStopped7(), "  and the close step passes")
+-- A tab change alone stops it too, but the close step must not pass on it.
+WoW.bags[3].items[10].locked = nil
+WoW.bags[3].size = 13
+WoW.bags[3].items[13] = { id = 3017, count = 4 }
+restore = only(3, 13)
+fp("mail attachtimer 3")
+SendMailFrame:Hide(); SendMailFrame:Show()
+WoW.advance(3.1)
+check(NS._test.delayed7().done and NS._test.delayed7().outcome ~= "attached", "a tab change: the delayed attach stops")
+check(not NS._test.closeStopped7(), "  but the close step fails: no mailbox close")
+restore()
 
 -- attachmany 3 with only one stack left: the check fails (only 1 of 3).
 WoW.bags[3].size = 11

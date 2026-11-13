@@ -1096,11 +1096,13 @@ local gen7 = 0        -- bumped by a mailbox close, combat, a send, the Send tab
 local delayed7        -- the last timer action: { done, outcome = "attached" | "stopped: why", source }
 
 local guard7 = CreateFrame("Frame")
+local closes7 = 0      -- mailbox closes alone (interaction HIDE 17), for the close-during-a-delay step
 local function bump7() gen7 = gen7 + 1 end
 Probe:RegisterEvents(guard7, { "PLAYER_INTERACTION_MANAGER_FRAME_HIDE", "PLAYER_REGEN_DISABLED",
     "SECURE_TRANSFER_CONFIRM_SEND_MAIL" })
 guard7:SetScript("OnEvent", function(_, event, kind)
-    if event ~= "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" or kind == mailInfoType() then bump7() end
+    if event ~= "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then bump7()
+    elseif kind == mailInfoType() then closes7 = closes7 + 1; bump7() end
 end)
 if global("SendMail") then hooksecurefunc("SendMail", bump7) end
 if global("SendMailFrame") then global("SendMailFrame"):HookScript("OnHide", bump7) end
@@ -1241,7 +1243,7 @@ local function attach(label, s, n, how)
     local what = string.format("%s %s id=%s x%s -> attachment %d", n and ("split " .. n .. " off") or "the stack",
         key(s), show(id), show(s.info.stackCount), a)
     local c, gen, sig = global("C_Container"), gen7, draftSig()
-    local timed = type(how) == "number" and { done = false, source = s } or nil
+    local timed = type(how) == "number" and { done = false, source = s, closes = closes7 } or nil
     if timed then delayed7 = timed end
     local function stop(why)
         say(label .. ": STOPPED, " .. why)
@@ -1425,6 +1427,17 @@ function C.unattach(arg)
     say(draftLine("unattach " .. a .. ", at once"))
     C_Timer.After(0.5, function() say(draftLine("unattach " .. a .. ", 0.5 s later")) end)
     return "unattach: attachment " .. a
+end
+
+-- The close-during-a-delay step: the delayed action stopped, the mailbox was
+-- closed after it was asked for (a tab change or combat alone doesn't count),
+-- the cursor is empty and the source untouched.
+local function closeStopped()
+    local d = delayed7
+    if not (d and d.done) then return false, "nothing ran" end
+    local closed = closes7 > d.closes
+    return closed and d.outcome ~= "attached" and not cursorHas() and sameSource(d.source),
+        d.outcome .. (closed and "; the mailbox closed" or "; NO mailbox close since")
 end
 
 -- For the wait steps: exactly what the last action meant is in the draft
@@ -1781,10 +1794,9 @@ Probe:Steps("bank", {
         end,
         check = function()
             local d = delayed7
-            local stopped = d and d.outcome and d.outcome:find("^stopped: the mailbox closed") ~= nil
             say(draftLine("after a close during a delayed attach") .. "; source " .. (d and key(d.source) or "?")
                 .. " " .. (d and slotNow(d.source) or "?"))
-            return stopped and not cursorHas() and sameSource(d.source), d and d.outcome or "nothing ran"
+            return closeStopped()
         end },
     { text = "Open the mailbox again and click Send Mail. Then Start.", button = "Start", run = function()
         sendTab()
@@ -1807,4 +1819,5 @@ Probe:Steps("bank", {
     { text = "Type /reload to save the results.", reload = true },
 })
 
-NS._test = { Probe = Probe, landed7 = landed, delayed7 = function() return delayed7 end }   -- the test seam, never on _G
+NS._test = { Probe = Probe, landed7 = landed, delayed7 = function() return delayed7 end,
+    closeStopped7 = closeStopped }   -- the test seam, never on _G
