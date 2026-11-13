@@ -25,7 +25,7 @@ review's main corrections are listed at the end.
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
   addon needs them.
-- **M4** *(in progress, #50)*: N2 local return assistance first ("N2: recall", below; v0.3.0),
+- **M4** *(done, #50; N2 in v0.3.0, N1 in v1.0.0)*: N2 local return assistance first ("N2: recall", below; v0.3.0),
   then N1 bank character ("N1: the bank character", below: `Core/Bank.lua`, one Send click per
   batch; probe session 7 first).
 - **Later:** cross-account N2 over LibAccountSync, shared-settings sync, Forward.

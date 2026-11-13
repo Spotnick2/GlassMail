@@ -37,13 +37,21 @@ can keep 0, 2, 5 or 10 bag slots free. Or tick individual mails: shift-click sel
 ctrl-click everything from that sender, then Open the selection or Return it one mail at a time.
 COD and GM mail are left for you to handle.
 
-**Your alts are in the address book.** A searchable list beside the To box: your characters that
+**Your alts are in the address book.** A searchable list from the Send tab's title bar: your characters that
 can receive mail from the one you're on (same faction and ruleset, any realm), recent recipients,
 friends and guildmates, each in their class colour. The To box can also start with the last name
 this character mailed, so repeat sends need no typing. With **AltStable** loaded, the list also
 includes the characters AltStable knows are yours, including those on your other WoW accounts
 once AltStable has synced them, and typing the start of one of their names in the To box
 completes it, the way the game completes the names it knows.
+
+**A bank character.** Name one of your characters as the bank for each faction and ruleset, and
+say what goes there on the Bank page of the Glass Mail window (`/gmail bank`): drop an item on it,
+or add a category such as Cloth, Herb or Metal & Stone, each with how many to keep. At the mailbox,
+a chat line says what is ready; on the Send tab, the bank button on the title bar fills an empty
+mail with up to 12 stacks and the bank's name. You check it and press Send, then click again for
+the next mail. To keep exactly that many, it first splits the stacks it needs (one click,
+"Prepare"). Soulbound items stay, and Glass Mail never sends anything itself.
 
 **Make yourself at home.** Choose clear glass, smoked glass or Blizzard's original look, or let
 **Glass UI** set it for all your Glass addons (its glass, its tint, changed live, and its accent); the
@@ -87,6 +95,8 @@ browse your records, or `/gmail help` for every command.
 | `/gmail skin clear` / `smoked` / `stock` | The mailbox's look (with Glass UI, `/gmail skin suite` follows its look again) |
 | `/gmail guides on` / `off` | Under glass, the inbox's empty slots, row lines and "No mail" (on by default) |
 | `/gmail autofill on` / `off` | Start the To box with the last name this character mailed (on by default) |
+| `/gmail bank` | The bank character and what goes to it |
+| `/gmail banknotice on` / `off` | A chat line at the mailbox when items are ready for the bank (on by default) |
 | `/gmail alert on` / `off` | A chat line when new mail comes (on by default) |
 | `/gmail tradeblock on` / `off` | Block trades while the mailbox is open (on by default) |
 | `/gmail tradeblock` | Who is blocking trades right now |
@@ -98,8 +108,8 @@ browse your records, or `/gmail help` for every command.
 
 ## Planned
 
-Help sending to your bank character. The full list is in
-[docs/FEATURES.md](docs/FEATURES.md).
+Later, maybe: Drafts and Spam folders, recalling mail across your WoW accounts, and Forward. The
+full list is in [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Reporting a problem
 

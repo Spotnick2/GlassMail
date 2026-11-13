@@ -23,7 +23,8 @@ and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as t
 the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (#43),
 released as v0.2.1. **M3 done** (#46: LibMailbox-1.0). **M4** (#50): N2, recall ("N2:
 recall" in docs/PLAN.md, #51), released in v0.3.0; then N1, the bank character ("N1: the bank
-character", probe sessions 7 and 7b, built in #53).
+character", probe sessions 7 and 7b, #53), released in v1.0.0. **M4 done**; next is the
+"Later" list.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
