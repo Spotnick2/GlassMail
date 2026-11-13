@@ -1451,7 +1451,7 @@ an enabled Return button: Ops checks the mail, not the recall).
 7. One return with Blizzard's letter button: the recall ends too.
 8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
 
-## N1: the bank character (M4, #50; owner, 2026-11-13; plan, Codex gpt-6-astra, high, 5 rounds so far)
+## N1: the bank character (M4, #50; owner, 2026-11-13; Codex gpt-6-astra, high, 6 rounds, consensus)
 
 FEATURES.md's N1: name a bank character and simple rules, and one click fills a draft of what
 should go there; the player still presses Send. The owner's choices (2026-11-13):
