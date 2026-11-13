@@ -16,11 +16,16 @@
 --
 -- GlassMail.Selection is the selection's public read API (issue #26, for
 -- Shatter's Mail Mode): Get() and OnChange(fn), at the end of this file.
+--
+-- N2's recalls (Core/Recall.lua) show here too: a tint on each row that could
+-- be a recalled mail (the accent when sure, amber when only possible), a line
+-- in its tooltip, and a notice under the rows, whatever the page, with a
+-- Return button for a sure one. The button is the only thing that acts.
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
 local API = GM.API
-local Scan, Ops = GM.Scan, GM.Ops
+local Scan, Ops, Recall, Store = GM.Scan, GM.Ops, GM.Recall, GM.Store
 local say = API.Print
 local Inbox = {}
 GM.Inbox = Inbox
@@ -35,12 +40,17 @@ local DELETE_ICON = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
 local LOADING = "Loading..."
 local TWIN = "Identical to another mail: use the row itself"
 local WAITING = "Waiting for mail to load"
+local AMBER = { 1, 0.7, 0.28 }
+local TINT_ALPHA = 0.16
+Inbox.RECALL_SURE = "Glass Mail: you asked to send this back"
+Inbox.RECALL_POSSIBLE = "Glass Mail: this could be a mail you asked to send back. Check it before returning it."
 
-local rows = {}              -- [i] = { check, icon, fp, action, why }
+local rows = {}              -- [i] = { check, icon, tint, fp, action, why, recall }
 local rowOf = {}             -- Blizzard's MailItemNButton -> i (our table, nothing written on theirs)
 local selected = {}          -- fingerprint -> true
 local anchor                 -- the last plainly clicked fingerprint, for shift ranges
 local bar                    -- { frame, open, ret, clear }
+local notice                 -- { frame, text, ret, fp }: N2's line under the rows
 local itemLines = {}         -- [inbox index] = the tooltip's attachment lines, until the next update
 local snap, counts = { mails = {} }, {}
 local listeners = {}         -- Selection.OnChange callbacks
@@ -107,10 +117,50 @@ local function returnable()
     return list
 end
 
+local function quoted(s) return '"' .. (s or "") .. '"' end
+
+-- N2's notice: the first sure recall with its Return button, else what the
+-- first possible one needs from the player; "+N more" for the rest.
+local function paintNotice(found, ready)
+    notice.fp = nil
+    if #found == 0 then return notice.frame:Hide() end
+    local first
+    for _, f in ipairs(found) do
+        if f.sure then first = f; break end
+    end
+    local more = #found - 1
+    local text
+    if first then
+        local m = first.sure
+        text = "Recall: " .. quoted(m.subject) .. " from " .. (m.sender or "?")
+        notice.fp = m.fp
+    else
+        first = found[1]
+        local n, subject = #first.mails, quoted(first.rec.subject)
+        local twins = n > 1 and first.mails[1].fp ~= nil
+        for _, m in ipairs(first.mails) do
+            if m.fp ~= first.mails[1].fp then twins = false end
+        end
+        if twins then
+            text = "Recall: " .. n .. " identical mails could be " .. subject .. ": open one and use its Return button"
+        elseif n > 1 then
+            text = "Recall: " .. n .. " mails could be " .. subject .. ": check the highlighted rows"
+        else
+            text = "Recall: a mail could be " .. subject .. ": check the highlighted row"
+        end
+    end
+    if more > 0 then text = text .. " (+" .. more .. " more)" end
+    notice.text:SetText(text)
+    notice.ret:SetShown(notice.fp ~= nil)
+    notice.ret:SetEnabled(notice.fp ~= nil and ready and counts[notice.fp] == 1)
+    notice.frame:Show()
+end
+
 local function refresh()
     if not bar then return end
     snap = Scan.Inbox()
     counts = Scan.Count(snap)
+    local recalls = Recall.Inbox(snap, counts)
     -- Outside the selection's own run, a selected mail that is gone or now has
     -- a twin leaves the selection. Not while a mail is loading: its
     -- fingerprint isn't counted yet.
@@ -128,6 +178,12 @@ local function refresh()
     for i, row in ipairs(rows) do
         local m = byIndex[(page - 1) * ROWS + i]
         row.fp, row.action, row.why = m and m.fp, nil, nil
+        row.recall = m and recalls.rows[m.index] or nil
+        if row.recall then
+            local c = row.recall == "sure" and GM.Suite.AccentColor() or AMBER
+            row.tint.tex:SetColorTexture(c[1], c[2], c[3], TINT_ALPHA)
+        end
+        row.tint:SetShown(row.recall ~= nil)
         if not m then
             row.check:Hide()
             row.icon:Hide()
@@ -163,6 +219,7 @@ local function refresh()
     bar.ret:SetText("Return next (" .. n .. " left)")
     bar.ret:SetEnabled(ready and n > 0)
     bar.clear:SetEnabled(idle)
+    paintNotice(recalls.found, ready)
     report()
 end
 
@@ -223,6 +280,13 @@ local function onOpen()
         end
         GM.OpenAll.Summary(r)
     end, refresh)
+end
+
+-- The notice's Return: the sure recall's mail, with the row icon's guards.
+local function onRecallReturn()
+    local fp = notice.fp
+    if busy() or Ops.LetterOpen() or not snap.resolved or not fp or counts[fp] ~= 1 then return refresh() end
+    act("return", fp)
 end
 
 local function onReturnNext()
@@ -294,7 +358,8 @@ local function onRowEnter(button)
     local subject = rawget(_G, "MailItem" .. i .. "Subject")
     local full = subject and subject:IsTruncated() and subject:GetText()
     if full ~= nil and API.IsSecret(full) then full = nil end
-    if #lines == 0 and not full then return end
+    local recall = rows[i].recall
+    if #lines == 0 and not full and not recall then return end
     if #lines > 0 then
         GameTooltip:AddLine(" ")
         for _, line in ipairs(lines) do GameTooltip:AddLine(line, 1, 1, 1) end
@@ -302,6 +367,11 @@ local function onRowEnter(button)
     if full then
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(full, 1, 1, 1, true)
+    end
+    if recall then
+        local c = recall == "sure" and GM.Suite.AccentColor() or AMBER
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(recall == "sure" and Inbox.RECALL_SURE or Inbox.RECALL_POSSIBLE, c[1], c[2], c[3], true)
     end
     GameTooltip:Show()
 end
@@ -337,7 +407,15 @@ function Inbox.Start()
         check:SetPoint("RIGHT", icon, "LEFT", -2, 0)
         check:SetScript("OnClick", function() onCheck(i) end)
         check:SetScript("OnEnter", function() checkTip(i) end)
-        rows[i] = { check = check, icon = icon }
+        -- N2's tint: over the row, under our controls, never taking a click.
+        local tint = CreateFrame("Frame", nil, inbox)
+        tint:SetAllPoints(item)
+        tint:SetFrameLevel(item:GetFrameLevel() + 1)
+        tint:EnableMouse(false)
+        tint.tex = tint:CreateTexture(nil, "ARTWORK")
+        tint.tex:SetAllPoints(tint)
+        tint:Hide()
+        rows[i] = { check = check, icon = icon, tint = tint }
         local button = rawget(_G, "MailItem" .. i .. "Button")
         if button then rowOf[button] = i end
     end
@@ -351,6 +429,25 @@ function Inbox.Start()
     bar.ret:SetPoint("RIGHT", bar.clear, "LEFT", -2, 0)
     bar.open = API.Button(frame, "Open", 66, onOpen)
     bar.open:SetPoint("RIGHT", bar.ret, "LEFT", -2, 0)
+    local nf = CreateFrame("Frame", nil, inbox)
+    nf:SetHeight(22)
+    nf:SetPoint("TOPLEFT", rawget(_G, "MailItem" .. ROWS), "BOTTOMLEFT", 4, -2)
+    nf:SetPoint("RIGHT", inbox, "RIGHT", -12, 0)
+    notice = { frame = nf }
+    notice.ret = API.Button(nf, "Return", 70, onRecallReturn)
+    notice.ret:SetPoint("RIGHT", nf, "RIGHT", 0, 0)
+    notice.ret:SetMotionScriptsWhileDisabled(true)
+    notice.ret:SetScript("OnEnter", function(self)
+        local w = (API.InCombat() and "Not in combat") or (Ops.Running() and "Busy: wait for the current action")
+            or (Ops.LetterOpen() and "Close the letter first") or (not snap.resolved and WAITING) or nil
+        tip(self, w and ("Return to sender\n" .. w) or "Return to sender")
+    end)
+    notice.ret:SetScript("OnLeave", hideTip)
+    notice.text = nf:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    notice.text:SetPoint("LEFT", nf, "LEFT", 0, 0)
+    notice.text:SetPoint("RIGHT", notice.ret, "LEFT", -6, 0)
+    notice.text:SetJustifyH("LEFT")
+    nf:Hide()
     if rawget(_G, "InboxFrameItem_OnEnter") then
         hooksecurefunc("InboxFrameItem_OnEnter", function(button)
             local ok, err = pcall(onRowEnter, button)
@@ -359,6 +456,9 @@ function Inbox.Start()
     end
     if inbox.Update then hooksecurefunc(inbox, "Update", refresh) end
     Ops.Watch(refresh)
+    -- A recall marked, unmarked, forgotten or ended while the mailbox is open
+    -- repaints at once (Ops checks the mail, not the recall).
+    Store.OnChange(refresh)
     local letter = rawget(_G, "OpenMailFrame")
     if letter then
         letter:HookScript("OnShow", refresh)
@@ -409,4 +509,5 @@ function Selection.OnChange(fn)
 end
 
 GM._test = GM._test or {}
-GM._test.inbox = { rows = rows, bar = function() return bar end, selected = function() return selected end }
+GM._test.inbox = { rows = rows, bar = function() return bar end, selected = function() return selected end,
+    notice = function() return notice end }

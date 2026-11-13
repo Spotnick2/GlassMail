@@ -17,7 +17,7 @@
 GlassMail = GlassMail or {}
 local GM = GlassMail
 local API = GM.API
-local Glass, Skin, Store, Summary = GM.Glass, GM.Skin, GM.Store, GM.Summary
+local Glass, Skin, Store, Summary, Recall = GM.Glass, GM.Skin, GM.Store, GM.Summary, GM.Recall
 local Window = {}
 GM.Window = Window
 
@@ -28,6 +28,7 @@ local ICONS = 6
 local DAY = 86400
 local FORGET_ICON = "Interface\\Buttons\\UI-GroupLoot-Pass-Up"
 local OPEN_ICON = "Interface\\Icons\\INV_Letter_15"
+local RECALL_ICON = "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up"
 local GREY = "|cff9d9d9d"
 local AMBER = "|cffffb347"
 
@@ -238,6 +239,10 @@ local function paintRow(row, e, now)
         top = (r.kind == "return" and "returned to " or "to ") .. r.to .. GREY .. "  from " .. charName(r.from) .. "|r"
         if r.state == "unconfirmed" then top = top .. AMBER .. "  unconfirmed|r" end
         right, bottom, items = when(r.at), contents(r), r.items
+        if r.recall then
+            top = top .. AMBER .. "  recall|r"
+            right = (Recall.Seen(r))
+        end
     elseif e.kind == "trash" then
         top = "from " .. (r.sender or "unknown") .. GREY .. "  in " .. charName(r.from) .. "'s mailbox|r"
         right, bottom, items = "gone in " .. span(r.expires - now), contents(r), r.items
@@ -252,7 +257,31 @@ local function paintRow(row, e, now)
     row.right:SetText(right)
     row.bottom:SetText(bottom)
     paintIcons(row, items)
+    -- N2: the recall toggle on a send (none on a return or another folder).
+    local send = e.kind == "sent" and r.kind == "send"
+    row.recall:SetShown(send)
+    if send then
+        local can = r.recall == true or (Recall.CanMark(r))
+        row.recall:SetEnabled(can)
+        row.recall:SetAlpha(r.recall and 1 or 0.35)
+        row.recall:GetNormalTexture():SetVertexColor(1, r.recall and 0.7 or 1, r.recall and 0.28 or 1)
+    end
     row:Show()
+end
+
+-- The recall toggle's tooltip: what a click does, or why it can't.
+function Window.RecallTip(r)
+    if r.recall then
+        local _, long = Recall.Seen(r)
+        return "Recall: " .. long .. ".\nWhen " .. r.to .. " opens a mailbox, Glass Mail highlights it, with a "
+            .. "Return button.\nClick to stop."
+    end
+    local ok, why = Recall.CanMark(r)
+    if ok then
+        return "Recall: sent to the wrong character? Mark it, and when " .. r.to .. " opens a mailbox, Glass Mail "
+            .. "highlights it, with a Return button."
+    end
+    return "Can't recall this one: " .. (why or "")
 end
 
 local function emptyText()
@@ -382,9 +411,29 @@ local function newRow(parent, i)
     end
     row.more = Glass.Font(row, 10, "LEFT")
     row.more:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -26 - ICONS * 18, 6)
+    row.recall = CreateFrame("Button", nil, row)
+    row.recall:SetSize(14, 14)
+    row.recall:SetPoint("TOPRIGHT", row, "TOPRIGHT", -6, -3)
+    row.recall:SetNormalTexture(RECALL_ICON)
+    row.recall:SetDisabledTexture(RECALL_ICON)
+    row.recall:GetDisabledTexture():SetDesaturated(true)
+    row.recall:SetMotionScriptsWhileDisabled(true)
+    row.recall:SetScript("OnEnter", function(self)
+        local e = row.entry
+        if not (e and e.kind == "sent") then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(Window.RecallTip(e.rec), 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    row.recall:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row.recall:SetScript("OnClick", function()
+        local e = row.entry
+        if e and e.kind == "sent" then Recall.Toggle(e.rec) end
+    end)
+    row.recall:Hide()
     row.forget = CreateFrame("Button", nil, row)
     row.forget:SetSize(14, 14)
-    row.forget:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+    row.forget:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -6, 3)
     row.forget:SetNormalTexture(FORGET_ICON)
     row.forget:SetAlpha(0.35)
     row.forget:SetScript("OnEnter", function(self)

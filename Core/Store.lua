@@ -47,7 +47,9 @@ local SPECS = {
     sent = {
         required = { kind = "string", day = "number", at = "number", from = "string", to = "string",
             state = "string" },
-        optional = { subject = "string", money = "number", cod = "number", items = "items" },
+        -- recall / fromName: N2 (Core/Recall.lua), set and cleared together by SetRecall.
+        optional = { subject = "string", money = "number", cod = "number", items = "items",
+            recall = "boolean", fromName = "string" },
         enums = { kind = { send = true, ["return"] = true }, state = { sent = true, unconfirmed = true } },
     },
     trash = {
@@ -348,6 +350,27 @@ end
 function Store.ForgetMail(guid, mail)
     local snap = Store.Ready() and Store.Snapshots()[guid]
     return snap and removeFrom(snap.mails, mail) or false
+end
+
+-- N2's mark on a saved send (the record itself, as the forget calls take it):
+-- on, with the sending character's name, or off. Both fields change before
+-- the watchers run. False when the record isn't in Sent or the name isn't a
+-- plain string.
+function Store.SetRecall(rec, on, fromName)
+    if not Store.Ready() then return false end
+    local found = false
+    for _, r in ipairs(Store.Sent()) do
+        if r == rec then found = true; break end
+    end
+    if not found then return false end
+    if on then
+        if API.IsSecret(fromName) or type(fromName) ~= "string" or fromName == "" then return false end
+        rec.recall, rec.fromName = true, fromName
+    else
+        rec.recall, rec.fromName = nil, nil
+    end
+    changed()
+    return true
 end
 
 function Store.SetChar(guid, rec)

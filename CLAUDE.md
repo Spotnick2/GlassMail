@@ -21,7 +21,8 @@ docs/PLAN.md): the look, the mail core with Open All, selection with row extras,
 (#17) is done with PR 5 (I4, the item grid, and the v0.2.0 prep); v0.2.0 is released (2026-11-12),
 and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as they play. After it:
 the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (#43),
-released as v0.2.1.
+released as v0.2.1. **M3 done** (#46: LibMailbox-1.0). **M4** (#50): N2, recall, first ("N2:
+recall" in docs/PLAN.md), then N1 after a probe session.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -53,7 +54,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` → `Compat.lua` → `Glass.lua` → `Suite.lua` → `Skin.lua` →
 `Core\Mailbox.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Store.lua` → `Core\Registry.lua` →
-`Core\Sent.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
+`Core\Sent.lua` → `Core\Recall.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
 `Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
@@ -137,7 +138,8 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   (Trash and a snapshot's mails: when the mail would have expired; a snapshot goes with its
   character), then the caps (`recentMax`, 1000 Sent, 500 Trash, 100 mails a snapshot). The forget
   calls, and `Store.OnChange` after every change. The settings in the same table aren't its
-  business.
+  business. A `sent` record may carry N2's `recall` and `fromName` (`Store.SetRecall` sets or
+  clears both, before the watchers run); each optional field is cleaned on its own.
 - **`Core\Registry.lua`**: own characters by GUID (`chars`, refreshed on every tick), or
   AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1 with the `provenance` feature;
   only its `self` and `own-account` characters, never a third party's; nothing from it saved);
@@ -150,7 +152,18 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   success first clears the current character's `lastTo`, so only an attributed one sets it.
 - **`Core\Trash.lua`**: every Delete / Return, ours or Blizzard's, captured at its post-hook and kept
   only when the next update proves it (its fingerprint and the loaded count each one fewer, within
-  5 s, on a settled inbox, with no other call in between). Deletes go to Trash, returns to Sent.
+  5 s, on a settled inbox, with no other call in between). Deletes go to Trash, returns to Sent;
+  a confirmed return also ends the oldest recall it matches (`Recall.OnReturned`, the mail as it was).
+- **`Core\Recall.lua`**: N2, no frames. A send marked `recall` in Sent (`Recall.CanMark`: a send of
+  items or gold, every field saved, to one of `Store.Chars()` other than its sender, same faction
+  and known ruleset judged between the two saved characters; never AltStable's list) is matched on
+  the recipient by `Recall.Matches`: sender name, subject, money, COD, attachments as a multiset of
+  (itemID, count), a live mail's attachments all read (`itemCount`), never its type (an alt's
+  AH-shaped subject is `ah`). The record must be comparable on its own (a dropped field matches
+  nothing). `Recall.Inbox` gives each row `sure` (the one candidate, unique, Blizzard returns it)
+  or `possible`; "sure" is one actionable candidate, not identity (both ends are your characters).
+  `Recall.Seen` reads the recipient's snapshot for the Sent row, a miss worded as Glass Mail's
+  memory, never the mailbox.
 - **`Core\Memory.lua`**: X1's snapshots. A visit runs from `MAIL_SHOW` to the close; each inbox
   update in it scans a frame later, for that visit only; a scan replaces the character's snapshot
   only when it read every loaded mail whole (else the old one stays). That the first update carries
@@ -165,6 +178,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   tooltip gets each attachment and the full subject. Everything disables in combat and while
   another run or a letter is open. `GlassMail.Selection` (`Get`, `OnChange`) is the selection's
   public read API, for Shatter (`docs/PUBLIC-API.md`): keep its contract when changing the selection.
+  N2's recalls: a tint per matching row (our frame, mouse off; the accent sure, amber possible), a
+  tooltip line, and a notice under the rows with a Return button for a sure one (`Ops.Act`, the row
+  icon's guards; the only thing that acts). The refresh also follows `Store.OnChange`.
 - **`Comforts.lua`**: X3. The gold Ops confirmed this visit (`Ops.TakeVisitMoney`), said at close;
   the trade block (the `blockTrades` CVar while the mailbox is open; only our own block is undone,
   nothing written in combat, a per-character claim for crash recovery; never silent: a failed
@@ -172,7 +188,9 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   latest senders changed, away from the mailbox).
 - **`Window.lua`**: Glass Mail's own window (`/gmail mail`, and our button on the mailbox's title
   bar): Inbox (each character's snapshot, opening into its mails), Sent and Trash, a search box
-  (names, subjects, item names loaded on demand once per session), a forget × on every row. A pool
+  (names, subjects, item names loaded on demand once per session), a forget × on every row, and
+  N2's recall toggle on each send (disabled with `CanMark`'s reason; a marked row says "recall" and
+  where the mail was last seen). A pool
   of rows and an offset; glass in the current preset (`stock` shows it smoked, `Skin.AddWindow` /
   `AddPane`). Escape closes it out of combat only (its `UISpecialFrames` entry leaves in combat).
 - **`Address.lua`**: S1. Our button right of `SendMailNameEditBox` opens our glass panel (a child

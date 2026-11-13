@@ -182,6 +182,9 @@ function Methods.SetText(t, text, ...)
     return coreSetText(t, text, ...)
 end
 function Methods.IsTruncated(fs) return fs._truncated == true end
+-- Kept per widget, so a test can tell a disabled control still shows its tooltip.
+function Methods.SetMotionScriptsWhileDisabled(w, v) w._motionWhileDisabled = v == true end
+function Methods.GetMotionScriptsWhileDisabled(w) return w._motionWhileDisabled == true end
 function GameTooltip_Hide() GameTooltip:Hide() end
 -- Blizzard's row tooltip (MailFrame.lua:489), shortened: its own first line.
 function InboxFrameItem_OnEnter(self)

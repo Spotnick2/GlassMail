@@ -22,6 +22,7 @@ Core\Ops.lua
 Core\Store.lua
 Core\Registry.lua
 Core\Sent.lua
+Core\Recall.lua
 Core\Trash.lua
 Core\Memory.lua
 OpenAll.lua

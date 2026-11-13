@@ -1,5 +1,6 @@
 -- Core/Trash.lua: X2's Trash folder (deleted mail, kept until it would have
--- expired), and the returns Sent records ("returned to").
+-- expired), and the returns Sent records ("returned to"), which also end N2's
+-- recalls (Core/Recall.lua).
 --
 -- Every DeleteInboxItem / ReturnInboxItem, ours or anyone's (the letter's
 -- buttons, the delete popup, our row icons), is captured at its post-hook from
@@ -22,7 +23,7 @@
 GlassMail = GlassMail or {}
 local GM = GlassMail
 local API = GM.API
-local Store, Scan, Registry, Sent = GM.Store, GM.Scan, GM.Registry, GM.Sent
+local Store, Scan, Registry, Sent, Recall = GM.Store, GM.Scan, GM.Registry, GM.Sent, GM.Recall
 local Trash = {}
 GM.Trash = Trash
 
@@ -66,6 +67,10 @@ local function commit(c)
             cod = m.cod, items = items(m), expires = c.expires })
     else
         Sent.AddReturn(m, items(m))
+        -- N2: a confirmed return ends the oldest recall it matches (the mail as
+        -- it was before the return).
+        local ok, err = pcall(Recall.OnReturned, m)
+        if not ok then API.Fail("recall return", err) end
     end
 end
 
