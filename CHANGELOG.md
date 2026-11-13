@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- The address book's button beside the To box no longer covers the "P" of "Postage" when a mail
-  costs more than a few copper to send.
+- The address book's button moved to the Send tab's title bar (where the inbox has the item
+  grid's), and its list opens beside the mail window: beside the To box it covered the "P" of
+  "Postage" once a mail cost more than a few copper to send.
 
 ## v0.3.0
 

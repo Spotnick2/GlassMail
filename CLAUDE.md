@@ -193,7 +193,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   where the mail was last seen). A pool
   of rows and an offset; glass in the current preset (`stock` shows it smoked, `Skin.AddWindow` /
   `AddPane`). Escape closes it out of combat only (its `UISpecialFrames` entry leaves in combat).
-- **`Address.lua`**: S1. Our button right of `SendMailNameEditBox` opens our glass panel (a child
+- **`Address.lua`**: S1. Our button on the mailbox's title bar, Send tab only (where the inbox has the item grid's; beside the To box it hid "Postage:"), opens our glass panel beside the mail window (a child
   of `SendMailFrame`): a search box, focused, over my characters (reachable, not hidden), recents,
   friends and the guild, filtered as you type (every word, plain find), a fixed pool of rows; each
   name once, no other realm's, never the current character. A pick (a click, or Enter for the

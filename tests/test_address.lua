@@ -261,19 +261,25 @@ end
 local function listening(event) return panel()._events[event] == true end
 
 check(Address.button and Address.button:GetParent() == SendMailFrame, "the picker's button is on the send tab")
--- Its place: right of the To box, clear of "Postage:" (the box ends at x 199 of
--- SendMailFrame, MailFrame.xml:594-596; the label starts near x 222 at 1s 80c).
+-- Its place: the mailbox's title bar, where the inbox has the item grid's button
+-- (owner, 2026-11-13: beside the To box it hid "Postage:"'s "P").
 do
     local p = Address.button._points[1]
-    local w = Address.button:GetWidth()
-    check(p and p[1] == "LEFT" and p[2] == SendMailNameEditBox and p[3] == "RIGHT", "  right of the To box")
-    check(199 + p[4] + w <= 218, "  ending by x 218, clear of the postage label (ends at " .. (199 + p[4] + w) .. ")")
+    check(p and p[1] == "TOPRIGHT" and p[2] == MailFrame and p[3] == "TOPRIGHT" and p[4] == -50 and p[5] == -2,
+        "  on the title bar, where the inbox has the item grid's button")
+    for _, q in ipairs(Address.button._points) do
+        check(q[2] ~= SendMailNameEditBox, "  not anchored to the To box")
+    end
 end
 db.recents = {}
 WoW.friends, WoW.guild = {}, nil
 for guid in pairs(db.chars) do if guid ~= ME then db.chars[guid] = nil end end
 local ownBefore = #GM._test.skin.own
 press()
+do
+    local q = panel()._points[1]
+    check(q and q[1] == "TOPLEFT" and q[2] == MailFrame and q[3] == "TOPRIGHT", "the picker opens beside the mail window")
+end
 check(shown(), "the button opens the picker")
 eq(#GM._test.skin.own, ownBefore + 3, "  glass, its backing and its search pane, in the skin's repaint list")
 local backing = GM._test.skin.own[ownBefore + 2]
