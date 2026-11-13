@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: |cff7fd4ffGlass|r Mail
-## Notes: Easier mail: Open All with filters, an item grid, searchable mail records and your alts' mailboxes, in optional liquid glass. /gmail help
+## Notes: Easier mail: Open All with filters, an item grid, searchable mail records, your alts' mailboxes and a bank character, in optional liquid glass. /gmail help
 ## Author: Spotnick
 ## Version: @project-version@
 ## X-License: MIT

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.0.0
 
 - **A bank character.** Name one of your characters as the bank for each faction and ruleset, and
   say what goes there, on the new Bank page of the Glass Mail window (`/gmail bank`): drop an item
