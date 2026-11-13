@@ -26,6 +26,12 @@ records you can search by name, character, subject or item. Open it anywhere wit
 
 A character's Inbox record updates each time you open its mailbox.
 
+**Sent it to the wrong alt?** In Sent, the arrow on a mail marks it "recall" (mail with items or
+gold to one of your characters on this WoW account that has logged in with Glass Mail). The row
+then says whether the mail was last seen in that character's mailbox. When that character next
+opens a mailbox, the mail is highlighted and a Return button under the mail window sends it back
+in one click. If two mails could be it, both are highlighted and you choose.
+
 **Collect what you want.** Open All has filters for Auction House, system and player mail, and
 can keep 0, 2, 5 or 10 bag slots free. Or tick individual mails: shift-click selects a range,
 ctrl-click everything from that sender, then Open the selection or Return it one mail at a time.
@@ -40,7 +46,7 @@ once AltStable has synced them, and typing the start of one of their names in th
 completes it, the way the game completes the names it knows.
 
 **Make yourself at home.** Choose clear glass, smoked glass or Blizzard's original look, or let
-**Glass UI** set it for all your Glass addons (its tint and accent, changed live); the
+**Glass UI** set it for all your Glass addons (its glass, its tint, changed live, and its accent); the
 mailbox keeps its familiar layout either way, empty or not: under glass, each row has a faint slot
 for its icon, and an empty inbox says "No mail". Each row gets a tooltip listing its attachments,
 a Return shortcut, and a Delete shortcut on empty mail only, so nothing with money or items is
@@ -92,7 +98,7 @@ browse your records, or `/gmail help` for every command.
 
 ## Planned
 
-Help sending to your bank character, and help with mail to return. The full list is in
+Help sending to your bank character. The full list is in
 [docs/FEATURES.md](docs/FEATURES.md).
 
 ## Reporting a problem
