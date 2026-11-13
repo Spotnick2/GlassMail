@@ -15,8 +15,11 @@ CreateFrame = function(kind, name, parent, ...)
 end
 local GM = loadAddon()
 local T = GM._test.skin
--- The address book's button (Address.lua) is the send tab's other unnamed child.
-for i = #made, 1, -1 do if made[i] == GM.Address.button then table.remove(made, i) end end
+-- The address book's button (Address.lua) and the bank's (Bank.lua) are the
+-- send tab's other unnamed children.
+for i = #made, 1, -1 do
+    if made[i] == GM.Address.button or made[i] == GM.BankUI.button then table.remove(made, i) end
+end
 eq(T.letters.MailFrame, nil, "the send letter isn't built")
 check(GM.failures["skin letter MailFrame"] ~= nil, "  and the failure is recorded")
 eq(#made, 2, "two pane frames were made (the letter's and the footer's)")

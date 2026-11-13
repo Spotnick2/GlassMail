@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- **A bank character.** Name one of your characters as the bank for each faction and ruleset, and
+  say what goes there, on the new Bank page of the Glass Mail window (`/gmail bank`): drop an item
+  on it, or add a category (Cloth, Herb, Metal & Stone and others), each with how many to keep.
+  At the mailbox, a chat line says what is ready. On the Send tab, the new button on the title bar
+  fills an empty draft for the bank, up to 12 stacks; you check it and press Send, then click
+  again for the next mail. To keep exactly that many, it first splits the stacks it needs (one
+  click, "Prepare"), then fills. Soulbound items stay. `/gmail banknotice off` turns the chat line
+  off, also on the options page.
+- The address book's button moved to the Send tab's title bar (where the inbox has the item
+  grid's), and its list opens beside the mail window: beside the To box it covered the "P" of
+  "Postage" once a mail cost more than a few copper to send.
+
 ## v0.3.0
 
 - **Recall a mail sent to the wrong alt.** In the Glass Mail window's Sent folder, the new arrow

@@ -33,7 +33,7 @@ local GREY = "|cff9d9d9d"
 local AMBER = "|cffffb347"
 
 Window.FOLDERS = { "inbox", "sent", "trash" }
-local LABELS = { inbox = "Inbox", sent = "Sent", trash = "Trash" }
+local LABELS = { inbox = "Inbox", sent = "Sent", trash = "Trash", bank = "Bank" }
 Window.TRASH_NOTE = "Trash holds the deletes Glass Mail confirmed. One made while another mail action "
     .. "was still in flight isn't here."
 
@@ -165,6 +165,7 @@ end
 
 local function build()
     local out, ws, now = {}, words(), time()
+    if folder == "bank" then return out end   -- N1's page, not a list (Bank.lua)
     if folder == "sent" then
         local sent = Store.Sent()
         for i = #sent, 1, -1 do
@@ -329,6 +330,20 @@ function Window.Refresh()
         b.label:SetText(LABELS[key] .. (n and (GREY .. "  " .. n .. "|r") or ""))
         b.selected:SetShown(key == folder)
     end
+    -- N1's Bank page takes the list's place.
+    local bank = folder == "bank"
+    if ui.folders.bank then
+        ui.folders.bank.label:SetText(LABELS.bank)
+        ui.folders.bank.selected:SetShown(bank)
+    end
+    for _, w in ipairs({ ui.search, ui.list, ui.note }) do w:SetShown(not bank) end
+    if ui.bankPage then ui.bankPage:SetShown(bank) end
+    if bank then
+        ui.heading:SetText("")
+        ui.back:Hide()
+        if GM.BankUI then GM.BankUI.RefreshPage() end
+        return
+    end
     local heading
     if folder == "inbox" and character and query == "" then
         heading = charName(character) .. "'s mailbox"
@@ -456,10 +471,10 @@ local function newRow(parent, i)
     return row
 end
 
-local function newFolder(parent, key, i)
+local function newFolder(parent, key, i, gap)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(116, 26)
-    b:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -4 - (i - 1) * 28)
+    b:SetPoint("TOPLEFT", parent, "TOPLEFT", 2, -4 - (i - 1) * 28 - (gap or 0))
     b.selected = b:CreateTexture(nil, "BACKGROUND")
     b.selected:SetAllPoints(b)
     b.selected:SetColorTexture(1, 0.82, 0, 0.12)
@@ -508,6 +523,7 @@ function Window.Build()
     side:SetWidth(120)
     Skin.AddPane(side, "section")
     for i, key in ipairs(Window.FOLDERS) do ui.folders[key] = newFolder(side, key, i) end
+    ui.folders.bank = newFolder(side, "bank", #Window.FOLDERS + 1, 12)
 
     local main = CreateFrame("Frame", nil, content)
     main:SetPoint("TOPLEFT", side, "TOPRIGHT", 10, 0)
@@ -579,6 +595,7 @@ function Window.Build()
     ui.note:SetPoint("BOTTOMLEFT", main, "BOTTOMLEFT", 10, 8)
     ui.note:SetPoint("RIGHT", main, "RIGHT", -10, 0)
     ui.note:SetTextColor(0.6, 0.6, 0.6)
+    if GM.BankUI then ui.bankPage = GM.BankUI.BuildPage(main) end
 
     frame:SetScript("OnShow", function() Window.Refresh() end)
     frame:SetScript("OnHide", function() GameTooltip:Hide() end)
@@ -592,6 +609,12 @@ function Window.Toggle()
 end
 
 function Window.IsShown() return frame ~= nil and frame:IsShown() end
+
+-- /gmail bank: the window on its Bank page.
+function Window.ShowBank()
+    Window.Show()
+    showFolder("bank")
+end
 
 -- Our button on the mailbox's title bar, left of its close button.
 local function addMailButton()

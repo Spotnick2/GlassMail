@@ -25,8 +25,9 @@ review's main corrections are listed at the end.
   (`LibMailbox-1.0`, LibShowcase's layout, upgrade tests). An AltStable PR adopts it in the same
   round, keeping AltStable's `mail_*` fields. The loot and send queues stay here unless a second
   addon needs them.
-- **M4** *(in progress, #50)*: N2 local return assistance first ("N2: recall", below), then N1
-  bank character (`Core/Send.lua`, one Send click per batch; a probe session and its own plan first).
+- **M4** *(in progress, #50)*: N2 local return assistance first ("N2: recall", below; v0.3.0),
+  then N1 bank character ("N1: the bank character", below: `Core/Bank.lua`, one Send click per
+  batch; probe session 7 first).
 - **Later:** cross-account N2 over LibAccountSync, shared-settings sync, Forward.
 
 ## M1 (reviewed with Codex, 4 rounds, consensus)
@@ -287,7 +288,7 @@ A send is captured as it is made and kept, in the state its outcome justifies:
 
 ### S1: the address book picker (`Address.lua`)
 
-- **Our button** to the right of `SendMailNameEditBox` (a child of SendMailFrame), opening a
+- **Our button** to the right of `SendMailNameEditBox` (a child of SendMailFrame; moved to the title bar on 2026-11-13, see CLAUDE.md), opening a
   `MenuUtil.CreateContextMenu` with sections, each skipped when empty:
   1. **My characters**: AltStable's list if loaded, else the registry; reachable ones only, not
      the current character, AltStable's hidden ones left out.
@@ -1449,6 +1450,201 @@ an enabled Return button: Ops checks the mail, not the recall).
 6. With the alt's mailbox open, mark and unmark from `/gmail mail`: the tint and the notice follow.
 7. One return with Blizzard's letter button: the recall ends too.
 8. Mark one, exit the client fully, relaunch: still marked (the new fields persist).
+
+## N1: the bank character (M4, #50; owner, 2026-11-13; Codex gpt-6-astra, high, 6 rounds, consensus)
+
+FEATURES.md's N1: name a bank character and simple rules, and one click fills a draft of what
+should go there; the player still presses Send. The owner's choices (2026-11-13):
+- **One bank per faction and ruleset group** (not a recipient per rule: that is Kerzo's auto-send,
+  which FEATURES keeps out).
+- **A button fills the draft.** At the mailbox, one chat line says what is ready; on the Send tab,
+  our button fills an empty draft; the player checks it and presses Send; the button then offers
+  the next batch.
+- **The rules live on a Bank page in the Glass Mail window** (`/gmail mail`).
+
+**Why it can stay small.** We never send: Blizzard's Send button and its confirmation do, as for
+every mail. Our code only puts items from the bags on the cursor and drops them on the draft's
+attachment slots, which is what the player's own clicks do. Sent already records the send
+(`Core/Sent.lua`, at the `SendMail` post-hook). What we promise is narrower than FEATURES' first
+wording ("checks everything again before sending"): the bags are read again at the click, the
+draft is verified after filling, and the player reviews it and sends. A `SendMail` post-hook is too
+late to veto a send, and nothing here pretends to.
+
+### Measured (session 7, 2026-11-13, FOREVER-PROBE.md)
+
+- **A whole stack attaches by code**: `C_Container.PickupContainerItem` then
+  `ClickSendMailItemButton(slot)`, from a click, a frame later, and **from a timer** (no key
+  press). It is in the draft at once (`MAIL_SEND_INFO_UPDATE` fires inside the drop). Three stacks
+  in one frame all landed.
+- **Attachments stay in the bags**, locked, at their full count, until the send succeeds; a close
+  of the mailbox empties the draft and unlocks them.
+- **A split dropped on the draft attaches the whole source stack**: "split 2" of a 10-stack put all
+  10 in the draft (and they were sent). **Session 7b: a split into an empty bag slot works**, and
+  that stack attaches alone (exactly 2 sent). The bags change only when the server answers (the
+  new stack shows within about a second, unlocked), so a split is its own click (Prepare, below).
+- **A soulbound item is refused**: `UI_ERROR_MESSAGE` 460, the item stays on the cursor, and
+  `ClearCursor` puts it back unlocked. `ContainerItemInfo.isBound` and `C_Item.IsBound` agreed on
+  every item (a heirloom too).
+- Blizzard fills an empty subject with the first attachment ("Windstone (5)"); our right-click
+  clear by code works; a send to the player's own alt showed no confirmation, success 0.22 s later.
+- Session 7b also: a split put straight back is whole again at once (`ClearCursor`); a delayed
+  attach due after a mailbox close stopped and moved nothing. Unmeasured: a code-filled draft
+  through the secure-transfer confirmation (a bank on another account); Blizzard's own dialog
+  does that send.
+
+### What is saved
+
+A new `bank` table in `GlassMailDB`, loaded and checked by `Core/Bank.lua` itself (a small
+loader, not Store's generic one; `Store.VERSION` stays 1; an older Glass Mail ignores it):
+- `bank.banks[group] = { name, guid? }`: the bank's mail address ("First Surname") and its GUID
+  when it was picked from your characters. `group` is `faction .. ":" .. ruleset`
+  (`Registry.RulesetOf`); an "Unknown" ruleset gets no bank.
+- `bank.rules`: a list, each exactly one of `{ item = itemID, keep = n }` or
+  `{ class = c, sub = s?, keep = n }` (`sub` absent: the whole class, for Recipes). IDs are
+  positive integers, `keep` an integer 0-9999, a category one of the offered ones (below). Adding a
+  rule that exists (same item, same class and sub) updates its keep. An entry that fails is
+  dropped alone.
+
+Not expired: the owner set them, unlike the lists that grow by themselves (the "no stale
+characters" rule). The bank is resolved live: by its GUID in `Registry.Characters()` (AltStable's
+list included, so a bank on another account resolves too) for its current name and reachability;
+the saved name is the fallback for one no list knows. It is "this character" by GUID, or by name
+key (`Names.Key`) when the GUID is unknown.
+
+### `Core/Bank.lua` (no frames)
+
+Loads after `Core/Recall.lua`.
+- **`Bank.Group(c)`**: a character's group, nil when its faction or ruleset is unknown.
+- **`Bank.For()`**: the current character's bank `{ name, guid }`, or nil and why (none set; the
+  bank is this character; not reachable, when the bank resolves to a known character).
+- **`Bank.Rule(itemID)`**: the item rule, else the category rule for its
+  `C_Item.GetItemInfoInstant` class and subclass (no cache needed), else nil.
+- **`Bank.Plan()`**: one mail's worth, from a fresh read of bags 0-4 (never cached). Per itemID
+  with a rule: `total` counts every unit in bags 0-4 (bound, locked and refused ones too: they
+  stay, so they count toward keep), `excess = total - keep`; then **movable** stacks (unbound,
+  unlocked, not refused this session) are taken whole, smallest first, while each fits in what is
+  left of the excess. A remainder that no whole stack fits (session 7b measured the split) is a **split to
+  prepare** (below), into an empty general bag slot, one per item, only while empty slots are free.
+  Up to 12 attachments. Returns the stacks and how many items would
+  still be movable after this batch. Simple over optimal: stacks of 6 and 10 with keep 6 send the 6.
+- **`Bank.Available()`**: what the algorithm can actually move in all, and the mails it takes (the
+  chat line).
+
+Categories offered (ItemSubClass, build 70938, `References\Forever\db`; session 7's bag scan
+confirmed items carry them, e.g. a herb 7.9, a part 7.11): Trade Goods' Cloth (7.5), Leather
+(7.6), Metal & Stone (7.7), Cooking (7.8), Herb (7.9), Elemental (7.10), Enchanting (7.12), Parts
+(7.1) and Other (7.11), and Recipes (class 9). Names from `C_Item.GetItemSubClassInfo` /
+`GetItemClassInfo` at run time, never saved.
+
+### The Send tab (`Bank.lua`)
+
+- **The button**: ours, on the mailbox's title bar left of the address book's, shown on the Send tab
+  only; its tooltip says "Fill for <Bank>: n items (m mails)" or why it is off. Its place is
+  checked with a screenshot.
+- **Enabled when** a bank is set for this group and reachable, `Bank.Plan()` has something, the
+  cursor is empty, not in combat (`API.InCombat`), no Ops run, and **the draft is empty**: no
+  attachment, the subject and the body empty, `MoneyInputFrame_GetCopper(SendMailMoney) == 0`
+  (the widget: `GetSendMailMoney()` stays 0 until the Send click copies it, session 6) and COD
+  unchecked; any of them unreadable disables it.
+- **No send in flight.** Blizzard keeps a sent draft (subject, attachments) until
+  `MAIL_SEND_SUCCESS` resets it, so an empty draft already rules out its own pending send. On top:
+  a send is pending from the `SendMail` post-hook (or `SECURE_TRANSFER_CONFIRM_SEND_MAIL`) until
+  `MAIL_SEND_SUCCESS`, `MAIL_FAILED`, `SECURE_TRANSFER_CANCEL`, the mailbox closing (interaction
+  HIDE 17), or 60 s; Fill is off meanwhile. This is not Sent's 120 s attribution window.
+- **A fill** runs inside the click (measured: several stacks in one frame), so nothing is left
+  scheduled. It re-plans from the bags at the click, puts the bank's name in the To box (`SetText`,
+  as the picker does; it replaces what was there), then for each planned stack: the source slot
+  still holds that item and count, unlocked; the cursor is empty (a pickup with something held
+  swaps); the attachment slot is free; pick up; the cursor holds that itemID (`GetCursorInfo`);
+  drop; the slot now holds that item and count. Any check failing stops the fill. A refused drop
+  (our item still on the cursor) goes back with `ClearCursor`, checked; if the cursor holds anything
+  else, it is left alone and chat says so. A refused itemID is skipped for the session.
+  `MAIL_LOCK_SEND_ITEMS` (Blizzard's refund confirmation) stops the fill and leaves the dialog to
+  the player. We never call `SendMailFrame_Update` (Blizzard's update runs on its own event), never
+  press Send, never fill money or COD.
+- **Keep N exactly takes two clicks (session 7b; Codex's rounds 2-4).** When the plan needs
+  splits, the button first reads "Prepare for <Bank> (split n stacks)". That click, for each
+  remainder: the same checks before it as a fill (source as planned, cursor empty, an empty general
+  bag slot, reserved for this split only), `SplitContainerItem`, the cursor holds that itemID,
+  `PickupContainerItem` on the reserved slot, the cursor is empty (if our item is still on it,
+  `ClearCursor` puts it back, checked, and Prepare stops). It attaches nothing, and **does not
+  expect the bags to show the split yet**: session 7b measured them change only when the server
+  answers (the source about 0.4 s later, the new stack within about a second, in separate
+  updates).
+- **Preparing.** Prepare then remembers, for this mailbox visit, each split as
+  `{ source = { bag, slot, itemID, before, after }, dest = { bag, slot, itemID, n } }` and the batch
+  to send (each stack as `{ bag, slot, itemID, count }`, the new ones included). While any split is
+  incomplete the button reads "Preparing..." and is off. On every `ITEM_LOCK_CHANGED` and
+  `BAG_UPDATE_DELAYED` it re-reads those slots: a source showing `before` (locked or not) or `after`,
+  and a destination empty or showing exactly `n` of that item, are expected states; a split is
+  complete when its source shows `after` and its destination `n`, both unlocked. Anything else in
+  those slots (another item, another count), a send, combat, the mailbox closing, or 5 s without
+  completing forgets it all: the split stacks stay in the bags, nothing is lost, and the next click
+  plans again. The first `BAG_UPDATE_DELAYED` is never taken to mean done.
+- **Fill after Prepare.** Once every split is complete, the button reads "Fill for <Bank>". That
+  click attaches **exactly the remembered batch** while every stack of it is still there as
+  remembered (same item, same count, unlocked) **and the keep still holds**: re-read at the click,
+  each item's units in bags 0-4 outside the batch are at least its keep (Codex's round 5: stacks
+  of 5 and 6, keep 2, prepared 5 + 4; if the kept 2 is destroyed meanwhile, the batch would leave
+  none). Otherwise it forgets the batch and plans again
+  (which may offer Prepare again). A fresh plan is not used after Prepare: smallest-first could
+  pick other stacks (Codex's round 3: stacks of 5 and 6, keep 2, prepare 5 + a split of 4; a fresh
+  plan over 2, 4, 5 takes 2 + 4 and leaves 5). Nothing is scheduled between the clicks, so no
+  deferred action can act on a changed draft; a prepared stack the player doesn't send just stays
+  in the bags. After completion, any change to the batch's slots, a send or the mailbox closing
+  forgets it.
+- **Afterwards** it compares the draft with the plan (each attachment's itemID and count) and
+  prints one line if anything differs. After `MAIL_SEND_SUCCESS` the button recounts; the player
+  clicks again for the next batch.
+- **At the mailbox**: one chat line per visit, "Glass Mail: n items ready for <Bank> (Fill on the
+  Send tab)", only when something is ready (a setting, on by default: `bankNotice`).
+
+### The Bank page (`Window.lua` + `Bank.lua`)
+
+A fourth entry in the window's sidebar, **Bank**, below the folders. The page replaces the list:
+- **Bank for <group>**: the current group's bank, chosen from a menu of your reachable characters
+  (`Registry.Characters`, as the address book lists them), or Clear. The other groups' banks are
+  listed below, each with a Clear.
+- **Rules**: one row per rule, its item (icon and name, loaded on demand) or category name, a keep
+  box (digits, 0-9999) and a ×. **Add**: drop an item from the bags on the add slot (the cursor's
+  item, `GetCursorInfo`; then `ClearCursor`, which session 7 measured puts it back), or pick a
+  category from a menu.
+- Nothing on the page acts on mail; it only edits `bank`.
+
+### Tests
+
+- `test_bank.lua` (core): groups; `Bank.For`'s reasons, the bank resolved through AltStable's list;
+  rule precedence and the loader (bad entries dropped alone, duplicates update); `Plan` over fake
+  bags: keep N with whole stacks, smallest first, bound / locked / refused units counted but not
+  moved, keep at or above the total, the 12 cap and the count left, a category rule, nothing for
+  items without a rule.
+- `test_bankui.lua`: the button's enable rules (each one off alone: body, the money widget, COD,
+  subject, an attachment, the cursor, combat, a run, a pending send); a fill attaches the plan in
+  order and fills To; each per-stack check stops it (source changed, cursor busy, slot taken, the
+  wrong item picked up); a refused drop is put back, a foreign cursor item left alone;
+  `MAIL_LOCK_SEND_ITEMS` stops it; Prepare splits each remainder into its own empty slot and
+  attaches nothing; the bags answer late and in pieces (7b: the cursor empty at once, the source
+  first, the new stack later): "Preparing..." through each partial state, done only when every
+  source and destination shows its count unlocked, forgotten on an unexpected slot content or
+  after 5 s; then Fill attaches exactly the remembered batch (stacks of 5 and 6 with keep 2: 5 and
+  the prepared 4, leaving 2), and plans afresh when a remembered stack changed or when the kept
+  units fell below keep after Prepare completed (the kept 2 destroyed: nothing attached); the
+  verification line; the next batch after a send; the chat
+  line once per visit; the page's add, keep and remove, and the bank menu. The fake cursor swaps
+  on a pickup, as the client does.
+- Mutation-test each.
+
+### In game
+
+1. Set a bank on the Bank page; add an item rule (keep 20) and a category (Herb).
+2. On another character of the group: the chat line at the mailbox; Fill on the Send tab; the draft
+   holds the right stacks, at least keep N left in the bags; press Send; the next batch.
+3. A soulbound item under a category rule: never attached.
+4. More than 12 stacks: two mails.
+5. The bank itself, and a character of the other faction: the button is off and says why.
+6. A body typed first, or gold in the money box: the button is off.
+7. Close the mailbox with a filled draft: everything back in the bags.
+8. A full client exit: the bank and rules persist.
 
 ## The mail core (M1)
 

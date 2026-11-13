@@ -24,6 +24,8 @@ local DEFAULTS = {
     expiryDays = 30, recentMax = 20,
     -- S1: the To box starts with the last name this character mailed (Address.lua).
     autofill = true,
+    -- N1: a chat line at the mailbox when items are ready for the bank (Bank.lua).
+    bankNotice = true,
 }
 GM.DEFAULTS = DEFAULTS
 
@@ -49,6 +51,7 @@ local function ensureDefaults()
     if db.recentMax ~= nil and not GM.Store.ValidRecentMax(db.recentMax) then db.recentMax = nil end
     if db.autofill ~= nil and type(db.autofill) ~= "boolean" then db.autofill = nil end
     if db.inboxGuides ~= nil and type(db.inboxGuides) ~= "boolean" then db.inboxGuides = nil end
+    if db.bankNotice ~= nil and type(db.bankNotice) ~= "boolean" then db.bankNotice = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
     -- The look's override while following Glass UI (Suite.lua): read raw and
     -- never pruned against the defaults; junk is dropped.
@@ -123,6 +126,11 @@ function Settings.SetAutofill(on)
     return true
 end
 
+function Settings.SetBankNotice(on)
+    GM.db.bankNotice = on == true
+    return true
+end
+
 function Settings.SetRecentMax(n)
     if not GM.Store.ValidRecentMax(n) then return false end
     GM.db.recentMax = n
@@ -175,6 +183,9 @@ local function helpLines()
             .. GM.db.recentMax .. ")",
         "/gmail autofill on/off - start the To box with the last name this character mailed ("
             .. (GM.db.autofill and "on" or "off") .. ")",
+        "/gmail bank - the bank character and what goes to it",
+        "/gmail banknotice on/off - a chat line at the mailbox when items are ready for the bank ("
+            .. (GM.db.bankNotice and "on" or "off") .. ")",
         "/gmail options - open the options page",
         "/gmail failures - what failed to build or register",
         "/gmail version - client build vs the measured one",
@@ -232,6 +243,12 @@ local function slash(msg)
         if ONOFF[arg] == nil then return say("/gmail autofill on/off") end
         Settings.SetAutofill(ONOFF[arg])
         say("autofill " .. arg)
+    elseif cmd == "bank" then
+        GM.Window.ShowBank()
+    elseif cmd == "banknotice" then
+        if ONOFF[arg] == nil then return say("/gmail banknotice on/off") end
+        Settings.SetBankNotice(ONOFF[arg])
+        say("bank notice " .. arg)
     elseif cmd == "debug" then
         -- Not in the help list: the in-game checks' debug line (#27).
         if ONOFF[arg] == nil then return say("/gmail debug on/off") end
@@ -267,6 +284,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
             -- glass, before anything builds a surface.
             start("suite", GM.Suite.Start)
             start("store", GM.Store.Load)
+            start("bank", GM.Bank.Load)
         elseif arg1 == "Blizzard_MailFrame" and GM.db then
             start("skin", GM.Skin.Start)
         end
@@ -275,6 +293,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         if not GM.db then GM.db, GM.charDB = ensureDefaults() end
         if not GM.GlassBuilt() then start("suite", GM.Suite.Start) end
         if not GM.Store.Ready() then start("store", GM.Store.Load) end
+        if not GM.Bank.Loaded() then start("bank", GM.Bank.Load) end
         -- The clock first: before any record is written or pruned.
         start("clock", GM.Store.Tick)
         start("clock ticker", function() C_Timer.NewTicker(600, GM.Store.Tick) end)
@@ -288,6 +307,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("window", GM.Window.Start)
         start("address", GM.Address.Start)
         start("bag", GM.Bag.Start)
+        start("bank ui", GM.BankUI.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then
         -- The class colour can be read by now (a class tint painted its built one).
         start("skin retry", GM.Skin.Retry)

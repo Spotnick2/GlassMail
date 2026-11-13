@@ -23,6 +23,7 @@ Core\Store.lua
 Core\Registry.lua
 Core\Sent.lua
 Core\Recall.lua
+Core\Bank.lua
 Core\Trash.lua
 Core\Memory.lua
 OpenAll.lua
@@ -31,5 +32,6 @@ Comforts.lua
 Window.lua
 Address.lua
 Bag.lua
+Bank.lua
 Options.lua
 GlassMail.lua

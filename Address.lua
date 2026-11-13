@@ -318,7 +318,8 @@ end
 local function build(button)
     panel = CreateFrame("Frame", nil, rawget(_G, "SendMailFrame"))
     panel:SetSize(PICK_W, PICK_H)
-    panel:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+    -- Beside the mail window, like the item grid (the button is on the title bar).
+    panel:SetPoint("TOPLEFT", rawget(_G, "MailFrame") or button, "TOPRIGHT", 2, 0)
     panel:SetFrameStrata("DIALOG")
     panel:SetToplevel(true)
     panel:SetClampedToScreen(true)
@@ -503,9 +504,14 @@ function Address.Start()
     local frame, b = rawget(_G, "SendMailFrame"), box()
     if started or not (frame and b) then return end
     started = true
+    -- On the mailbox's title bar, where the inbox has the item grid's button
+    -- (left of the window's): right of the To box there are only ~15 px
+    -- before "Postage:", which is right-aligned to the amount
+    -- (MailFrame.xml:660) and moves with it and the language (owner,
+    -- 2026-11-13: the button hid its "P" at 20 px and at 16 px).
     local button = CreateFrame("Button", nil, frame)
     button:SetSize(20, 20)
-    button:SetPoint("LEFT", b, "RIGHT", 4, 0)
+    button:SetPoint("TOPRIGHT", rawget(_G, "MailFrame") or frame, "TOPRIGHT", -50, -2)
     button:SetNormalTexture(ICON)
     button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     button:SetScript("OnClick", safely("address picker", function(self) Address.Toggle(self) end))

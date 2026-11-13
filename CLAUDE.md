@@ -22,7 +22,8 @@ docs/PLAN.md): the look, the mail core with Open All, selection with row extras,
 and the owner runs its in-game gate (docs/PLAN.md, "The grid PR in detail") as they play. After it:
 the To box's completion ("S1: completing a name as you type", #42) and the inbox's guides (#43),
 released as v0.2.1. **M3 done** (#46: LibMailbox-1.0). **M4** (#50): N2, recall ("N2:
-recall" in docs/PLAN.md, #51), released in v0.3.0; N1 next, after a probe session.
+recall" in docs/PLAN.md, #51), released in v0.3.0; then N1, the bank character ("N1: the bank
+character", probe sessions 7 and 7b, built in #53).
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 
@@ -54,8 +55,8 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` → `Compat.lua` → `Glass.lua` → `Suite.lua` → `Skin.lua` →
 `Core\Mailbox.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Store.lua` → `Core\Registry.lua` →
-`Core\Sent.lua` → `Core\Recall.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
-`Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
+`Core\Sent.lua` → `Core\Recall.lua` → `Core\Bank.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
+`Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Bank.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
@@ -164,6 +165,16 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   or `possible`; "sure" is one actionable candidate, not identity (both ends are your characters).
   `Recall.Seen` reads the recipient's snapshot for the Sent row, a miss worded as Glass Mail's
   memory, never the mailbox.
+- **`Core\Bank.lua`**: N1, no frames. `GlassMailDB.bank` (its own loader, each entry checked
+  alone, the clean copy written back; never expired: the owner sets it): `banks[group]` (`group` is
+  "faction:ruleset") `= { name, guid? }`, and `rules`, each `{ item, keep }` or
+  `{ class, sub?, keep }` (one of `Bank.CATEGORIES`; an item rule beats its category; adding an
+  existing rule updates its keep). `Bank.For` resolves the group's bank through
+  `Registry.Characters()` (AltStable's own-account characters too), else its saved name, or says
+  why not (none, this character, not reachable). `Bank.Plan` reads bags 0-4 fresh: per item,
+  every unit counts toward keep (bound, locked, refused too), only movable stacks go, whole and
+  smallest first while they fit, then one split of the rest into an empty general slot; 12
+  attachments a mail. `Bank.Available` is everything movable (the chat line).
 - **`Core\Memory.lua`**: X1's snapshots. A visit runs from `MAIL_SHOW` to the close; each inbox
   update in it scans a frame later, for that visit only; a scan replaces the character's snapshot
   only when it read every loaded mail whole (else the old one stays). That the first update carries
@@ -193,7 +204,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   where the mail was last seen). A pool
   of rows and an offset; glass in the current preset (`stock` shows it smoked, `Skin.AddWindow` /
   `AddPane`). Escape closes it out of combat only (its `UISpecialFrames` entry leaves in combat).
-- **`Address.lua`**: S1. Our button right of `SendMailNameEditBox` opens our glass panel (a child
+- **`Address.lua`**: S1. Our button on the mailbox's title bar, Send tab only (where the inbox has the item grid's; beside the To box it hid "Postage:"), opens our glass panel beside the mail window (a child
   of `SendMailFrame`): a search box, focused, over my characters (reachable, not hidden), recents,
   friends and the guild, filtered as you type (every word, plain find), a fixed pool of rows; each
   name once, no other realm's, never the current character. A pick (a click, or Enter for the
@@ -213,6 +224,21 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   by itemID in a fixed pool of 6 x 9 buttons, a row offset. A click is an Ops `items` run
   (`Ops.TakeItems`: only those items, never money, COD and GM left); the footer's Stop, or the
   item's own button, stops it. Refreshed only while visible.
+- **`Bank.lua`**: N1's frames. A button on the Send tab's title bar (left of the address
+  book's): **Fill** puts the bank in the To box and attaches the plan inside the click, checking
+  each step (the source as planned, the cursor empty: a pickup with something held swaps; the
+  item picked up; the item landed; a refused drop goes back with `ClearCursor` and its item is
+  skipped for the session; a foreign cursor item is left alone; `MAIL_LOCK_SEND_ITEMS` stops it),
+  then compares the draft with the plan. Only on an empty draft (no attachment, subject, letter,
+  money in the widget, COD), no cursor item, no combat, no Ops run, no send in flight
+  (`SendMail` or the stranger dialog until success, failure, cancel, the close or 60 s). For keep
+  N exactly, **Prepare** first splits into empty slots and remembers the batch; the bags show a
+  split only when the server answers (session 7b), so it reads "Preparing..." until every source
+  and new stack shows its count unlocked (anything else, a send, combat, the close or 5 s forgets
+  it), and Fill then takes exactly that batch if it and the kept units still hold. A chat line at
+  the mailbox says what is ready (`bankNotice`, `/gmail banknotice`). The Bank page in the window
+  (`/gmail bank`): the group's bank from a menu, the other groups' banks, and the rules (drop an
+  item, add a category, a keep box, a ×).
 - **`Options.lua`**: the Esc > Options > AddOns page, built with the porting guide's recipe.
   Choices are radio groups (`radios`), not dropdowns; on/off settings are checkboxes (`checkbox`).
 - **`GlassMail.lua`**: bootstrap, saved settings (only what the player set is saved), the
