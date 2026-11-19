@@ -8,6 +8,9 @@
   item, the gold you send ("12 Gold, 50 Silver"). A subject you type is never changed, and the
   one Glass Mail wrote goes when its item or gold does. `/gmail subject off` turns it off, also on
   the options page.
+- Glass Mail's own panels (the address book, the item grid, the Glass Mail window and its Bank
+  page) use fonts with the letters of Russian, Korean and Chinese clients, which showed boxes
+  before (LibGlass r13, with r12's fonts).
 
 ## v1.0.0
 
