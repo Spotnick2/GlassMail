@@ -292,7 +292,10 @@ GM = boot(f)
 local b = GM.GlassBuild()
 check(b.wanted == "neon" and b.preset == "clean" and b.failed == "build-failed", "an unknown preset: clean instead")
 r = lastReport(f)
-check(r.built == nil and r.reason == "build-failed" and r.minor == 11, "  reported, with LibGlass's MINOR")
+-- The MINOR of the LibGlass loaded: the .pkgmeta pin in CI, ..\LibGlass locally.
+local _, libMinor = LibStub("LibGlass-1.0")
+check(type(libMinor) == "number" and r.built == nil and r.reason == "build-failed" and r.minor == libMinor,
+    "  reported, with LibGlass's MINOR")
 GM.Settings.SetSkin("stock")
 GM.Settings.SetSkin("suite")
 eq(lastReport(f).reason, "build-failed", "  stock and back: the original result again")
