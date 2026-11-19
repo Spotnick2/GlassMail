@@ -284,7 +284,9 @@ Send then sent the mail normally, with nothing blocked.
   ("Windstone (5)"); each attachment shows its count (screenshot). **Gone on 70959**
   (2026-11-17): the fill moved under `C_Mail.IsCODEnabled()` and COD is disabled (the C.O.D.
   button's tooltip, owner's screenshot, 2026-11-18), so the subject stays empty. S2 (#59) fills it;
-  reported as Stanzilla/WoWUIBugs#903.
+  reported as Stanzilla/WoWUIBugs#903. S2 checked in game on 70959 (owner, 2026-11-19): it works;
+  `C_CurrencyInfo.GetCoinText(11200, ", ")` gave "1 Gold, 12 Silver" (a zero denomination left
+  out, no colour codes), sent from the Send Money box (screenshot).
 - **Blizzard's right-click clear by code**, `ClickSendMailItemButton(n, true)`: the attachment
   leaves the draft at once, its bag slot unlocked.
 - **A send to the player's own alt**: no confirmation dialog; `MAIL_SEND_SUCCESS` 0.22 s after
