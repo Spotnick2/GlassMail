@@ -1,5 +1,5 @@
 # WowTestKit for these tests: the commit, and the client build to test against.
-# build: Compat.lua's MEASURED_ON_BUILD is 70291, which the kit has no data for, so the newest it has.
-sha=c99451a06cbed5107cba9aa3655fa8f54375d6c0
-build=70888
+# build: Compat.lua's MEASURED_ON_BUILD.
+sha=38c8a6c58a8caaf3b4cee41424e6e43502102a45
+build=70959
 api=2
