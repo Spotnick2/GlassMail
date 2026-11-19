@@ -24,6 +24,8 @@ local DEFAULTS = {
     expiryDays = 30, recentMax = 20,
     -- S1: the To box starts with the last name this character mailed (Address.lua).
     autofill = true,
+    -- S2: an empty subject gets the first item's name or the gold sent (Subject.lua).
+    subjectFill = true,
     -- N1: a chat line at the mailbox when items are ready for the bank (Bank.lua).
     bankNotice = true,
 }
@@ -50,6 +52,7 @@ local function ensureDefaults()
     if db.expiryDays ~= nil and not GM.Store.ValidExpiry(db.expiryDays) then db.expiryDays = nil end
     if db.recentMax ~= nil and not GM.Store.ValidRecentMax(db.recentMax) then db.recentMax = nil end
     if db.autofill ~= nil and type(db.autofill) ~= "boolean" then db.autofill = nil end
+    if db.subjectFill ~= nil and type(db.subjectFill) ~= "boolean" then db.subjectFill = nil end
     if db.inboxGuides ~= nil and type(db.inboxGuides) ~= "boolean" then db.inboxGuides = nil end
     if db.bankNotice ~= nil and type(db.bankNotice) ~= "boolean" then db.bankNotice = nil end
     db.glass = nil   -- M0's on/off switch (dev builds only), replaced by skin
@@ -126,6 +129,11 @@ function Settings.SetAutofill(on)
     return true
 end
 
+function Settings.SetSubjectFill(on)
+    GM.db.subjectFill = on == true
+    return true
+end
+
 function Settings.SetBankNotice(on)
     GM.db.bankNotice = on == true
     return true
@@ -183,6 +191,8 @@ local function helpLines()
             .. GM.db.recentMax .. ")",
         "/gmail autofill on/off - start the To box with the last name this character mailed ("
             .. (GM.db.autofill and "on" or "off") .. ")",
+        "/gmail subject on/off - fill an empty subject with the first item or the gold ("
+            .. (GM.db.subjectFill and "on" or "off") .. ")",
         "/gmail bank - the bank character and what goes to it",
         "/gmail banknotice on/off - a chat line at the mailbox when items are ready for the bank ("
             .. (GM.db.bankNotice and "on" or "off") .. ")",
@@ -243,6 +253,10 @@ local function slash(msg)
         if ONOFF[arg] == nil then return say("/gmail autofill on/off") end
         Settings.SetAutofill(ONOFF[arg])
         say("autofill " .. arg)
+    elseif cmd == "subject" then
+        if ONOFF[arg] == nil then return say("/gmail subject on/off") end
+        Settings.SetSubjectFill(ONOFF[arg])
+        say("subject fill " .. arg)
     elseif cmd == "bank" then
         GM.Window.ShowBank()
     elseif cmd == "banknotice" then
@@ -306,6 +320,7 @@ boot:SetScript("OnEvent", function(_, event, arg1)
         start("comforts", GM.Comforts.Start)
         start("window", GM.Window.Start)
         start("address", GM.Address.Start)
+        start("subject", GM.Subject.Start)
         start("bag", GM.Bag.Start)
         start("bank ui", GM.BankUI.Start)
     elseif event == "PLAYER_ENTERING_WORLD" then

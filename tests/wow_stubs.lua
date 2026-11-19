@@ -366,7 +366,11 @@ function GetSendMailCOD() return WoW.draft.cod or 0 end
 -- name, itemID, texture, count, quality (MailFrame.lua:1297)
 function GetSendMailItem(i)
     local it = WoW.draft.items and WoW.draft.items[i]
-    if it then return "item " .. tostring(it.id), it.id, 134, it.count or 1, 1 end
+    if it then
+        local name = it.name
+        if name == nil then name = "item " .. tostring(it.id) end
+        return name, it.id, 134, it.count or 1, 1
+    end
 end
 function SendMail(to, subject, body)
     table.insert(WoW.sends, { to = to, subject = subject, body = body })
@@ -423,6 +427,10 @@ SendMailFrame:Hide()
 function SendMailFrame_Reset()
     SendMailNameEditBox:SetText("")
     SendMailNameEditBox:SetFocus()
+    -- 1425-1428: the subject, the update, the money (defined further down).
+    SendMailSubjectEditBox:SetText("")
+    SendMailFrame_Update()
+    MoneyInputFrame_ResetMoney(SendMailMoney)
 end
 function WoW.reply(sender)
     MailFrameTab_OnClick(nil, 2)
@@ -769,7 +777,77 @@ function ClickSendMailItemButton(a, clear)
     WoW.fire("MAIL_SEND_INFO_UPDATE")
 end
 CreateFrame("EditBox", "SendMailSubjectEditBox", SendMailFrame)
-function MoneyInputFrame_GetCopper() return WoW.moneyInput end
+-- The money box (MoneyInputFrame.lua): three coin boxes ($parentGold/Silver/
+-- Copper, MoneyInputFrame.xml:80-112), each SetText running its OnTextChanged
+-- as the client does. GetCopper reads them, plus WoW.moneyInput (a test that
+-- only needs an amount sets that). SetCopper writes copper, silver, gold in
+-- turn and ResetMoney clears gold, silver, copper, so a hook sees the amounts
+-- in between, as in the client.
+local coin = {}
+for _, n in ipairs({ "Gold", "Silver", "Copper" }) do
+    coin[n:lower()] = CreateFrame("EditBox", "SendMailMoney" .. n, SendMailMoney)
+    coin[n:lower()]._text = ""
+end
+function MoneyInputFrame_GetCopper()
+    local function n(b) return tonumber(b:GetText()) or 0 end
+    return (WoW.moneyInput or 0) + n(coin.copper) + 100 * n(coin.silver) + 10000 * n(coin.gold)
+end
+function MoneyInputFrame_SetCopper(_, money)
+    coin.copper:SetText(tostring(money % 100))
+    coin.silver:SetText(tostring(math.floor(money / 100) % 100))
+    coin.gold:SetText(tostring(math.floor(money / 10000)))
+end
+function MoneyInputFrame_ResetMoney()
+    coin.gold:SetText(""); coin.silver:SetText(""); coin.copper:SetText("")
+end
+function WoW.setMoney(copper) MoneyInputFrame_SetCopper(SendMailMoney, copper) end
+-- The radios (MailFrame.lua:1467): 1 Send Money, 2 COD.
+SendMailSendMoneyButton._checked = true
+function SendMailRadioButton_OnClick(index)
+    SendMailSendMoneyButton:SetChecked(index == 1)
+    SendMailCODButton:SetChecked(index ~= 1)
+end
+-- COD, off on Forever since 70959 (the C.O.D. button's tooltip).
+WoW.codEnabled = false
+C_Mail.IsCODEnabled = function() return WoW.codEnabled end
+-- C_CurrencyInfo.GetCoinText(amount, separator): the denominations present.
+C_CurrencyInfo.GetCoinText = function(c, sep)
+    local parts = {}
+    local g, s, k = math.floor(c / 10000), math.floor(c / 100) % 100, c % 100
+    if g > 0 then parts[#parts + 1] = g .. " Gold" end
+    if s > 0 then parts[#parts + 1] = s .. " Silver" end
+    if k > 0 then parts[#parts + 1] = k .. " Copper" end
+    return table.concat(parts, sep or " ")
+end
+-- SendMailFrame_Update's subject part as on 70959 (MailFrame.lua:1288-1342):
+-- the item title only while COD is enabled; else the subject is cleared when
+-- it is the previous item's, and previousItem is "".
+SendMailFrame.previousItem = ""
+function SendMailFrame_Update()
+    WoW.sendUpdates = (WoW.sendUpdates or 0) + 1
+    local itemCount, itemTitle = 0, nil
+    for i = 1, ATTACHMENTS_MAX_SEND do
+        if HasSendMailItem(i) then
+            itemCount = itemCount + 1
+            local name, _, _, count = GetSendMailItem(i)
+            if not itemTitle and name then
+                itemTitle = count <= 1 and name or (name .. " (" .. count .. ")")
+            end
+        end
+    end
+    local subject = SendMailSubjectEditBox
+    if itemCount > 0 and C_Mail.IsCODEnabled() then
+        if subject:GetText() == "" or subject:GetText() == SendMailFrame.previousItem then
+            itemTitle = itemTitle or ""
+            subject:SetText(itemTitle)
+            SendMailFrame.previousItem = itemTitle
+        end
+    else
+        if subject:GetText() == SendMailFrame.previousItem then subject:SetText("") end
+        SendMailFrame.previousItem = ""
+        SendMailRadioButton_OnClick(1)
+    end
+end
 C_Item.GetItemInfoInstant = function(id)
     local i = WoW.itemInfo[id]
     if i and i.class then return id, "", "", "", 134, i.class, i.sub end

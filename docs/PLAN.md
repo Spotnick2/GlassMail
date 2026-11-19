@@ -1646,6 +1646,103 @@ A fourth entry in the window's sidebar, **Bank**, below the folders. The page re
 7. Close the mailbox with a filled draft: everything back in the bags.
 8. A full client exit: the bank and rules persist.
 
+## S2: the subject (#59; owner, 2026-11-18; Codex gpt-6-astra, high, 1 round, no blocker; built)
+
+**Why.** Client 1.60.1.70959 (2026-11-17) changed `SendMailFrame_Update`
+(`MailFrame.lua:1323`) from `if ( itemCount > 0 )` to
+`if ( itemCount > 0 and C_Mail.IsCODEnabled())`. Blizzard's subject fill (an empty subject, or
+the one it wrote, becomes the first attachment's name, "Name (count)" when more than one) lives in
+that branch, and COD is disabled on Forever (owner's screenshot of the new tooltip, "Cash on
+Delivery is currently disabled."). So the subject stays empty and every send needs one typed.
+Session 7 saw the fill working on 70938. The `else` branch still runs: it clears the subject when
+it equals `SendMailFrame.previousItem` and sets `previousItem = ""`. Reported as
+Stanzilla/WoWUIBugs#903.
+
+**Temporary: the item half goes when Blizzard fixes it (#61).** Once a client build puts the fill
+back outside the COD check (`wow-ui-source`, `SendMailFrame_Update`), or #903 is closed as fixed,
+remove `itemTitle` and its tests; the gold half stays. Until then both coexist (a subject Blizzard
+wrote isn't ours). Check on every new build. The owner also asked for the gold in the subject (Postal's "Wire", "Out for now"
+until now).
+
+**The rule.** Glass Mail fills the subject the way Blizzard does, from one more source:
+- **What it wants** (`Subject.Wanted()`), the first that applies:
+  1. the item title, only while `C_Mail.IsCODEnabled()` is false (else Blizzard's own fill runs and
+     items are left to it): the first slot `1..ATTACHMENTS_MAX_SEND` with `HasSendMailItem` and a
+     non-empty name from `GetSendMailItem`, `name` or `name .. " (" .. count .. ")"` when count > 1
+     (Blizzard's exact string);
+  2. the gold: Send Money checked (`SendMailSendMoneyButton:GetChecked()`; never under COD, which
+     is a price, not gold sent), `MoneyInputFrame_GetCopper(SendMailMoney)` above 0, as
+     `C_CurrencyInfo.GetCoinText(copper, ", ")` (the client's own localized words; the API dump
+     has it; the exact wording is checked in game);
+  3. nothing.
+  Items beat gold: a mail of items with gold is named by its item, as Blizzard's fill did. A
+  secret or a non-string anywhere, an empty result, or a `|` in it (an escape in a subject):
+  nothing.
+- **Who owns the subject.** `ours`, what the box held right after Glass Mail's last write (its
+  `GetText()`: the box keeps 64 letters, so a long title may be cut), and the title it was written
+  for (a file local, this session). The box is written only when it reads `""` or `ours`, and not
+  again for the same title. Anything else is the player's: `ours` is dropped and nothing is
+  touched. A key typed in the subject (its `OnTextChanged` with `userInput`, a post-hook) drops
+  `ours` too, so a subject typed back to our text stays the player's. When nothing is wanted and
+  the box still reads `ours`, it is cleared (an item removed, the gold set back to 0).
+  `SendMailFrame.previousItem` is never written (the UI contract); it is not read either.
+- **When it runs.** `hooksecurefunc("SendMailFrame_Update", refresh)` (Blizzard calls it by
+  global name: `MAIL_SEND_INFO_UPDATE`, the tab, the reset after a send);
+  `HookScript("OnTextChanged", refresh)` on `SendMailMoneyGold`, `SendMailMoneySilver` and
+  `SendMailMoneyCopper` (the money frame's `onValueChangedFunc` is Blizzard's captured
+  `SendMailFrame_CanSend`, a field on a Blizzard frame we don't replace);
+  `hooksecurefunc("SendMailRadioButton_OnClick", refresh)` (Send Money / COD, when COD comes back).
+  Each refresh is under `pcall`, a failure recorded once with `API.Fail("subject", err)`.
+- **Setting `subjectFill`** (default on): a checkbox under "Memory" beside `autofill` ("Fill in
+  the subject from the first item or the gold"), `/gmail subject on|off` and its help line. Off:
+  nothing is written; a subject already written stays (it is text in the box now).
+- **Writes.** `SendMailSubjectEditBox:SetText(text)` only; Blizzard's `OnTextChanged` on that box
+  calls `SendMailFrame_CanSend`, nothing that loops back. No focus, no highlight. Out of combat
+  and in it alike (not a protected widget; Address.lua's fill does the same on the To box; checked
+  in game, below). `pcall` contains errors; it is no taint guarantee.
+
+**With other features.**
+- N1's Fill needs an empty subject at its start only (`draftEmpty`); the subject filled while it
+  attaches is the one Blizzard gave before 70959 (session 7 measured Fill with it).
+- With COD enabled again (Blizzard's fill back): gold into an empty box, then an item: Blizzard
+  overwrites only `""` or its `previousItem`, so the gold stays. Item first, then gold: the box
+  isn't ours, so the item stays. Accepted, not worked around.
+- A send's reset (`SendMailFrame_Reset`: subject `""`, then `SendMailFrame_Update`, then
+  `MoneyInputFrame_ResetMoney`, gold, silver and copper cleared one at a time): the update still
+  sees the gold and fills it, each coin box's change refreshes with the amount in between, and the
+  last one finds nothing wanted and clears our text. It converges; nothing is deferred.
+  `MoneyInputFrame_SetCopper` writes copper, silver, gold in turn: the same.
+- The mailbox closing: the money box's `OnHide` resets it, our refresh clears our gold text;
+  `MailMixin:OnHide` clears the subject, and reopening runs `SendMailFrame_Update`.
+- Reply: the tab, then `"RE: ..."` written, not ours, so it stays.
+
+**Files.** `Subject.lua` (after `Address.lua` in the TOC), `GlassMail.lua` (default, validation,
+setter, slash, help), `Options.lua` (the checkbox).
+
+**Tests** (`tests/test_subject.lua`, stubs for the coin boxes, the radio buttons,
+`C_Mail.IsCODEnabled`, `C_CurrencyInfo.GetCoinText`): an item fills an empty box, with its
+count; a second item changes nothing; the first removed: the next one's name; all removed:
+cleared; a typed subject never touched (and stays after the item goes); gold fills, changes with
+the amount, clears at 0; COD checked: no gold; items beat gold, gold back when the items go; COD
+enabled: no item fill (Blizzard's), gold still; the setting off; a secret name or count: nothing;
+an uncached `""` name skipped; a `|` refused; a key typed (even back to our text) makes it the
+player's; a title cut by the 64-letter box still ours, not rewritten; the reset in Blizzard's
+order, coin box by coin box; the hooks are post-hooks (Blizzard's function still
+runs, nothing replaced); the setting's load validation, slash and checkbox. Mutation-test each.
+
+**In game.**
+1. Attach an item (stack of 5): the subject reads "Name (5)". Remove it: empty.
+2. Type a subject, then attach: it stays.
+3. 12 g 50 s in the money box: the subject in the client's words; 0: empty.
+4. Gold, then an item: the item's name; remove the item: the gold again.
+5. Send one to an alt: it goes, the subject arrives as filled; the draft after the reset is empty;
+   a second draft fills again.
+6. A filled subject (an item) to a stranger: through Blizzard's confirmation, sent, nothing blocked.
+7. Reply to a mail: "RE: ..." stays when an item is attached.
+8. Close and reopen with an item and gold in the draft: an empty draft and subject.
+9. In combat (a training dummy): attach an item; the subject fills; no error, no blocked action.
+10. `/gmail subject off`: nothing filled.
+
 ## The mail core (M1)
 
 In `Core/`, shaped like a library but not published as one until M3. (Superseded where the M1

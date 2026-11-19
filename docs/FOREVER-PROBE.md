@@ -281,7 +281,10 @@ Send then sent the mail normally, with nothing blocked.
   `ContainerItemInfo.isBound` and `C_Item.IsBound` agreed on all 22 items (a Hearthstone, a quest
   item, a heirloom: bound; `C_Item.IsBoundToAccountUntilEquip` false everywhere).
 - **Blizzard's subject fill**: an empty subject becomes the first attachment's name and count
-  ("Windstone (5)"); each attachment shows its count (screenshot).
+  ("Windstone (5)"); each attachment shows its count (screenshot). **Gone on 70959**
+  (2026-11-17): the fill moved under `C_Mail.IsCODEnabled()` and COD is disabled (the C.O.D.
+  button's tooltip, owner's screenshot, 2026-11-18), so the subject stays empty. S2 (#59) fills it;
+  reported as Stanzilla/WoWUIBugs#903.
 - **Blizzard's right-click clear by code**, `ClickSendMailItemButton(n, true)`: the attachment
   leaves the draft at once, its bag slot unlocked.
 - **A send to the player's own alt**: no confirmation dialog; `MAIL_SEND_SUCCESS` 0.22 s after
