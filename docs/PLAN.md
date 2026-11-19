@@ -1673,7 +1673,7 @@ until now).
   2. the gold: Send Money checked (`SendMailSendMoneyButton:GetChecked()`; never under COD, which
      is a price, not gold sent), `MoneyInputFrame_GetCopper(SendMailMoney)` above 0, as
      `C_CurrencyInfo.GetCoinText(copper, ", ")` (the client's own localized words; the API dump
-     has it; the exact wording is checked in game);
+     has it; in game on 70959: "1 Gold, 12 Silver", a zero denomination left out);
   3. nothing.
   Items beat gold: a mail of items with gold is named by its item, as Blizzard's fill did. A
   secret or a non-string anywhere, an empty result, or a `|` in it (an escape in a subject):
