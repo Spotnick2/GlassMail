@@ -337,8 +337,10 @@ pwsh Tools\deploy.ps1 -Probe                                         # copy the 
 
 - Default AddOns path: `C:\Program Files (x86)\World of Warcraft\_classic_beta_\Interface\AddOns`
   (`-AddOnsPath` to change).
-- In game: `/console scriptErrors 1` first, then `/reload`. A brand-new addon folder no longer
-  needs a client restart, unless it brings new textures (owner, 2026-10-09; see the porting guide).
+- In game: `/console scriptErrors 1` first, then `/reload`. A `/reload` loads everything a deploy
+  brings: a brand-new addon folder, new files, new textures and TOC changes (measured 2026-11-16,
+  GuildSpy #97; porting guide §5). A full client exit only for a persistence test, or when a
+  `/reload` visibly missed a change.
 - Shell heredocs in this environment can collapse `\\` to `\`: write files that contain Lua
   backslash escapes or Windows paths with the Write/Edit tools.
 
