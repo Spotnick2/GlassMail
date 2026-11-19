@@ -24,7 +24,8 @@ the To box's completion ("S1: completing a name as you type", #42) and the inbox
 released as v0.2.1. **M3 done** (#46: LibMailbox-1.0). **M4** (#50): N2, recall ("N2:
 recall" in docs/PLAN.md, #51), released in v0.3.0; then N1, the bank character ("N1: the bank
 character", probe sessions 7 and 7b, #53), released in v1.0.0. **M4 done**; next is the
-"Later" list.
+"Later" list. S2 (#59, the subject fill, after client 70959 broke Blizzard's) and LibGlass r13
+are released in v1.1.0.
 Some probe items are still open; FOREVER-PROBE.md's "Still open" table says which
 milestone measures each one, before the feature that depends on it ships.
 

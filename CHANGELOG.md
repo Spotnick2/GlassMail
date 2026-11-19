@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.0
 
 - **The subject fills itself again.** Since the client's 1.60.1.70959 update, attaching an item no
   longer named the mail (Blizzard tied it to C.O.D., which is off), so every send needed a subject
