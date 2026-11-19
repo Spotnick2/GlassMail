@@ -1656,7 +1656,12 @@ that branch, and COD is disabled on Forever (owner's screenshot of the new toolt
 Delivery is currently disabled."). So the subject stays empty and every send needs one typed.
 Session 7 saw the fill working on 70938. The `else` branch still runs: it clears the subject when
 it equals `SendMailFrame.previousItem` and sets `previousItem = ""`. Reported as
-Stanzilla/WoWUIBugs#903. The owner also asked for the gold in the subject (Postal's "Wire", "Out for now"
+Stanzilla/WoWUIBugs#903.
+
+**Temporary: the item half goes when Blizzard fixes it (#61).** Once a client build puts the fill
+back outside the COD check (`wow-ui-source`, `SendMailFrame_Update`), or #903 is closed as fixed,
+remove `itemTitle` and its tests; the gold half stays. Until then both coexist (a subject Blizzard
+wrote isn't ours). Check on every new build. The owner also asked for the gold in the subject (Postal's "Wire", "Out for now"
 until now).
 
 **The rule.** Glass Mail fills the subject the way Blizzard does, from one more source:

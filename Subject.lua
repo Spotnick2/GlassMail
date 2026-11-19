@@ -6,6 +6,12 @@
 -- attached item no longer names the mail. While COD is off this applies
 -- Blizzard's rule itself; and, from the money box, the gold sent (never a COD
 -- amount). Only an empty subject or the one written here is ever changed.
+--
+-- WORKAROUND, TO REMOVE (#61): the item half (itemTitle and its use in
+-- Subject.Wanted) only stands in for Blizzard's fill, reported as
+-- Stanzilla/WoWUIBugs#903. Once a client build puts that fill back outside the
+-- COD check, delete it and its tests; keep the gold half (a feature). Until
+-- then the two coexist: a subject Blizzard wrote is not ours, so it is left.
 
 GlassMail = GlassMail or {}
 local GM = GlassMail
@@ -23,7 +29,7 @@ local function str(v)
 end
 
 -- Blizzard's item title (MailFrame.lua:1302-1309): the first attachment with a
--- name, "Name (count)" when more than one.
+-- name, "Name (count)" when more than one. The workaround: remove with #61.
 local function itemTitle()
     for a = 1, rawget(_G, "ATTACHMENTS_MAX_SEND") or 12 do
         if HasSendMailItem(a) then
