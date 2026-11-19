@@ -373,7 +373,7 @@ Same as GlassChat's CLAUDE.md, "Workflow and releasing":
   run after pushing.
 - **The owner merges and closes PRs and launches reviews.**
 - **Plans** get an adversarial review before coding: Codex via the `codex-consult` skill,
-  `gpt-6-astra` at high effort, looping until consensus. Hand it this file, `docs/PLAN.md`,
+  `gpt-6.2-astra` at high effort, looping until consensus. Hand it this file, `docs/PLAN.md`,
   `docs/FEATURES.md` and the porting guide. Verify its claims; push back on complexity.
 - **Code reviews are manual** (by the owner) unless the owner asks for one.
 - **A release tag (`vX.Y.Z`) updates both READMEs in its prep PR** (RELEASING.md §3): `README.md`
