@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **The subject fills itself again.** Since the client's 1.60.1.70959 update, attaching an item no
+  longer named the mail (Blizzard tied it to C.O.D., which is off), so every send needed a subject
+  typed. Glass Mail now fills an empty subject with the first item's name and count, or, with no
+  item, the gold you send ("12 Gold, 50 Silver"). A subject you type is never changed, and the
+  one Glass Mail wrote goes when its item or gold does. `/gmail subject off` turns it off, also on
+  the options page.
+
 ## v1.0.0
 
 - **A bank character.** Name one of your characters as the bank for each faction and ruleset, and

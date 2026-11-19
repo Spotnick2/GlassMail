@@ -57,7 +57,7 @@ Write everything from the client APIs and `C:\Projects\WoW\wow-ui-source`. This 
 TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\LibMailbox-1.0.xml` → `Compat.lua` → `Glass.lua` → `Suite.lua` → `Skin.lua` →
 `Core\Mailbox.lua` → `Core\Loot.lua` → `Core\Ops.lua` → `Core\Store.lua` → `Core\Registry.lua` →
 `Core\Sent.lua` → `Core\Recall.lua` → `Core\Bank.lua` → `Core\Trash.lua` → `Core\Memory.lua` → `OpenAll.lua` → `Inbox.lua` →
-`Comforts.lua` → `Window.lua` → `Address.lua` → `Bag.lua` → `Bank.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
+`Comforts.lua` → `Window.lua` → `Address.lua` → `Subject.lua` → `Bag.lua` → `Bank.lua` → `Options.lua` → `GlassMail.lua`. The mail core (`Core\`) loads before the feature files.
 
 - **`Compat.lua`**: `GlassMail.API`, the only route to client APIs that moved or may be absent:
   `IsSecret`, `RegisterEvents` (reports failures), `NoteCombat` / `InCombat` (`InCombatLockdown()` is
@@ -220,6 +220,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
   part) only when Blizzard's own source has nothing, its dropdown is hidden, no IME composition and
   the cursor is at the end; Blizzard's autocomplete is only read, never written. A second hook,
   `OnTextChanged`, only traces under `/gmail debug on`.
+- **`Subject.lua`**: S2 (#59). Client 70959 put Blizzard's item subject fill under
+  `C_Mail.IsCODEnabled()` (`MailFrame.lua:1323`) and COD is off, so we apply its rule while COD is
+  off, and else the gold sent (`C_CurrencyInfo.GetCoinText`, never a COD amount; items first).
+  Post-hooks only: `SendMailFrame_Update`, `SendMailRadioButton_OnClick`, the three coin boxes'
+  and the subject's `OnTextChanged`. Only an empty subject or ours (what the box kept after our
+  write) is changed; a key typed makes it the player's. Setting `subjectFill`.
 - **`Bag.lua`**: I4. Our bag button on the inbox's title bar (left of the window's) toggles a
   glass panel beside `MailFrame` (a child of `InboxFrame`): every non-currency attachment merged
   by itemID in a fixed pool of 6 x 9 buttons, a row offset. A click is an Ops `items` run

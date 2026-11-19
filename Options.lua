@@ -158,7 +158,10 @@ local function build()
     local autofill = checkbox(panel, lastDays, "Fill in the last name this character mailed",
         function() return GM.db.autofill end, GM.Settings.SetAutofill)
     Options._test.autofill = autofill
-    local bankNotice = checkbox(panel, autofill, "Say in chat what is ready for the bank character",
+    local subjectFill = checkbox(panel, autofill, "Fill in the subject from the first item or the gold",
+        function() return GM.db.subjectFill end, GM.Settings.SetSubjectFill)
+    Options._test.subjectFill = subjectFill
+    local bankNotice = checkbox(panel, subjectFill, "Say in chat what is ready for the bank character",
         function() return GM.db.bankNotice end, GM.Settings.SetBankNotice)
     Options._test.bankNotice = bankNotice
     local hint = label(panel, "Type /gmail help for every command.", "GameFontDisableSmall")
