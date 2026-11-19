@@ -336,6 +336,7 @@ ships with a safe fallback until it is measured:
 | 4 | Several `ReturnInboxItem` in a row (`returnmany`) | when convenient | I2 batch Return (v0.1.0: one click each) |
 | 7 | Our controls in combat | when convenient | nothing: they disable in combat |
 | 8 | Postmaster mail and other system senders; senders on a localized client | when one arrives | I1 filter (a reasoned rule until then) |
+| 3 | Taking gold from a stranger's mail: `SECURE_TRANSFER_CONFIRM_TAKE_MAIL_MONEY` and its dialog (70425+), `MAIL_OPEN_ALL_CANCELED` | #66, a MailProbe session | I1 / a selection's Open on a stranger's gold: the run stops as uncertain after 5 s unless the dialog is accepted in time |
 | 6 | Postage failure; bind/refund prompts; a send to another ruleset | when convenient | nothing: Sent records what `SendMail` was called with, and its result if one comes |
 | 8 | Friends' name formats; names from another realm | when a friend or another realm is at hand | S1 keeps a realm suffix in its keys and offers no other-realm character |
 | Trash | An AH mail with items deleted through its confirmation popup (no pre-call point) | when convenient | nothing: the post-hook still sees the mail when no update came that frame |
