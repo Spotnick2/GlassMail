@@ -109,5 +109,5 @@ if (-not $ProbeOnly) { Deploy-Addon }
 if ($Probe -or $ProbeOnly) { Deploy-Probe }
 
 Write-Host ""
-Write-Host "/reload is enough, a brand-new addon folder included; restart the client only for new textures." -ForegroundColor Yellow
+Write-Host "/reload to load it." -ForegroundColor Yellow
 Write-Host "In game:  /console scriptErrors 1   then   /gmail help   (probe: /fp mail, /fp steps; its lines in /fp)" -ForegroundColor Green
