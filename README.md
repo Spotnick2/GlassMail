@@ -45,6 +45,11 @@ includes the characters AltStable knows are yours, including those on your other
 once AltStable has synced them, and typing the start of one of their names in the To box
 completes it, the way the game completes the names it knows.
 
+**The subject writes itself.** Attach an item and an empty subject becomes its name and count,
+"Linen Cloth (5)"; send only gold and it reads the amount, "1 Gold, 12 Silver". The game stopped
+doing the first in its 1.60.1.70959 update, and Glass Mail puts it back. A subject you type is
+never changed, and the one Glass Mail wrote goes when its item or gold does.
+
 **A bank character.** Name one of your characters as the bank for each faction and ruleset, and
 say what goes there on the Bank page of the Glass Mail window (`/gmail bank`): drop an item on it,
 or add a category such as Cloth, Herb or Metal & Stone, each with how many to keep. At the mailbox,
@@ -95,6 +100,7 @@ browse your records, or `/gmail help` for every command.
 | `/gmail skin clear` / `smoked` / `stock` | The mailbox's look (with Glass UI, `/gmail skin suite` follows its look again) |
 | `/gmail guides on` / `off` | Under glass, the inbox's empty slots, row lines and "No mail" (on by default) |
 | `/gmail autofill on` / `off` | Start the To box with the last name this character mailed (on by default) |
+| `/gmail subject on` / `off` | Fill an empty subject with the first item or the gold sent (on by default) |
 | `/gmail bank` | The bank character and what goes to it |
 | `/gmail banknotice on` / `off` | A chat line at the mailbox when items are ready for the bank (on by default) |
 | `/gmail alert on` / `off` | A chat line when new mail comes (on by default) |
