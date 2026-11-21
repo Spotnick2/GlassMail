@@ -120,7 +120,7 @@ function Bank.OnChange(fn) watchers[#watchers + 1] = fn end
 -- isn't known.
 function Bank.Group(c)
     local faction = c and plain(c.faction)
-    local ruleset = c and Registry.RulesetOf(c.realm)
+    local ruleset = c and Registry.RulesetOf(c)
     if type(faction) ~= "string" or faction == "" or ruleset == "Unknown" then return nil end
     return faction .. ":" .. ruleset
 end

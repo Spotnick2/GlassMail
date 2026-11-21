@@ -38,7 +38,8 @@ local SPECS = {
         required = { name = "string", lastPlayDay = "number" },
         -- lastTo: the Names.Key of this character's last attributed send (S1's fill).
         -- class: the class file token ("PRIEST"), for the picker's colours.
-        optional = { realm = "string", faction = "string", lastTo = "string", class = "string" },
+        -- ruleset: Registry.LiveRuleset as this character's own client read it (the realm is hidden since 2026-11-20).
+        optional = { realm = "string", ruleset = "string", faction = "string", lastTo = "string", class = "string" },
     },
     recents = {
         required = { name = "string", day = "number" },

@@ -195,7 +195,8 @@ needs no cleanup pass:
   `own-account` are taken. An AltStable without the provenance feature can't say whose a
   character is, so it isn't used (our own record is). Nothing from it is saved.
 - **Reachability:** an own character is offered as a recipient when its faction tag and
-  **ruleset** match the current character's (`Registry.RulesetOf`, from the realm's name,
+  **ruleset** match the current character's (`Registry.RulesetOf`: the character's `ruleset`, read
+  from the game's rules since the realm was hidden on 2026-11-20 (#74), else its realm's name,
   AltStable's rule; "Unknown" matches nothing). Session 6: the other faction fails ("Target is
   unfriendly"); the other account's character takes mail like an alt. **Owner, 2026-11-12:** on
   Forever a realm is part of its ruleset (a ruleset is a group of servers, not worlds of their

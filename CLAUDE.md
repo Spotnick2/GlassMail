@@ -146,8 +146,12 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
 - **`Core\Registry.lua`**: own characters by GUID (`chars`, refreshed on every tick), or
   AltStable's list live when it is loaded (`PUBLIC_API_VERSION` 1 with the `provenance` feature;
   only its `self` and `own-account` characters, never a third party's; nothing from it saved);
-  `Registry.Reachable` (same faction tag and ruleset, `Registry.RulesetOf` from the realm name,
-  any realm of it; not the current character).
+  `Registry.Reachable` (same faction tag and ruleset, any realm of it; not the current character).
+  The realm is hidden since the 2026-11-20 hotfix (#74): `Registry.LiveRuleset` reads the game's
+  rules (`C_GameRules.IsGameRuleActive`, each `Enum.GameRule` name checked, a non-boolean is no
+  reading), saved as the character's `ruleset`; `Registry.RulesetOf(c)` takes a character, its known
+  `ruleset` first (AltStable's too), then its realm's name (older records). An AltStable character
+  with neither (AltStable v1.10.0 has no `ruleset`) takes our own record's for its GUID.
 - **`Core\Sent.lua`**: every send, captured at the `SendMail` post-hook and attributed by a 120 s
   window (`sent` only when it is the one candidate at `MAIL_SEND_SUCCESS`, else `unconfirmed` at its
   end; a stranger's send waits for the dialog's close; error 457 drops it), plus the returns Trash

@@ -51,11 +51,56 @@ check(not Registry.Reachable(byGuid["Player-1-CCC"]), "the other faction isn't r
 check(Registry.Reachable({ name = "X Y", realm = "Elsewhere", faction = "Horde" }),
     "another realm of the same ruleset is reachable (a realm is part of its ruleset)")
 check(not Registry.Reachable({ name = "X Y", realm = "Elsewhere PvP", faction = "Horde" }), "another ruleset isn't")
-check(not Registry.Reachable({ name = "X Y", faction = "Horde" }), "nor one with no realm known")
+check(not Registry.Reachable({ name = "X Y", faction = "Horde" }), "nor one with no realm or ruleset known")
+
+-- The game's rules (the realm is hidden since the 2026-11-20 hotfix).
+eq(Registry.LiveRuleset(), "Normal", "the rules: none on is Normal")
+eq(db.chars[ME].ruleset, "Normal", "  saved with the character at login")
+local E = Enum.GameRule
+WoW.gameRules[E.PvPRuleset] = true
+eq(Registry.LiveRuleset(), "PvP", "  PvP")
+WoW.gameRules[E.RPRuleset] = true
+eq(Registry.LiveRuleset(), "RPPvP", "  RP and PvP: RP-PvP")
+WoW.gameRules[E.PvPRuleset] = nil
+eq(Registry.LiveRuleset(), "RP", "  RP")
+WoW.gameRules[E.HardcoreRuleset] = true
+eq(Registry.LiveRuleset(), "Hardcore", "  Hardcore first")
+WoW.gameRules = {}
+WoW.gameRulesAnswer = "throw"
+eq(Registry.LiveRuleset(), nil, "  a query that throws is no reading")
+WoW.gameRulesAnswer = 1
+eq(Registry.LiveRuleset(), nil, "  nor is one that answers a non-boolean")
+WoW.gameRulesAnswer = WoW.Secret("rule")
+eq(Registry.LiveRuleset(), nil, "  nor a secret one")
+WoW.gameRulesAnswer = nil
+local rules, gameRule = C_GameRules, Enum.GameRule
+C_GameRules = nil
+eq(Registry.LiveRuleset(), nil, "  no C_GameRules: no reading")
+C_GameRules, Enum.GameRule = rules, { HardcoreRuleset = 10, PvPRuleset = 213 }
+eq(Registry.LiveRuleset(), nil, "  a rule name the client lacks: no reading")
+Enum.GameRule = gameRule
+
+-- The realm hidden, as on the live client.
 local realm = WoW.realm
-WoW.realm = nil
-check(not Registry.Reachable(byGuid["Player-1-BBB"]), "  nor anyone while this character's realm is unknown")
-check(not Registry.Reachable({ name = "X Y", faction = "Horde" }), "  not even one whose realm is unknown too")
+WoW.realm = ""
+WoW.advance(600)
+eq(db.chars[ME].realm, "Doomhowl", "a tick with the realm hidden keeps the saved one")
+eq(db.chars[ME].ruleset, "Normal", "  and saves the rules' ruleset")
+check(Registry.Reachable(byGuid["Player-1-BBB"]), "the realm hidden: the rules still find a character of the ruleset")
+check(Registry.Reachable({ name = "X Y", ruleset = "Normal", faction = "Horde" }),
+    "  and one saved with its ruleset and no realm")
+check(not Registry.Reachable({ name = "X Y", ruleset = "PvP", faction = "Horde" }), "  not one of another ruleset")
+WoW.gameRules[E.PvPRuleset] = true
+check(not Registry.Reachable(byGuid["Player-1-BBB"]), "  on a PvP character, a Normal one isn't reachable")
+check(Registry.Reachable({ name = "X Y", realm = "Elsewhere PvP", faction = "Horde" }), "  a PvP realm's is")
+WoW.gameRules = {}
+WoW.gameRulesAnswer = "throw"
+check(Registry.Reachable(byGuid["Player-1-BBB"]), "no rules and no realm: this character's own record says")
+WoW.playerGUID = "Player-1-NEW"
+check(not Registry.Reachable(byGuid["Player-1-BBB"]), "  a character with no record: nobody is reachable")
+check(not Registry.Reachable({ name = "X Y", faction = "Horde" }), "  not even one whose ruleset is unknown too")
+WoW.playerGUID = ME
+WoW.gameRulesAnswer = nil
 WoW.realm = realm
 
 -- Rulesets, from the realm's name (AltStable's rule).
@@ -72,6 +117,10 @@ eq(R("HC One"), "Hardcore", "  HC as a word")
 eq(R(""), "Unknown", "an empty name is Unknown")
 eq(R(nil), "Unknown", "  so is none")
 eq(R(WoW.Secret("realm")), "Unknown", "  and a secret one")
+eq(R({ ruleset = "PvP", realm = "Doomhowl" }), "PvP", "a character: its ruleset wins over its realm's name")
+eq(R({ realm = "Sunfire PvP" }), "PvP", "  else its realm's name")
+eq(R({ ruleset = "Unknown", realm = "Doomhowl" }), "Normal", "  a ruleset that isn't one is ignored")
+eq(R({}), "Unknown", "  neither: Unknown")
 
 -- AltStable with an unknown API version: ignored.
 local calls = 0
@@ -95,7 +144,7 @@ eq(calls, 0, "  and never called")
 rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
     GetCharacters = function()
     return {
-        { guid = "Player-2-ZZZ", name = "Bank Alt", realm = "Doomhowl", faction = "Horde", hidden = true,
+        { guid = "Player-2-ZZZ", name = "Bank Alt", ruleset = "Normal", faction = "Horde", hidden = true,
             current = false, provenance = "own-account" },
         { guid = "Player-9-FRI", name = "A Friend", realm = "Doomhowl", faction = "Horde", hidden = false,
             current = false, provenance = "third-party" },
@@ -114,8 +163,33 @@ end
 eq(list[1].name, "Bank Alt", "  in its order")
 check(list[1].hidden, "  hidden is passed on")
 eq(list[1].provenance, "own-account", "  and provenance")
+eq(list[1].ruleset, "Normal", "  and its ruleset (AltStable's `ruleset` feature)")
+check(Registry.Reachable(list[1]), "  a character with a ruleset and no realm is reachable")
 check(list[2].current, "  the current character is flagged")
 eq(db.chars["Player-2-ZZZ"], nil, "nothing from AltStable is saved")
+
+-- AltStable v1.10.0 (no `ruleset` feature) after the hotfix: a blank realm and
+-- no ruleset. Our own record of the same GUID gives the ruleset (#75 review).
+Store.SetChar("Player-2-OLD", { name = "Bank Alt", ruleset = "Normal", faction = "Horde", lastPlayDay = Store.PlayDay() })
+Store.SetChar("Player-2-PVP", { name = "Pvp Alt", ruleset = "Normal", faction = "Horde", lastPlayDay = Store.PlayDay() })
+rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
+    GetCharacters = function()
+    return {
+        { guid = "Player-2-OLD", name = "Bank Alt", realm = "", faction = "Horde", hidden = true,
+            provenance = "own-account" },
+        { guid = "Player-2-UNK", name = "Unseen Alt", realm = "", faction = "Horde", provenance = "own-account" },
+        { guid = "Player-2-PVP", name = "Pvp Alt", ruleset = "PvP", faction = "Horde", provenance = "own-account" },
+    }
+end })
+list = Registry.Characters()
+eq(list[1].ruleset, "Normal", "an AltStable record with no ruleset takes ours for its GUID")
+check(list[1].hidden and list[1].provenance == "own-account", "  AltStable's hidden and provenance kept")
+check(Registry.Reachable(list[1]), "  and is reachable")
+eq(list[2].ruleset, nil, "  one we have no record of stays unknown")
+check(not Registry.Reachable(list[2]), "  and isn't reachable")
+eq(list[3].ruleset, "PvP", "  AltStable's own ruleset wins over ours")
+eq(db.chars["Player-2-OLD"].hidden, nil, "  nothing from AltStable is saved")
+db.chars["Player-2-OLD"], db.chars["Player-2-PVP"] = nil, nil
 
 -- An AltStable that throws: our list, and the failure recorded.
 rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },

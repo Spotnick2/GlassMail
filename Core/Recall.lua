@@ -97,8 +97,8 @@ end
 -- don't agree.
 local function reaches(a, b)
     if not (plain(a.faction, "string") and plain(b.faction, "string")) or a.faction ~= b.faction then return false end
-    local ruleset = Registry.RulesetOf(a.realm)
-    return ruleset ~= "Unknown" and Registry.RulesetOf(b.realm) == ruleset
+    local ruleset = Registry.RulesetOf(a)
+    return ruleset ~= "Unknown" and Registry.RulesetOf(b) == ruleset
 end
 
 -- Whether a Sent record can be marked: true and the sender's name, or false

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Your characters, recall and the bank work again.** Since a server change on 2026-11-20 the
+  game no longer tells addons the realm, so Glass Mail couldn't tell which of your characters
+  share your ruleset: the address book stopped offering them, no send could be marked for recall,
+  and the bank said "This character's faction or ruleset isn't known yet". Glass Mail now reads
+  the ruleset from the game's rules and remembers it for each character. A character first
+  played after that change needs one login with this version to be known; with AltStable, its
+  characters' rulesets come from it.
+
 ## v1.1.0
 
 - **The subject fills itself again.** Since the client's 1.60.1.70959 update, attaching an item no
