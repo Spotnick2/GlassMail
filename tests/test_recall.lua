@@ -142,6 +142,12 @@ eq(why(sent({ from = "Player-1-NOR", to = "Norealm Two" })), Recall.WHY_REACH:fo
     "two unknown realms don't agree")
 eq(why(sent({ to = "Pvp Person" })), Recall.WHY_REACH:format("Pvp Person", MY_NAME), "another ruleset")
 eq(why(sent({ to = "Norealm Person" })), Recall.WHY_REACH:format("Norealm Person", MY_NAME), "a realm unknown: no agreement")
+-- Saved after the 2026-11-20 hotfix: a ruleset from the game's rules, no realm.
+Store.SetChar("Player-1-RS1", { name = "Rules One", ruleset = "Normal", faction = "Horde", lastPlayDay = 1 })
+Store.SetChar("Player-1-RS2", { name = "Rules Two", ruleset = "PvP", faction = "Horde", lastPlayDay = 1 })
+check(Recall.CanMark(sent({ to = "Rules One" })), "a recipient saved with its ruleset and no realm")
+check(Recall.CanMark(sent({ from = "Player-1-RS1", to = ALT_NAME })), "  and such a sender")
+eq(why(sent({ to = "Rules Two" })), Recall.WHY_REACH:format("Rules Two", MY_NAME), "  another ruleset still isn't")
 check(Recall.CanMark(sent({ to = "  kaleid   sumner " })), "the recipient by Names.Key")
 ok, name = Recall.CanMark(sent({ from = ALT, to = MY_NAME }))
 check(ok, "judged from the record's sender, not the character browsing")

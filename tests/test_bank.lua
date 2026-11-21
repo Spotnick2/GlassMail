@@ -84,9 +84,21 @@ end }
 b = Bank.For()
 check(b and b.name == "Renamed Banks" and b.char ~= nil, "  through AltStable's list (another account)")
 AltStable = nil
+-- The realm hidden (the 2026-11-20 hotfix): the game's rules give the group.
 WoW.realm = ""
+eq(Bank.CurrentGroup(), "Horde:Normal", "  the realm hidden: the rules still give the group")
+eq(Bank.Group({ faction = "Horde", ruleset = "Normal" }), "Horde:Normal", "  a character saved with a ruleset, no realm")
+Store.SetChar("Player-1-NEW", { name = "Newer Banks", ruleset = "Normal", faction = "Horde", lastPlayDay = 1 })
+Bank.Set("Horde:Normal", "Newer Banks", "Player-1-NEW")
+b = Bank.For()
+check(b and b.name == "Newer Banks" and b.char ~= nil, "  a bank first seen after the hotfix is reachable")
+WoW.gameRulesAnswer = "throw"
+local guid = WoW.playerGUID
+WoW.playerGUID = "Player-1-NOR"
 none, why = Bank.For()
-check(none == nil and why == Bank.WHY_GROUP, "  a realm that can't be read: no group")
+check(none == nil and why == Bank.WHY_GROUP, "  no rules, no realm and no record: no group")
+WoW.playerGUID = guid
+WoW.gameRulesAnswer = nil
 WoW.realm = "Doomhowl"
 Bank.Set("Horde:Normal", "Cowruzo Banks", "Player-1-BNK")
 check(not Bank.Set("Horde:Normal", "", nil), "Set: an empty name refused")

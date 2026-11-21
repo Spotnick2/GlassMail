@@ -95,6 +95,19 @@ function UnitGUID(unit) if unit == "player" then return WoW.playerGUID end end
 function UnitName(unit) if unit == "player" then return WoW.playerName or "Karuzo", "Morphisto" end end
 WoW.realm, WoW.faction = "Doomhowl", "Horde"
 function GetRealmName() return WoW.realm end
+-- The ruleset's game rules (porting guide, "The realm is hidden since the
+-- 2026-11-20 server hotfix"): the names and values measured on 71037, all off
+-- on a PvE realm. WoW.gameRules[Enum.GameRule.X] = true turns one on;
+-- WoW.gameRulesAnswer = "throw" makes the query throw, any other value is
+-- what it answers instead of a boolean.
+Enum.GameRule = { HardcoreRuleset = 10, PvPRuleset = 213, RPRuleset = 214 }
+WoW.gameRules = {}
+C_GameRules = {}
+function C_GameRules.IsGameRuleActive(rule)
+    if WoW.gameRulesAnswer == "throw" then error("IsGameRuleActive: no reading") end
+    if WoW.gameRulesAnswer ~= nil then return WoW.gameRulesAnswer end
+    return WoW.gameRules[rule] == true
+end
 function UnitFactionGroup(unit) if unit == "player" then return WoW.faction, WoW.faction end end
 
 WoW.addonVersion = "dev"
