@@ -168,6 +168,29 @@ check(Registry.Reachable(list[1]), "  a character with a ruleset and no realm is
 check(list[2].current, "  the current character is flagged")
 eq(db.chars["Player-2-ZZZ"], nil, "nothing from AltStable is saved")
 
+-- AltStable v1.10.0 (no `ruleset` feature) after the hotfix: a blank realm and
+-- no ruleset. Our own record of the same GUID gives the ruleset (#75 review).
+Store.SetChar("Player-2-OLD", { name = "Bank Alt", ruleset = "Normal", faction = "Horde", lastPlayDay = Store.PlayDay() })
+Store.SetChar("Player-2-PVP", { name = "Pvp Alt", ruleset = "Normal", faction = "Horde", lastPlayDay = Store.PlayDay() })
+rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
+    GetCharacters = function()
+    return {
+        { guid = "Player-2-OLD", name = "Bank Alt", realm = "", faction = "Horde", hidden = true,
+            provenance = "own-account" },
+        { guid = "Player-2-UNK", name = "Unseen Alt", realm = "", faction = "Horde", provenance = "own-account" },
+        { guid = "Player-2-PVP", name = "Pvp Alt", ruleset = "PvP", faction = "Horde", provenance = "own-account" },
+    }
+end })
+list = Registry.Characters()
+eq(list[1].ruleset, "Normal", "an AltStable record with no ruleset takes ours for its GUID")
+check(list[1].hidden and list[1].provenance == "own-account", "  AltStable's hidden and provenance kept")
+check(Registry.Reachable(list[1]), "  and is reachable")
+eq(list[2].ruleset, nil, "  one we have no record of stays unknown")
+check(not Registry.Reachable(list[2]), "  and isn't reachable")
+eq(list[3].ruleset, "PvP", "  AltStable's own ruleset wins over ours")
+eq(db.chars["Player-2-OLD"].hidden, nil, "  nothing from AltStable is saved")
+db.chars["Player-2-OLD"], db.chars["Player-2-PVP"] = nil, nil
+
 -- An AltStable that throws: our list, and the failure recorded.
 rawset(_G, "AltStable", { PUBLIC_API_VERSION = 1, PUBLIC_API_FEATURES = { provenance = true },
     GetCharacters = function() error("boom") end })

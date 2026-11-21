@@ -103,9 +103,9 @@ end
 
 local OWN = { self = true, ["own-account"] = true }
 
--- Every own character known, as fresh copies: { guid, name, realm, faction,
--- hidden, current, provenance }. AltStable's proven own characters when it is
--- loaded, else ours. Nothing from AltStable is saved.
+-- Every own character known, as fresh copies: { guid, name, realm, ruleset,
+-- faction, hidden, current, provenance }. AltStable's proven own characters
+-- when it is loaded, else ours. Nothing from AltStable is saved.
 function Registry.Characters()
     local current = Registry.CurrentGUID()
     local out = {}
@@ -113,14 +113,23 @@ function Registry.Characters()
     if A then
         local ok, list = pcall(A.GetCharacters)
         if ok and type(list) == "table" then
+            local saved = Store.Ready() and Store.Chars() or {}
             for _, c in ipairs(list) do
                 if type(c) == "table" and str(c.guid) and str(c.name) and OWN[str(c.provenance) or ""] then
                     -- ruleset: AltStable's `ruleset` feature (#405), its own
-                    -- client's reading; RulesetOf checks the value.
-                    out[#out + 1] = { guid = c.guid, name = c.name, realm = str(c.realm), ruleset = str(c.ruleset),
+                    -- client's reading; RulesetOf checks the value. An AltStable
+                    -- without it (v1.10.0) and a realm hidden since the hotfix
+                    -- say nothing, so our own record of that GUID does (#75).
+                    local e = { guid = c.guid, name = c.name, realm = str(c.realm), ruleset = str(c.ruleset),
                         faction = str(c.faction),
                         class = str(c.class), hidden = c.hidden == true, current = c.guid == current,
                         provenance = str(c.provenance) }
+                    local mine = saved[c.guid]
+                    if Registry.RulesetOf(e) == "Unknown" and type(mine) == "table" then
+                        local r = Registry.RulesetOf(mine)
+                        e.ruleset = r ~= "Unknown" and r or nil
+                    end
+                    out[#out + 1] = e
                 end
             end
             return out, "altstable"
