@@ -43,7 +43,11 @@ friends and guildmates, each in their class colour. The To box can also start wi
 this character mailed, so repeat sends need no typing. With **AltStable** loaded, the list also
 includes the characters AltStable knows are yours, including those on your other WoW accounts
 once AltStable has synced them, and typing the start of one of their names in the To box
-completes it, the way the game completes the names it knows.
+completes it, the way the game completes the names it knows. Since the game stopped naming the realm
+to addons (2026-11-20), Glass Mail learns each character's ruleset when you log in on it, or takes
+AltStable's (v1.11.0 or later) when it has one. A character neither knows yet appears once you log
+in on it with Glass Mail v1.1.1; one on another WoW account, once it has logged in with AltStable
+v1.11.0 or later and synced.
 
 **The subject writes itself.** Attach an item and an empty subject becomes its name and count,
 "Linen Cloth (5)"; send only gold and it reads the amount, "1 Gold, 12 Silver". The game stopped
