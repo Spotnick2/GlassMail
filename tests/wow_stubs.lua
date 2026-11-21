@@ -72,7 +72,7 @@ function time(t)
     return os.time(t)
 end
 function GetServerTime() return time() end
-function GetBuildInfo() return "1.60.1", "70959", "Nov 12 2026", 16001 end
+function GetBuildInfo() return "1.60.1", "71037", "Nov 18 2026", 16001 end
 -- CVars; SetCVar fires CVAR_UPDATE synchronously, as the client documents it.
 -- WoW.cvarFail makes SetCVar throw; WoW.cvarRefuse makes it return false
 -- and change nothing.

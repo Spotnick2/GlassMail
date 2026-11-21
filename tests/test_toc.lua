@@ -20,7 +20,7 @@ eq(tocFiles()[#tocFiles()], "GlassMail.lua", "the bootstrap loads last")
 
 -- Two places that must agree, never derived from each other (porting guide section 0).
 loadAddon()
-eq(GlassMail.MEASURED_ON_BUILD, "1.60.1.70959", "MEASURED_ON_BUILD")
+eq(GlassMail.MEASURED_ON_BUILD, "1.60.1.71037", "MEASURED_ON_BUILD")
 
 -- Every texture the material names ships with the library.
 local root = libGlassRoot()

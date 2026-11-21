@@ -1,5 +1,5 @@
 # WowTestKit for these tests: the commit, and the client build to test against.
-# build: the newest client build; Compat.lua's MEASURED_ON_BUILD stays 70959 until it is checked in game on 71037.
+# build: Compat.lua's MEASURED_ON_BUILD.
 sha=a9b2ee01084b9a8e05c11a72edb59a1245e428bc
 build=71037
 api=2
