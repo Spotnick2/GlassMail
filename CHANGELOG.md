@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.1.1
 
 - **Your characters, recall and the bank work again.** Since a server change on 2026-11-20 the
   game no longer tells addons the realm, so Glass Mail couldn't tell which of your characters
