@@ -317,7 +317,7 @@ TOC load order: `Libs\LibGlass-1.0\LibGlass-1.0.xml` → `Libs\LibMailbox-1.0\Li
 
 - `C:\Projects\WoW\References\Docs\PORTING-TBC-TO-FOREVER.md`: measured, addon-agnostic field notes. Treat
   them as fact. New addon-agnostic findings go there, not into a copy here.
-- `C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.70959.md`: the API dump (functions, events, widget
+- `C:\Projects\WoW\References\Forever\api\forever-api-1.60.1.71037.md`: the API dump (functions, events, widget
   methods, `_G`). **Presence is not a contract.** Mail: `MailInfoDocumentation.lua` in
   wow-ui-source's `Blizzard_APIDocumentationGenerated`.
 - `C:\Projects\WoW\References\Docs\EMBEDDED-LIBRARIES.md`, `LIBGLASS-MIGRATION.md`: library rules.
